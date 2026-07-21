@@ -447,6 +447,34 @@ export function buildRootView(
   sidebar.add(changesBar);
   sidebar.add(logBar);
 
+  // Draggable git changes↔log divider: a 1-row grab strip over the divider glyph row (git view only).
+  // Dragging sets settings.gitSplitRatio LIVE via workspace.setGitSplit — the SAME persisted value the
+  // settings panel writes (single source). Capture-on-mousedown (captureDragTarget) so this thin strip
+  // survives the drag exactly like the sidebar divider; the ratio is the pointer's row within the
+  // sidebar body, so it tracks the cursor directly.
+  const gitSplitDivider = new BoxRenderable(renderer, {
+    id: 'git-split-divider',
+    position: 'absolute',
+    height: 1,
+    backgroundColor: readPalette().border,
+    visible: false,
+  });
+  sidebar.add(gitSplitDivider);
+  const gitSplitRatioAtPointer = (pointerScreenY: number): number => {
+    const bodyTopScreenY = (sidebar.y as number) + 1; // +1 = sidebar top border
+    const bodyHeight = Math.max(1, (sidebar.height as number) - 2);
+    return (pointerScreenY - bodyTopScreenY) / bodyHeight;
+  };
+  gitSplitDivider.onMouseDown = (event) => {
+    captureDragTarget(gitSplitDivider);
+    workspace.setGitSplit(gitSplitRatioAtPointer(event.y));
+    renderer.requestRender();
+  };
+  gitSplitDivider.onMouseDrag = (event) => {
+    workspace.setGitSplit(gitSplitRatioAtPointer(event.y));
+    renderer.requestRender();
+  };
+
   // Interior height of a bordered box = box height - 2 (top+bottom border).
   // invariant: A scrollable pane height is an input not an output (ui.invariants.md)
   const editorViewportHeight = () => Math.max(1, (editorArea.height as number) - 2);
@@ -599,6 +627,17 @@ export function buildRootView(
       viewportSize: gitPanelGeometry.logRows,
       scrollPosition: workspace.gitPanel.logScrollTop.value,
     });
+
+    // Git changes↔log divider grab strip: over the divider GLYPH row (dividerRow is the first LOG row,
+    // so the glyph is one above), spanning the sidebar body width. Only in git view.
+    if (gitVisible) {
+      gitSplitDivider.visible = true;
+      gitSplitDivider.top = Math.max(1, gitPanelGeometry.dividerRow - 1);
+      gitSplitDivider.left = 0;
+      gitSplitDivider.width = sidebarInnerWidth;
+    } else {
+      gitSplitDivider.visible = false;
+    }
   }
 
   function renderTree(): StyledText {
