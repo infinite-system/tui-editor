@@ -29,8 +29,10 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 - [ ] **EDITOR REWORK (current, mine):** (a) reactive frame effect — DONE (3b244b2, app.invariants.md);
       (b) grapheme-safe coordinate model — DONE (2a06da1, editor.coordinates.ts + Unicode matrix);
       (c) real caret at display column — DONE (e560996, OpenTUI native cursor; tmux-visual pending);
-      (d) selection + copy/cut/paste (Clipboard capability) ← NEXT; (e) multi-workspace; (f) search;
-      (g) piece-table undo. Then a tmux end-to-end smoke to promote frame/coordinate/caret invariants.
+      (d) selection + copy/cut/paste — DONE functional (d9a91b8, Clipboard capability, 7 tests;
+      HIGHLIGHT render pending); (e) multi-workspace; (f) search; (g) piece-table undo.
+      **NEXT: build `scripts/tui-harness.sh` + the selection-highlight render, then a tmux smoke to
+      promote frame/coordinate/caret/selection invariants to established.**
 - [~] M4 — git module INTEGRATED (b5cf988, 7 tests). Remaining: `diff` module (DiffEngine/DiffModel/
       DiffView/DiffRenderable) + the git sidebar UI (staged/unstaged, stage/unstage) + the
       split editable-diff view (left read-only blob, right live buffer).
