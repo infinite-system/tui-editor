@@ -8,3 +8,6 @@ artifacts/process-snapshots/
 
 # codex worker worktrees (own branches, not embedded in main tree)
 .claude/worktrees/
+artifacts/status-*.json
+artifacts/frame-*.json
+artifacts/*.tmp
