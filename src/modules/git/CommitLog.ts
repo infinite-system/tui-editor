@@ -49,10 +49,12 @@ class $CommitLog {
 
   /** Records for `[start, start+count)`; `undefined` = not yet loaded (render a placeholder row). */
   rows(start: number, count: number): (CommitRecord | undefined)[] {
-    const c = this.cache.value; // subscribe
-    const out: (CommitRecord | undefined)[] = [];
-    for (let i = start; i < start + count; i++) out.push(i >= 0 ? c.get(i) : undefined);
-    return out;
+    const cachedRecords = this.cache.value; // subscribe
+    const records: (CommitRecord | undefined)[] = [];
+    for (let index = start; index < start + count; index++) {
+      records.push(index >= 0 ? cachedRecords.get(index) : undefined);
+    }
+    return records;
   }
 
   /** Fetch one page `[skip, skip+limit)`. Overridable via constructor `fetch` (tests inject a fake). */
@@ -70,13 +72,13 @@ class $CommitLog {
    * discarded — never let an out-of-date page overwrite newer state.
    */
   async ensureRange(start: number, count: number, keepMargin = count): Promise<void> {
-    const id = ++this.loadId;
+    const loadToken = ++this.loadId;
     const gaps = missingRanges(new Set(this.cache.value.keys()), start, count);
     for (const { offset, length } of gaps) {
       const page = await this.fetchPage(offset, length);
-      if (id !== this.loadId) return; // superseded by a newer ensureRange — discard
+      if (loadToken !== this.loadId) return; // superseded by a newer ensureRange — discard
       const next = new Map(this.cache.value);
-      page.forEach((rec, k) => next.set(offset + k, rec));
+      page.forEach((record, pageOffset) => next.set(offset + pageOffset, record));
       if (page.length < length) this.knownEnd.value = offset + page.length; // reached the end
       this.cache.value = next;
     }
@@ -89,7 +91,7 @@ class $CommitLog {
     const drop = evictable(this.cache.value.keys(), keepStart, keepCount);
     if (drop.length === 0) return;
     const next = new Map(this.cache.value);
-    for (const i of drop) next.delete(i);
+    for (const index of drop) next.delete(index);
     this.cache.value = next;
   }
 

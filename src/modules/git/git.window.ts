@@ -21,11 +21,11 @@ export function missingRanges(loaded: ReadonlySet<number>, start: number, count:
   const to = from + count; // exclusive
   const ranges: FetchRange[] = [];
   let runStart = -1;
-  for (let i = from; i < to; i++) {
-    const missing = !loaded.has(i);
-    if (missing && runStart < 0) runStart = i;
+  for (let index = from; index < to; index++) {
+    const missing = !loaded.has(index);
+    if (missing && runStart < 0) runStart = index;
     else if (!missing && runStart >= 0) {
-      ranges.push({ offset: runStart, length: i - runStart });
+      ranges.push({ offset: runStart, length: index - runStart });
       runStart = -1;
     }
   }
@@ -38,9 +38,9 @@ export function missingRanges(loaded: ReadonlySet<number>, start: number, count:
  * dropped to bound memory. keepCount is typically the viewport height plus a margin above and below.
  */
 export function evictable(loaded: Iterable<number>, keepStart: number, keepCount: number): number[] {
-  const lo = Math.max(0, keepStart);
-  const hi = keepStart + keepCount; // exclusive
-  const out: number[] = [];
-  for (const i of loaded) if (i < lo || i >= hi) out.push(i);
-  return out;
+  const low = Math.max(0, keepStart);
+  const high = keepStart + keepCount; // exclusive
+  const evicted: number[] = [];
+  for (const index of loaded) if (index < low || index >= high) evicted.push(index);
+  return evicted;
 }

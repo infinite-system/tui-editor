@@ -2,13 +2,13 @@ import { test, expect, describe } from 'bun:test';
 import { CommitLog, type CommitPageFetch } from './CommitLog';
 import type { CommitRecord } from './git.parsers';
 
-function mkCommit(i: number): CommitRecord {
+function makeCommit(index: number): CommitRecord {
   return {
-    sha: `sha${i}`,
-    shortSha: `s${i}`,
+    sha: `sha${index}`,
+    shortSha: `s${index}`,
     author: 'a',
     dateIso: '2026-01-01',
-    subject: `commit ${i}`,
+    subject: `commit ${index}`,
     refs: [],
   };
 }
@@ -17,9 +17,11 @@ function mkCommit(i: number): CommitRecord {
 function fakeFetch(total: number, calls: Array<{ skip: number; limit: number }>): CommitPageFetch {
   return async (skip, limit) => {
     calls.push({ skip, limit });
-    const out: CommitRecord[] = [];
-    for (let i = skip; i < Math.min(skip + limit, total); i++) out.push(mkCommit(i));
-    return out;
+    const records: CommitRecord[] = [];
+    for (let index = skip; index < Math.min(skip + limit, total); index++) {
+      records.push(makeCommit(index));
+    }
+    return records;
   };
 }
 
@@ -29,7 +31,7 @@ describe('CommitLog', () => {
     const log = new CommitLog.Class('/repo', { fetch: fakeFetch(1000, calls) });
     await log.ensureRange(0, 10);
     const rows = log.rows(0, 10);
-    expect(rows.every((r) => r !== undefined)).toBe(true);
+    expect(rows.every((row) => row !== undefined)).toBe(true);
     expect(rows[0]!.subject).toBe('commit 0');
     expect(rows[9]!.subject).toBe('commit 9');
     expect(calls).toEqual([{ skip: 0, limit: 10 }]); // one batched page
@@ -71,17 +73,17 @@ describe('CommitLog', () => {
   test('stale ensureRange is discarded (only the newest mutates state)', async () => {
     // A slow first fetch (resolves later) must NOT overwrite a newer fetch's result.
     let releaseSlow: (() => void) | null = null;
-    const slow = new Promise<void>((r) => (releaseSlow = r));
+    const slow = new Promise<void>((resolve) => (releaseSlow = resolve));
     let call = 0;
     const fetch: CommitPageFetch = async (skip, limit) => {
       call++;
       if (call === 1) {
         await slow; // first call hangs until released
-        return [{ ...mkCommit(999), subject: 'STALE' }];
+        return [{ ...makeCommit(999), subject: 'STALE' }];
       }
-      const out: CommitRecord[] = [];
-      for (let i = skip; i < skip + limit; i++) out.push(mkCommit(i));
-      return out;
+      const records: CommitRecord[] = [];
+      for (let index = skip; index < skip + limit; index++) records.push(makeCommit(index));
+      return records;
     };
     const log = new CommitLog.Class('/repo', { fetch });
     const first = log.ensureRange(0, 1); // starts the slow fetch
