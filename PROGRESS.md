@@ -4,6 +4,41 @@ Live status ledger for the autonomous build. Updated every turn so state survive
 compaction. **If you are resuming: read this, then `HANDOFF.md`, then continue at the first
 unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
+## RESUME HERE (frontier as of commit 79b14fc)
+- **State:** 10 module contracts · 96 tests pass · tsc green · checker 0 problems · end-to-end tmux
+  smoke ALL-PASS. codex modules git/markdown/lsp INTEGRATED. Editor rework done: reactive frame
+  (established), grapheme coordinate model, native-cursor caret, selection + clipboard (functional).
+- **Verify the app end-to-end:** `bash scripts/smoke-editor.sh` (drives the real TUI via
+  `scripts/tui-harness.sh`; asserts from `artifacts/status.json`). Harness verbs: launch/ready/
+  settle/send/capture/status/field/kill (internal `sleep` works inside the invoked script).
+  status.json fields: ready, frame (settle counter), renderQuiescent, activeWorkspace, activeBuffer,
+  bufferRevision, dirty, cursor{line,col}, focus, treeRows, treeSelected, overlay, paletteQuery,
+  paletteMatches, width, height, git*. Assert STATE from here; pane-capture for visual only.
+- **IMMEDIATE NEXT TASK — selection highlight render** in `src/modules/ui/RootView.ts`
+  `renderEditorStyled()`:
+  1. `const sel = ws.editor.cursor.selectionRange()` → `{start:{line,col}, end:{line,col}}` (grapheme
+     cols) or null.
+  2. For each visible line `lineNo`, if `sel` and `lineNo` in `[sel.start.line, sel.end.line]`,
+     the selected grapheme range on it is `startCol = lineNo===sel.start.line ? sel.start.col : 0`,
+     `endCol = lineNo===sel.end.line ? sel.end.col : graphemeCount(line)` (extend past EOL for
+     mid-selection lines if you want the newline shaded).
+  3. Split the line at `graphemeToU16(text, startCol/endCol)` (from `../editor/editor.coordinates`);
+     render the selected slice with a background. OpenTUI: check `node_modules/@opentui/core/lib/
+     styled-text.d.ts` — `StyleAttrs{fg,bg,bold,reverse}`; there are named helpers + likely a `bg`.
+     Simplest robust style = a `reverse:true` chunk over the selection (or `bg(selColor)(fg(fgColor)(t))`
+     if composable). First pass may drop syntax highlight on the selected slice; refine later.
+  4. Add a `selection` field to `publish()` in `Bootstrap.ts` (e.g. `hasSelection`, `selStart`,
+     `selEnd`) so the smoke can assert it. Then extend `scripts/smoke-editor.sh` with a
+     shift+Right → assert hasSelection=true step. Then promote the caret + selection invariants
+     (`ui.invariants.md` caret, `editor.invariants.md` selection) to `established`.
+- **Then, in order:** multi-workspace (WorkspaceManager + outer tabs + per-workspace snapshot
+  restore) → file search → piece-table undo (replace the full-document snapshot undo) → M4 `diff`
+  module + git sidebar UI + split editable-diff view → M5 lsp editor wiring (diagnostics render +
+  definition jump; map editor grapheme col ↔ LSP UTF-16 via `editor.coordinates`) → M6 markdown
+  split-preview UI + toggle command → M7 plugin demo (kernel composition + one contribution plugin)
+  → 5-pass gauntlet + independent subagent panel + completeness-critic-until-dry → isolated blackline
+  acceptance test (`VERIFICATION_RESULTS.md`, throwaway worktree) → §5.1 gate green.
+
 ## Environment (established)
 - Bun `~/.bun/bin/bun` (v1.3.14). Prefix: `export PATH="$HOME/.bun/bin:$PATH"`. Node also on PATH.
 - Deps: `ivue@2.0.0`, `vue@3.5.40`, `@opentui/core@0.4.5`, `web-tree-sitter@0.26.11`.
@@ -31,8 +66,8 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       (c) real caret at display column — DONE (e560996, OpenTUI native cursor; tmux-visual pending);
       (d) selection + copy/cut/paste — DONE functional (d9a91b8, Clipboard capability, 7 tests;
       HIGHLIGHT render pending); (e) multi-workspace; (f) search; (g) piece-table undo.
-      **NEXT: build `scripts/tui-harness.sh` + the selection-highlight render, then a tmux smoke to
-      promote frame/coordinate/caret/selection invariants to established.**
+      tmux harness (`scripts/tui-harness.sh`) + smoke (`scripts/smoke-editor.sh`) built, ALL-PASS.
+      **NEXT: selection-highlight render (see RESUME HERE), then re-smoke + promote invariants.**
 - [~] M4 — git module INTEGRATED (b5cf988, 7 tests). Remaining: `diff` module (DiffEngine/DiffModel/
       DiffView/DiffRenderable) + the git sidebar UI (staged/unstaged, stage/unstage) + the
       split editable-diff view (left read-only blob, right live buffer).
@@ -70,23 +105,13 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 - Drive real TUI under tmux; assert STATE from `artifacts/status.json` (StatusChannel), pane-capture only for visual.
 - tsc green + tests pass at every commit; dispose resources; record benchmarks.
 
-## Next action (precise, in order)
-1. **Integrate lsp** when its completion subagent returns (writes fixes+contract+tests into
-   `.claude/worktrees/codex-lsp`): review output, run `bunx tsc --noEmit` + `bun test src/modules/lsp`
-   + checker in the worktree, then `cp -r .claude/worktrees/codex-lsp/src/modules/lsp/. src/modules/lsp/
-   && rm -f src/modules/lsp/.gitkeep`, verify on master, commit crediting codex + subagent.
-   (git + markdown already integrated.)
-2. **Selection + copy/cut/paste** (active editor item) — anchor on `Cursor` (add `anchor {line,col}`,
-   set/clear + `hasSelection`), shift+arrow + mouse-drag extend, selection-aware insert/delete
-   (replace-selection), a `Clipboard` capability (`src/modules/system/Clipboard.ts`, Static:
-   wl-copy/xclip/pbcopy + OSC 52 fallback), selection highlight in RootView (bg over the selected
-   graphemes via StyleAttrs.bg/reverse). All grapheme-boundary correct (use editor.coordinates).
-3. **tmux end-to-end smoke** — build a `scripts/tui-harness.sh` (settle-signal wait via status.json,
-   not sleep), drive boot + edit + caret; promote reactive-frame/coordinate/caret invariants to established.
-4. Then M4 `diff` module + git sidebar UI + split editable-diff; M5 lsp editor wiring (diagnostics/
-   definition, grapheme↔UTF-16 map); M6 markdown split-preview UI + toggle; M7 plugins; gauntlet;
-   blackline large-project test (VERIFICATION_RESULTS.md, isolated worktree); §5.1 gate.
+## Next action
+See **RESUME HERE** at the top of this file — it is the authoritative frontier. lsp integrated
+(f0f5334), selection+clipboard functional (d9a91b8), tmux harness + smoke ALL-PASS. Immediate task:
+selection-highlight render in `RootView.renderEditorStyled()`, then re-smoke with a selection
+assertion and promote caret/selection invariants.
 
 ## Last commit
-6cae817 — M6 markdown module integrated. (Also: b5cf988 git module; editor rework 3b244b2 reactive
-frame, 2a06da1 grapheme coordinate model, e560996 native-cursor caret; handoff 6591b0e.)
+79b14fc — Bootstrap editor keys → two switches (ctrl/non-ctrl); frame-effect invariant established.
+(Chain: 6cae817 markdown, f0f5334 lsp, b5cf988 git; editor rework 3b244b2 reactive frame,
+2a06da1 grapheme coordinates, e560996 native-cursor caret, d9a91b8 selection+clipboard.)
