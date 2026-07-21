@@ -5,10 +5,10 @@ compaction. **If you are resuming: read this, then `HANDOFF.md`, then continue a
 unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
 ## RESUME HERE (frontier as of commit 922f373)
-- **State:** 11 module contracts · 110 tests pass · tsc green · checker 0 problems · end-to-end tmux
+- **State:** 11 module contracts · 98 tests pass · tsc green · checker 0 problems · end-to-end tmux
   smoke ALL-PASS. codex modules git/markdown/lsp INTEGRATED. Editor rework: reactive frame
-  (established), grapheme coordinate model, native-cursor caret, selection + clipboard, selection
-  span-split LOGIC (`ui.selection.ts` + 12 unit tests — proven). **FrameProbe visual-observation
+  (established), grapheme coordinate model, native-cursor caret, selection + clipboard (model works),
+  editor split into gutter + `SelectableText` code renderable. **FrameProbe visual-observation
   channel built + tested** (`TUI_FRAME_DUMP=1` → `artifacts/frame.json`, per-cell char/fg/bg/attrs).
 - **OBSERVATION TOOLING (answered):** `tmux capture-pane -e` is LOSSY for truecolor bg (verified —
   even Box backgroundColors don't round-trip). Correct model: drive with tmux, assert STATE from
@@ -51,20 +51,13 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   status.json fields: ready, frame (settle counter), renderQuiescent, activeWorkspace, activeBuffer,
   bufferRevision, dirty, cursor{line,col}, focus, treeRows, treeSelected, overlay, paletteQuery,
   paletteMatches, width, height, git*. Assert STATE from here; pane-capture for visual only.
-- **Then, in order:** multi-workspace (WorkspaceManager + outer tabs + per-workspace snapshot
-  restore) → file search → piece-table undo (replace the full-document snapshot undo) → M4 `diff`
-  module + git sidebar UI + split editable-diff view → M5 lsp editor wiring (diagnostics render +
-  definition jump; map editor grapheme col ↔ LSP UTF-16 via `editor.coordinates`) → M6 markdown
-  split-preview UI + toggle command → M7 plugin demo (kernel composition + one contribution plugin)
-  → 5-pass gauntlet + independent subagent panel + completeness-critic-until-dry → isolated blackline
-  acceptance test (`VERIFICATION_RESULTS.md`, throwaway worktree) → §5.1 gate green.
-
 ## Environment (established)
 - Bun `~/.bun/bin/bun` (v1.3.14). Prefix: `export PATH="$HOME/.bun/bin:$PATH"`. Node also on PATH.
 - Deps: `ivue@2.0.0`, `vue@3.5.40`, `@opentui/core@0.4.5`, `web-tree-sitter@0.26.11`.
 - Runbook: DB-free. Run `bun run <file>`; test `bun test`; typecheck `bunx tsc --noEmit`
   (NEVER pipe tsc through tail/tee — masks the exit code; use `; echo TSC=$?`).
-- Invariants checker (in ibr repo, DO NOT copy here):
+- Invariants checker (VENDORED project-local via `npx @invariantai/ibr install`; /ibr + /invariants
+  + ivue skills in `.claude/skills`, so codex worktrees inherit them):
   `node .claude/skills/invariants/scripts/check_invariants.mjs --all|--refs|--score`
 - codex workers: `codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -C <worktree> "$(cat prompt)"` in `.claude/worktrees/codex-<mod>` (branch `codex/<mod>`, node_modules symlinked). Prompts: `scripts/codex/*.prompt.txt`.
 - OpenTUI: `createCliRenderer({exitOnCtrlC:false,targetFps})`→ renderer; `.root`, `.requestRender()`, `.start()`, `.destroy()`, `.keyInput.on('keypress',KeyEvent{name,ctrl,shift,meta,option,sequence,repeated})`, `.on('resize')`, `.on('frame')`. `BoxRenderable`/`TextRenderable`/`StyledText`/`fg` from `@opentui/core`.
