@@ -249,6 +249,7 @@ export function buildRootView(
   barThickness.set(logBar, 2);
 
   // Interior height of a bordered box = box height - 2 (top+bottom border).
+  // invariant: A scrollable pane height is an input not an output (ui.invariants.md)
   const editorViewportHeight = () => Math.max(1, (editorArea.height as number) - 2);
   // Layout-anchored (never hand-derived): the code renderable's own laid-out width, minus the one
   // column the overlay vertical scrollbar occupies — so the final column of a line is always
@@ -374,6 +375,8 @@ export function buildRootView(
   }
 
   function renderTree(): StyledText {
+    // invariant: Renderables hold no model state (ui.invariants.md)
+    // invariant: Only the visible window is rendered (ui.invariants.md)
     const palette = readPalette();
     const rows = workspace.tree.rows;
     const selectedIndex = workspace.tree.selectedIndex.value;
