@@ -29,6 +29,10 @@ class $FileTree {
   get selectedIndex() {
     return ref(0);
   }
+  // Row index under the mouse pointer (-1 = none) — hover highlight only, never selection truth.
+  get hoveredIndex() {
+    return ref(-1);
+  }
   // shallowRef holding the last flattened rows (recomputed on structural change only).
   private get rowsRef() {
     return shallowRef<TreeRow[]>([]);

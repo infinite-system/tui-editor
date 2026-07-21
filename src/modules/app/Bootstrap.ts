@@ -36,7 +36,12 @@ export interface BootedApp {
 export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   Logging.Class.info('Boot start');
 
-  const renderer = await createCliRenderer({ exitOnCtrlC: false, targetFps: 30, useMouse: true });
+  const renderer = await createCliRenderer({
+    exitOnCtrlC: false,
+    targetFps: 30,
+    useMouse: true,
+    enableMouseMovement: true, // hover highlighting (over/out/move)
+  });
 
   Kernel.instance.seal();
   Kernel.instance.assertSealed();
@@ -77,6 +82,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       focus: workspace.focus.value,
       treeRows: workspace.tree.rows.length,
       treeSelected: workspace.tree.selectedIndex.value,
+      treeHovered: workspace.tree.hoveredIndex.value,
       editorScrollTop: editor.viewport.scrollTop.value,
       gitLogScrollTop: workspace.gitPanel.logScrollTop.value,
       gitLogIndex: workspace.gitPanel.logIndex.value,
@@ -115,6 +121,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     void editor.viewport.scrollTop.value;
     void workspace.focus.value;
     void workspace.tree.selectedIndex.value;
+    void workspace.tree.hoveredIndex.value;
     // Git state is produced asynchronously (refresh/log outlive boot); observe it so the sidebar
     // repaints — and the status side-channel flushes — when git data arrives.
     const git = workspace.git.value;

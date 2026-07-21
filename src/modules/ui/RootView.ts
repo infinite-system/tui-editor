@@ -173,7 +173,12 @@ export function buildRootView(
       const rowIndex = top + visibleIndex;
       const indent = '  '.repeat(row.depth);
       const icon = theme.icon(row.name, row.isDir, row.expanded);
-      const marker = rowIndex === selectedIndex && workspace.focus.value === 'files' ? '›' : ' ';
+      const marker =
+        rowIndex === selectedIndex && workspace.focus.value === 'files'
+          ? '›'
+          : rowIndex === workspace.tree.hoveredIndex.value
+            ? '·'
+            : ' ';
       let label = `${marker}${indent}${icon} ${row.name}`;
       if (label.length > SIDEBAR_WIDTH - 2) label = label.slice(0, SIDEBAR_WIDTH - 2);
       return label;
@@ -448,6 +453,18 @@ export function buildRootView(
   // Sidebar clicks: focus follows the click (files or git view), and a click on a tree row SELECTS
   // it — clicking the already-selected row ACTIVATES it (open file / toggle folder). Keyboard
   // parity holds: everything here is also reachable via arrows/Enter.
+  // Hover highlight (enhancement only — selection/activation stay on click/keys). The hovered row
+  // is model view-state so the frame effect repaints when it changes; cost is one marker cell.
+  sidebar.onMouseMove = (event) => {
+    if (workspace.focus.value === 'git') return;
+    const rowIndex = treeWindowTop() + (event.y - (sidebar.y + 1));
+    workspace.tree.hoveredIndex.value =
+      rowIndex >= 0 && rowIndex < workspace.tree.rows.length ? rowIndex : -1;
+  };
+  sidebar.onMouseOut = () => {
+    workspace.tree.hoveredIndex.value = -1;
+  };
+
   sidebar.onMouseDown = (event) => {
     if (workspace.focus.value === 'git') {
       // Git rows get click-select with the changes-list treatment; for now the click just keeps
