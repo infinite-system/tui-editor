@@ -351,7 +351,10 @@ export function buildRootView(
   // Scale map (reported->true position per bar) + intended thickness (cells; NEVER read back from
   // layout — pre-layout reads return 0).
   const barScales = new Map<object, number>();
-  const barThickness = new Map<object, number>();
+  // UNIFIED thickness: every scrollbar (both axes, every pane) is the SAME cell count, read LIVE from
+  // settings.scrollbarThickness so a change applies to all bars at once (one source of truth — the
+  // scrollbarThickness applied-effect test asserts the rendered bar occupies exactly this many cells).
+  const scrollbarThicknessCells = (): number => Math.max(1, Math.round(settings.scrollbarThickness.value));
   // True while applyBarGeometry is ASSIGNING scrollPosition: the widget fires onChange for
   // programmatic writes too, and treating those as user thumb-drags halted the momentum glide on
   // every paint (the 'wheel not smooth since scrollbars' regression). onChange handlers must act
@@ -429,11 +432,6 @@ export function buildRootView(
   sidebar.add(treeVerticalBar);
   sidebar.add(changesBar);
   sidebar.add(logBar);
-  barThickness.set(editorVerticalBar, 1);
-  barThickness.set(editorHorizontalBar, 1);
-  barThickness.set(treeVerticalBar, 2);
-  barThickness.set(changesBar, 2);
-  barThickness.set(logBar, 2);
 
   // Interior height of a bordered box = box height - 2 (top+bottom border).
   // invariant: A scrollable pane height is an input not an output (ui.invariants.md)
@@ -481,12 +479,19 @@ export function buildRootView(
       return;
     }
     bar.visible = true;
-    // A bar thicker than 1 cell grows INWARD from the region edge (never over the border).
-    const thickness = barThickness.get(bar) ?? 1;
+    // A bar thicker than 1 cell grows INWARD from the region edge (never over the border). Thickness is
+    // read live + UNIFORM across every bar, and the cross-axis size is set here every frame so a
+    // settings change resizes all bars without reconstruction.
+    const thickness = scrollbarThicknessCells();
     bar.top = orientation === 'vertical' ? geometry.trackTop : geometry.trackTop - (thickness - 1);
     bar.left = orientation === 'vertical' ? geometry.trackLeft - (thickness - 1) : geometry.trackLeft;
-    if (orientation === 'vertical') bar.height = geometry.trackLength;
-    else bar.width = geometry.trackLength;
+    if (orientation === 'vertical') {
+      bar.height = geometry.trackLength;
+      bar.width = thickness;
+    } else {
+      bar.width = geometry.trackLength;
+      bar.height = thickness;
+    }
     applyingBarGeometry = true;
     try {
       bar.scrollSize = scroll.scrollSize;
