@@ -164,7 +164,12 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   });
 
   // Frame-settle signal for the tmux harness (a frame actually rendered).
-  const framePath = join(dirname(StatusChannel.Class.path), 'frame.json');
+  const framePath =
+    process.env.TUI_FRAME_PATH ||
+    join(
+      dirname(StatusChannel.Class.path),
+      StatusChannel.Class.path.split('/').pop()!.replace('status', 'frame'),
+    );
   let frame = 0;
   // Smooth-scroll animation clock. dt is clamped so a resume from idle (a "paused clock") advances
   // one frame's worth, not the whole idle gap — the paused-clock invariant.

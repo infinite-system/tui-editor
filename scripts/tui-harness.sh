@@ -15,7 +15,11 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-STATUS="$ROOT/artifacts/status.json"
+# Per-session side channels: each launched instance writes its OWN status/frame files, so
+# concurrent instances (user demo + harness sessions) never pollute each other's verdicts.
+status_path() { echo "$ROOT/artifacts/status-$1.json"; }
+frame_path()  { echo "$ROOT/artifacts/frame-$1.json"; }
+STATUS="$ROOT/artifacts/status.json" # legacy fallback for single-arg field/status
 BUN="${BUN:-$HOME/.bun/bin/bun}"
 
 _field() { # read a top-level field from status.json without jq
@@ -32,11 +36,14 @@ case "$cmd" in
     tmux kill-session -t "$session" 2>/dev/null
     rm -f "$STATUS"
     tmux new-session -d -s "$session" -x "$cols" -y "$rows"
-    # Run inside the repo with bun on PATH.
-    tmux send-keys -t "$session" "cd '$ROOT' && PATH=\"\$HOME/.bun/bin:\$PATH\" $* " C-m
+    rm -f "$(status_path "$session")" "$(frame_path "$session")"
+    # Run inside the repo with bun on PATH and a session-scoped side channel.
+    tmux send-keys -t "$session" "cd '$ROOT' && PATH=\"\$HOME/.bun/bin:\$PATH\" TUI_STATUS_PATH='$(status_path "$session")' TUI_FRAME_PATH='$(frame_path "$session")' $* " C-m
     echo "launched $session ($cols x $rows): $*"
     ;;
   ready|settle)
+    STATUS="$(status_path "$1")"
+
     session="${1:-}"; timeout="${2:-15}"
     end=$((SECONDS + timeout))
     while [ $SECONDS -lt $end ]; do
@@ -99,6 +106,8 @@ case "$cmd" in
     cat "$STATUS" 2>/dev/null || echo "(no status)"
     ;;
   field)
+    # field <session> <name> (2 args) or legacy field <name> (reads the shared default file).
+    if [ $# -ge 2 ]; then STATUS="$(status_path "$1")"; shift; fi
     _field "$1"
     ;;
   kill)

@@ -7,8 +7,11 @@ import { Static } from './Static';
 // for genuinely visual assertions (layout, squiggles, theme).
 import { writeFileSync, renameSync, mkdirSync } from 'node:fs';
 
-const STATUS_PATH = 'artifacts/status.json';
-const TEMP_PATH = 'artifacts/.status.json.tmp';
+// Per-INSTANCE side channel: two app instances sharing a cwd must never clobber each other's
+// observability (a polluted channel produces false verdicts — the FrameProbe-stride lesson).
+// The harness sets TUI_STATUS_PATH per session; a bare manual run keeps the default.
+const STATUS_PATH = process.env.TUI_STATUS_PATH || 'artifacts/status.json';
+const TEMP_PATH = `${STATUS_PATH}.tmp`;
 let prepared = false;
 
 export interface StatusSnapshot {

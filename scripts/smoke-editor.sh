@@ -9,8 +9,10 @@ ROOT="$(cd "$DIR/.." && pwd)"
 S="smoke-$$"
 BUN="$HOME/.bun/bin/bun"
 FIX="${1:-$ROOT/fixtures}"
+FRAME="$ROOT/artifacts/frame-$S.json"
+STATUSF="$ROOT/artifacts/status-$S.json"
 fail=0
-f()    { "$H" field "$1"; }
+f()    { "$H" field "$S" "$1"; }
 chk()  { if [ "$2" = "$3" ]; then echo "  PASS  $1 ($2)"; else echo "  FAIL  $1: got '$2' want '$3'"; fail=1; fi; }
 chkne(){ if [ -n "$2" ] && [ "$2" != "null" ]; then echo "  PASS  $1 ($2)"; else echo "  FAIL  $1: '$2'"; fail=1; fi; }
 gt()   { if [ "${2:-0}" -gt "${3:-0}" ] 2>/dev/null; then echo "  PASS  $1 ($3->$2)"; else echo "  FAIL  $1 ($3->$2)"; fail=1; fi; }
@@ -51,8 +53,8 @@ echo "  info: dirty=$(f dirty) cursor=$(f cursor)"
 "$H" settle "$S" >/dev/null 2>&1
 echo "== caret cell == typed glyph cell (human-QA regression: was one row high) =="
 if [ "${TUI_FRAME_DUMP:-}" = "1" ]; then
-  caret_check="$("$BUN" -e '
-const f=JSON.parse(require("fs").readFileSync("artifacts/frame.json"));
+  caret_check="$(FRAME_FILE="$FRAME" "$BUN" -e '
+const f=JSON.parse(require("fs").readFileSync(process.env.FRAME_FILE));
 let qx=-1,qy=-1;
 for(let y=0;y<f.height && qx<0;y++){let cell=0;for(const ch of f.rows[y].text){if(ch==="X"){qx=cell;qy=y;break}cell++;}}
 const [cx,cy]=process.argv[1].split(",").map(Number);
@@ -64,8 +66,8 @@ else
 fi
 
 echo "== no soft-wrap: long line 1 stays one row; gutter 2 on the next row (human-QA regression) =="
-wrap_check="$("$BUN" -e '
-const f=JSON.parse(require("fs").readFileSync("artifacts/frame.json"));
+wrap_check="$(FRAME_FILE="$FRAME" "$BUN" -e '
+const f=JSON.parse(require("fs").readFileSync(process.env.FRAME_FILE));
 let qy=-1;
 for(let y=0;y<f.height && qy<0;y++){for(const ch of f.rows[y].text){if(ch==="X"){qy=y;break}}}
 if(qy<0){console.log("WRONG no typed glyph found");process.exit(0)}
@@ -108,8 +110,8 @@ if [ -n "$mouse" ] && [ "$mouse" != "null" ]; then echo "  PASS  mouse click reg
 echo "== h-scroll range: End reveals the long line's end (scrollbar geometry regression) =="
 "$H" click "$S" 40 1 >/dev/null   # put the cursor ON the long line (row y=1 = doc line 0)
 tmux send-keys -t "$S" End; sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
-end_visible="$("$BUN" -e '
-const f=JSON.parse(require("fs").readFileSync("artifacts/frame.json"));
+end_visible="$(FRAME_FILE="$FRAME" "$BUN" -e '
+const f=JSON.parse(require("fs").readFileSync(process.env.FRAME_FILE));
 let ok=false;for(let y=0;y<f.height;y++) if(f.rows[y].text.includes("desync)")){ok=true;break}
 console.log(ok?"OK":"CUT");
 ')"
@@ -133,6 +135,16 @@ chk "tree click focuses files" "$(f focus)" "files"
 chk "tree click selected row 0" "$(f treeSelected)" "0"
 "$H" click "$S" 60 5 >/dev/null    # click editor pane -> focus editor
 chk "editor click focuses editor" "$(f focus)" "editor"
+
+echo "== single-dispatch: a tree click opens WITHOUT moving the editor cursor =="
+"$H" click "$S" 60 6 >/dev/null   # place the cursor somewhere via an editor click
+"$H" settle "$S" >/dev/null 2>&1
+"$H" click "$S" 5 2 >/dev/null    # click a tree FILE row (data.json)
+sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
+opened_buffer="$(f activeBuffer)"
+cursor_line="$(STATUS_FILE="$STATUSF" "$BUN" -e 'console.log(JSON.parse(require("fs").readFileSync(process.env.STATUS_FILE)).cursor?.line ?? -1)')"
+case "$opened_buffer" in *greeter.ts) buffer_ok=1;; *) buffer_ok=0;; esac  # y=2 = greeter.ts (src expanded by the earlier click test)
+if [ "$buffer_ok" = 1 ] && [ "$cursor_line" = "0" ]; then echo "  PASS  tree click opened a file, cursor stayed at line 0 (no double-dispatch)"; else echo "  FAIL  double-dispatch? buffer=$opened_buffer cursorLine=$cursor_line"; fail=1; fi
 
 echo "== command palette (Ctrl+P) =="
 "$H" send "$S" C-p >/dev/null
