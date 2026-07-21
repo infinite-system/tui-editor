@@ -1,6 +1,6 @@
 import { test, expect } from 'bun:test';
 import { GitRows } from './git.rows';
-import type { GitFileRecord } from './git.parsers';
+import type { GitFileRecord } from './GitParsers';
 
 function file(path: string, xy: string): GitFileRecord {
   return { path, xy } as GitFileRecord;

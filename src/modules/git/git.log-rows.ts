@@ -11,7 +11,7 @@
 // invariant: Commit expansion is lazy and windowed (src/modules/git/git.invariants.md)
 // invariant: Cost tracks the actively observed set (project.invariants.md)
 import { Static } from '../system/Static';
-import type { CommitFileChange, CommitRecord } from './git.parsers';
+import type { CommitFileChange, CommitRecord } from './GitParsers';
 
 /** One expanded commit: its position in the log, its sha, and its changed files (null = loading). */
 export interface ExpandedCommit {

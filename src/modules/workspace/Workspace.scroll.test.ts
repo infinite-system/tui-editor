@@ -1,7 +1,7 @@
 import { test, expect, describe } from 'bun:test';
 import { Workspace } from './Workspace';
 import { CommitLog } from '../git/CommitLog';
-import type { CommitRecord } from '../git/git.parsers';
+import type { CommitRecord } from '../git/GitParsers';
 
 function makeCommit(index: number): CommitRecord {
   return { sha: `sha${index}`, shortSha: `s${index}`, author: 'a', dateIso: 'd', subject: `c${index}`, refs: [] };

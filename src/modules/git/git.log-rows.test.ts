@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { GitLogRows, type ExpandedCommit } from './git.log-rows';
-import type { CommitRecord } from './git.parsers';
+import type { CommitRecord } from './GitParsers';
 
 const {
   commitFlatIndex,

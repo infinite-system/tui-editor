@@ -3,7 +3,7 @@ import {
   LOG_FIELD_SEPARATOR,
   LOG_RECORD_SEPARATOR,
   GitParsers,
-} from '../git.parsers';
+} from '../GitParsers';
 
 test('name-status parser yields one status letter + path per line', () => {
   const output = ['M\tsrc/modules/git/GitCommands.ts', 'A\tdocs/new.md', 'D\told.txt', ''].join('\n');

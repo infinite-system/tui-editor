@@ -118,7 +118,7 @@ function addTrackedRecord(snapshot: GitStatusSnapshot, record: GitFileRecord): v
   if (record.y !== '.') snapshot.unstaged.push(record);
 }
 
-function parseStatusPorcelainV2Implementation(output: string): GitStatusSnapshot {
+function $parseStatusPorcelainV2(output: string): GitStatusSnapshot {
   const snapshot: GitStatusSnapshot = {
     branch: '',
     head: '',
@@ -187,7 +187,7 @@ export interface CommitFileChange {
  * Parse `git show --name-status --format=` output: one `<STATUS>\t<path>` line per changed file;
  * renames/copies are `R<score>\t<old>\t<new>` (the new path is the file's identity).
  */
-function parseNameStatusImplementation(output: string): CommitFileChange[] {
+function $parseNameStatus(output: string): CommitFileChange[] {
   const changes: CommitFileChange[] = [];
 
   for (const rawLine of output.split(/\r?\n/)) {
@@ -210,7 +210,7 @@ function parseNameStatusImplementation(output: string): CommitFileChange[] {
   return changes;
 }
 
-function parseLogImplementation(output: string): CommitRecord[] {
+function $parseLog(output: string): CommitRecord[] {
   const commits: CommitRecord[] = [];
 
   for (const rawRecord of output.split(LOG_RECORD_SEPARATOR)) {
@@ -236,9 +236,9 @@ function parseLogImplementation(output: string): CommitRecord[] {
 }
 
 class $GitParsers {
-  static parseStatusPorcelainV2 = parseStatusPorcelainV2Implementation;
-  static parseLog = parseLogImplementation;
-  static parseNameStatus = parseNameStatusImplementation;
+  static parseStatusPorcelainV2 = $parseStatusPorcelainV2;
+  static parseLog = $parseLog;
+  static parseNameStatus = $parseNameStatus;
 }
 
 export namespace GitParsers {

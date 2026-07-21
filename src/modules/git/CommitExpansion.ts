@@ -13,7 +13,7 @@
 import { Reactive } from 'ivue';
 import { shallowRef } from 'vue';
 import { GitCommands } from './GitCommands';
-import { GitParsers, type CommitFileChange } from './git.parsers';
+import { GitParsers, type CommitFileChange } from './GitParsers';
 import type { ExpandedCommit } from './git.log-rows';
 
 export type CommitFilesFetch = (sha: string) => Promise<readonly CommitFileChange[]>;

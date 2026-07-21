@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'bun:test';
 import { CommitLog, type CommitPageFetch } from './CommitLog';
-import type { CommitRecord } from './git.parsers';
+import type { CommitRecord } from './GitParsers';
 
 function makeCommit(index: number): CommitRecord {
   return {

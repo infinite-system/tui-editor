@@ -3,7 +3,7 @@
 //
 // invariant: Git command failures stay data (src/modules/git/git.invariants.md)
 import { Processes } from '../system/Processes';
-import { LOG_FORMAT } from './git.parsers';
+import { LOG_FORMAT } from './GitParsers';
 
 export interface GitCommandResult {
   code: number;

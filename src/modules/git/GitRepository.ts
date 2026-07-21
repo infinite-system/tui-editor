@@ -10,7 +10,7 @@ import {
   GitParsers,
   type CommitRecord,
   type GitFileRecord,
-} from './git.parsers';
+} from './GitParsers';
 
 export interface LoadHistoryOptions {
   branch?: string;

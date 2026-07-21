@@ -3,7 +3,7 @@
 // exactly this list and the mouse hit-tester indexes into the SAME list, so clicks always land on
 // the row the user sees (the lesson from the tree: renderer and hit-test must share layout math).
 import { Static } from '../system/Static';
-import type { GitFileRecord } from './git.parsers';
+import type { GitFileRecord } from './GitParsers';
 
 export type ChangeBucket = 'staged' | 'unstaged' | 'untracked';
 

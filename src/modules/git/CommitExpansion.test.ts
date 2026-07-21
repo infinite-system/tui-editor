@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'bun:test';
 import { CommitExpansion, type CommitFilesFetch } from './CommitExpansion';
-import type { CommitFileChange } from './git.parsers';
+import type { CommitFileChange } from './GitParsers';
 
 function filesFor(sha: string): CommitFileChange[] {
   return [{ status: 'M', path: `${sha}/changed.ts` }];

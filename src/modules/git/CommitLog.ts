@@ -8,7 +8,7 @@
 import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
 import { GitCommands } from './GitCommands';
-import { GitParsers, type CommitRecord } from './git.parsers';
+import { GitParsers, type CommitRecord } from './GitParsers';
 import { GitWindow } from './git.window';
 
 export type CommitPageFetch = (skip: number, limit: number) => Promise<CommitRecord[]>;
