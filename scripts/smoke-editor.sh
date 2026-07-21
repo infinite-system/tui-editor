@@ -118,14 +118,18 @@ console.log(ok?"OK":"CUT");
 if [ "$end_visible" = "OK" ]; then echo "  PASS  line end visible at max scrollLeft"; else echo "  FAIL  line end cut off at max scrollLeft"; fail=1; fi
 tmux send-keys -t "$S" Home; sleep 0.3
 
-echo "== SHIFT+wheel scrolls HORIZONTALLY (SGR 69/68; repeat-offender QA regression) =="
+echo "== horizontal wheel ROUTING test (Option+wheel SGR 75/74) =="
+# ROUTING test only: injecting into tmux bypasses the terminal, so this proves the app ROUTES the
+# codes, NOT that a given modifier is delivered. Real-terminal delivery is terminal-dependent and was
+# confirmed OUT-OF-BAND: the user's `cat -v` capture showed Option+wheel arriving as 74/75 (shift 68/69
+# is swallowed by xterm-family terminals; native tilt 66/67 is terminal-dependent). Acceptance = 74/75.
 "$H" settle "$S" >/dev/null 2>&1
-shift_wheel_before="$(f editorScrollLeft)"
-for _ in 1 2 3 4 5 6; do tmux send-keys -t "$S" -l "$(printf '\033[<69;40;2M')"; sleep 0.12; done  # shift+wheel-down
+h_wheel_before="$(f editorScrollLeft)"
+for _ in 1 2 3 4 5 6; do tmux send-keys -t "$S" -l "$(printf '\033[<75;40;2M')"; sleep 0.12; done  # Option+wheel-right
 sleep 0.5; "$H" settle "$S" >/dev/null 2>&1
-shift_wheel_after="$(f editorScrollLeft)"
-if [ "${shift_wheel_after:-0}" -gt "${shift_wheel_before:-0}" ] 2>/dev/null; then echo "  PASS  shift+wheel scrolled horizontally ($shift_wheel_before->$shift_wheel_after)"; else echo "  FAIL  shift+wheel did not scroll horizontally ($shift_wheel_before->$shift_wheel_after)"; fail=1; fi
-for _ in 1 2 3 4 5 6 7 8; do tmux send-keys -t "$S" -l "$(printf '\033[<68;40;2M')"; sleep 0.1; done  # shift+wheel-up reverses
+h_wheel_after="$(f editorScrollLeft)"
+if [ "${h_wheel_after:-0}" -gt "${h_wheel_before:-0}" ] 2>/dev/null; then echo "  PASS  Option+wheel routes to horizontal ($h_wheel_before->$h_wheel_after)"; else echo "  FAIL  Option+wheel did not route horizontal ($h_wheel_before->$h_wheel_after)"; fail=1; fi
+for _ in 1 2 3 4 5 6 7 8; do tmux send-keys -t "$S" -l "$(printf '\033[<74;40;2M')"; sleep 0.1; done  # Option+wheel-left reverses
 sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
 tmux send-keys -t "$S" Home; sleep 0.3
 

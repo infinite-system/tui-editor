@@ -1120,9 +1120,12 @@ export function buildRootView(
   };
   editorArea.onMouseScroll = (event) => {
     if (!workspace.editor.hasDocument.value) return;
-    // Horizontal arrives TWO ways (terminal-dependent): native horizontal wheel events
-    // (direction left/right — many terminals translate shift+wheel or trackpad swipes into
-    // these), or a vertical wheel with the shift modifier bit. Route BOTH to columns.
+    // Horizontal scroll arrives by SEVERAL terminal-dependent encodings; route them ALL to columns:
+    //   - native horizontal wheel / tilt: SGR 66/67 -> direction left/right (trackpad two-finger swipe;
+    //     Option+wheel on the user's terminal arrives as 74/75 = 66/67 + Meta, also direction left/right);
+    //   - a VERTICAL wheel with a modifier: Option/Alt (+8 -> 72/73) is the user-facing path that
+    //     survives real terminals; Shift (+4 -> 68/69) is a bonus (most terminals swallow it).
+    // Delivery of any given modifier is terminal-dependent — supporting all of them is the robust fix.
     const direction = event.scroll?.direction;
     if (workspace.editor.wordWrap.value) {
       // Wrap mode: ONE scroll axis — horizontal gestures route to the vertical window and
@@ -1131,7 +1134,8 @@ export function buildRootView(
       scrollEditorVertically((backward ? -1 : 1) * WHEEL_STEP);
       return;
     }
-    const horizontal = direction === 'left' || direction === 'right' || event.modifiers.shift;
+    const modifierHorizontal = event.modifiers.alt || event.modifiers.shift; // Option maps to alt
+    const horizontal = direction === 'left' || direction === 'right' || modifierHorizontal;
     if (horizontal) {
       const backward = direction === 'left' || direction === 'up';
       workspace.impulseEditorHorizontalScroll(backward ? -1 : 1);

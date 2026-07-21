@@ -6,11 +6,16 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
 ## USER PIPELINE (durable — no user request drops; statused per item)
 
-- [x] QA-A. **Shift+wheel horizontal scroll.** RESOLVED — it was already working in the current tree
-      (the momentum merge 77dee65 added the `event.modifiers.shift` horizontal branch to the editor
-      wheel handler; the user's report predated that merge). FrameProbe-confirmed by DRIVING it:
-      SGR shift+wheel-down `\e[<69;…M` shifts content `ABC…`→`345…` (scrollLeft 0→33) and shift+wheel-up
-      `\e[<68;…M` reverses to 0. Locked with a smoke assertion in smoke-editor.sh.
+- [x] QA-A. **Horizontal scroll via Option+wheel (SGR 74/75) — confirmed on the user's terminal.**
+      The earlier shift+wheel "fix" was a FALSE-GREEN: xterm-family terminals SWALLOW Shift+wheel (68/69)
+      for their own scrollback and forward nothing — a tmux-injected smoke passed while the real user
+      path stayed dead (injecting into tmux bypasses the terminal layer that fails). The user's `cat -v`
+      capture settled it: Option+wheel arrives as **74/75** (delivered), Shift 68/69 swallowed, native
+      tilt 66/67 terminal-dependent. FIX: the editor wheel handler routes to horizontal on
+      direction left/right (covers 66/67 and 74/75, which OpenTUI decodes as left/right) AND on the
+      alt/shift modifier (covers Option-vertical 72/73 + the Shift bonus). Verified by DRIVING:
+      Option+wheel-right 75 → scrollLeft 0→27, Option+wheel-left 74 → back to 13, alt-vertical 73 → 32.
+      The smoke is a ROUTING test (74/75) — real delivery is terminal-dependent, confirmed out-of-band.
 - [x] QA-B. **File-list scroll-swim** + **QA-C click-jumps-to-top** (same root cause). The tree window
       was DERIVED from the selection index (`treeWindowTop = selectedIndex - height + 1`), pinning the
       highlight to a screen edge (swim) and snapping to top when a click set a low selection index.
