@@ -158,6 +158,43 @@ storm accumulating one timer per event.
 
 **Last refined:** 2026-07-21
 
+### Commit expansion is lazy and windowed
+
+**Invariant:** If a commit in the log is expanded inline, then its changed-file list was fetched on
+demand for THAT sha alone (`git show --name-status --format=`), is retained in a hard-bounded
+expanded set (expanding past the capacity collapses the oldest expansion, and collapse evicts the
+files), and only the flat rows inside the visible window are ever rendered or consulted.
+
+**Scope:** `CommitExpansion` (expanded set + lazy fetch + eviction), the flat row model in
+`git.log-rows.ts`, and every consumer of it: `RootView.renderGitPanel`'s log region,
+`Workspace.logRowAt`/`ensureLogWindow`/`activateLogRow`, and the log hit-tester/keyboard indices.
+
+**Mechanism:** `CommitExpansion.expand` fetches one sha only after the user expands it, shows a
+loading row until the fetch lands, and discards a result superseded by collapse/reset (per-sha
+tickets); `expansionOrder` bounds the expanded set at `capacity` (default 32) by collapsing the
+oldest; `commitLogRows(flatStart, rowCount, …)` walks only the commits intersecting the window
+plus the bounded expanded set, with unfetched commit records degrading to placeholder headers.
+
+**Generates:** VS Code-style inline drill-down over a 10k-commit log at O(window) cost; a single
+flat row space shared by renderer, mouse hit-test, and keyboard selection; instant collapse with
+no orphaned async writes.
+
+**Evidence:** `src/modules/git/CommitExpansion.ts` (`expand`, `collapse`, capacity eviction);
+`src/modules/git/git.log-rows.ts` (`commitLogRows`, `commitIndexAtFlatRow`, `totalFlatRows`);
+`src/modules/git/CommitExpansion.test.ts` (lazy single-sha fetch, stale-collapse discard, bounded
+eviction); `src/modules/git/git.log-rows.test.ts` (windowing across an expanded commit, loading
+placeholder).
+
+**Impossible if true:** Expanding one commit pre-fetching any other commit's files; an expanded
+10k-commit log materializing rows beyond the visible window plus the bounded expanded set; a
+collapse racing its own fetch and re-expanding from a stale result.
+
+**Verification:** `bun test src/modules/git/CommitExpansion.test.ts src/modules/git/git.log-rows.test.ts`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-21
+
 ### Destructive working-tree operations require confirmation
 
 **Invariant:** If an operation destroys uncommitted work (discard a file's changes, clean an

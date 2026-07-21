@@ -26,6 +26,7 @@ import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { displayColumn, lineWidth, graphemeAtDisplayColumn, graphemeToU16 } from '../editor/editor.coordinates';
 import { SelectableText } from './SelectableText';
 import { GitRows } from '../git/git.rows';
+import { GitLogRows } from '../git/git.log-rows';
 import { ScrollbarGeometry } from './scrollbar-geometry';
 import { Logging } from '../system/Logging';
 
@@ -228,7 +229,7 @@ export function buildRootView(
     onChange: (position) => {
       workspace.haltGitLogScroll(); // thumb drag adopts authority (One-Writer)
       workspace.gitPanel.logScrollTop.value = trueScrollPosition(logBar, position);
-      void workspace.commitLog.value?.ensureRange(workspace.gitPanel.logScrollTop.value, 50);
+      workspace.ensureLogWindow(workspace.gitPanel.logScrollTop.value);
     },
   });
   sidebar.add(changesBar);
@@ -337,7 +338,8 @@ export function buildRootView(
       viewportSize: gitPanelGeometry.changesRows,
       scrollPosition: workspace.gitPanel.changesScrollTop.value,
     });
-    const knownEnd = workspace.commitLog.value?.knownEnd.value ?? Number.POSITIVE_INFINITY;
+    // Flat-row total: commit count PLUS the rows contributed by expanded commits (inline expansion).
+    const logFlatEnd = workspace.logFlatEnd();
     const logRegion = {
       top: gitPanelGeometry.dividerRow, // content-relative first log row (screen divider + 1)
       left: 0,
@@ -348,8 +350,8 @@ export function buildRootView(
       // Unknown history length: a rolling virtual size keeps the thumb draggable; it refines once
       // the end is discovered (a short page sets knownEnd).
       scrollSize: gitVisible
-        ? Number.isFinite(knownEnd)
-          ? (knownEnd as number)
+        ? Number.isFinite(logFlatEnd)
+          ? logFlatEnd
           : workspace.gitPanel.logScrollTop.value + gitPanelGeometry.logRows * 4
         : 0,
       viewportSize: gitPanelGeometry.logRows,
@@ -562,20 +564,44 @@ export function buildRootView(
 
     pushRow('─'.repeat(innerWidth), palette.border);
 
-    // Commit log region (bottom) — virtualized: only the visible window is read from the cache.
+    // Commit log region (bottom) — virtualized over FLAT rows (inline commit expansion): an
+    // expanded commit is its header plus indented file rows (or a loading row while its lazy fetch
+    // is in flight). The SAME pure row model (git.log-rows.ts) serves the renderer here and the
+    // hit-tester/keyboard (Workspace.logRowAt), windowed by logScrollTop; only the visible
+    // commits' records (and the bounded expanded set) are consulted.
+    // invariant: Commit expansion is lazy and windowed (src/modules/git/git.invariants.md)
     const logHeight = Math.max(1, bodyHeight - topHeight - 1);
     const commitLog = workspace.commitLog.value;
     if (commitLog) {
-      const top = gitPanel.logScrollTop.value;
-      const visibleCommits = commitLog.rows(top, logHeight);
-      visibleCommits.forEach((record, index) => {
-        const commitIndex = top + index;
-        const selected = active && gitPanel.region.value === 'log' && commitIndex === gitPanel.logIndex.value;
-        const hovered = commitIndex === gitPanel.logHovered.value;
+      const flatTop = gitPanel.logScrollTop.value;
+      const expandedEntries = workspace.commitExpansion.value?.entries.value ?? [];
+      // O(window): at most logHeight commit records cover the flat window (expansion only
+      // DECREASES how many commits fit on screen).
+      const firstCommitIndex = GitLogRows.Class.commitIndexAtFlatRow(expandedEntries, flatTop);
+      const windowRecords = commitLog.rows(firstCommitIndex, logHeight);
+      const flatRows = GitLogRows.Class.commitLogRows(
+        flatTop,
+        logHeight,
+        expandedEntries,
+        (commitIndex) => windowRecords[commitIndex - firstCommitIndex],
+        commitLog.knownEnd.value,
+      );
+      flatRows.forEach((row, index) => {
+        const flatIndex = flatTop + index;
+        const selected = active && gitPanel.region.value === 'log' && flatIndex === gitPanel.logIndex.value;
+        const hovered = flatIndex === gitPanel.logHovered.value;
         const background = selected ? palette.selection : hovered ? palette.cursorLine : null;
-        const newline = index < visibleCommits.length - 1;
-        if (record) pushRow(` ${record.shortSha} ${record.subject}`, palette.fg, { background, newline });
-        else pushRow(' …', palette.dim, { background, newline });
+        const newline = index < flatRows.length - 1;
+        if (row.kind === 'commit') {
+          const chevron = row.expanded ? '▾' : '▸';
+          if (row.record)
+            pushRow(` ${chevron} ${row.record.shortSha} ${row.record.subject}`, palette.fg, { background, newline });
+          else pushRow(' …', palette.dim, { background, newline });
+        } else if (row.kind === 'loading') {
+          pushRow('      …loading', palette.dim, { background, newline });
+        } else {
+          pushRow(`    ${row.glyph} ${row.path}`, glyphColor(row.glyph), { background, newline });
+        }
       });
     }
 
@@ -934,6 +960,9 @@ export function buildRootView(
       } else {
         workspace.gitPanel.region.value = 'log';
         workspace.gitPanel.logIndex.value = hit.index;
+        // Row body = select + ACTIVATE (consistent with tree/changes): a commit header toggles its
+        // inline expansion (lazy fetch); a file row opens that file's diff for that commit.
+        workspace.activateLogRow(hit.index);
       }
       return;
     }

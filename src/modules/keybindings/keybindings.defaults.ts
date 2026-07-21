@@ -40,6 +40,8 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 'return' }, action: 'git.stageToggle', context: 'git' },
   { chord: { key: 'space' }, action: 'git.stageToggle', context: 'git' },
   { chord: { key: 'o' }, action: 'git.openFile', context: 'git' },
+  { chord: { key: 'right' }, action: 'git.expandRight', context: 'git' },
+  { chord: { key: 'left' }, action: 'git.collapseLeft', context: 'git' },
   { chord: { key: 'd' }, action: 'git.discard', context: 'git' },
   { chord: { key: 'escape' }, action: 'git.leave', context: 'git' },
 

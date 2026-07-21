@@ -102,6 +102,32 @@ class $GitCommands {
     return this.run(cwd, ['show', '--no-ext-diff', '--no-color', '--decorate=short', ref, '--']);
   }
 
+  /** One commit's changed files as name-status lines (lazy commit expansion in the log). */
+  static showNameStatus(cwd: string, sha: string): Promise<GitCommandResult> {
+    return this.run(cwd, [
+      '-c',
+      'core.quotepath=false',
+      'show',
+      '--name-status',
+      '--format=',
+      '--no-ext-diff',
+      '--no-color',
+      sha,
+      '--',
+    ]);
+  }
+
+  /** Unified diff of ONE file as of ONE commit (parent → commit). Exits nonzero on a root commit
+   *  (`<sha>^` does not exist) — callers fall back to `showCommitFile`. */
+  static diffCommitFile(cwd: string, sha: string, filePath: string): Promise<GitCommandResult> {
+    return this.run(cwd, ['diff', '--no-ext-diff', '--no-color', `${sha}^`, sha, '--', filePath]);
+  }
+
+  /** Root-commit fallback for `diffCommitFile`: the commit's own patch for one file. */
+  static showCommitFile(cwd: string, sha: string, filePath: string): Promise<GitCommandResult> {
+    return this.run(cwd, ['show', '--no-ext-diff', '--no-color', '--format=', sha, '--', filePath]);
+  }
+
   static branchShowCurrent(cwd: string): Promise<GitCommandResult> {
     return this.run(cwd, ['branch', '--show-current']);
   }

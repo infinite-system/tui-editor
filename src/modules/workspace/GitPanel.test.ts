@@ -1,45 +1,8 @@
 import { test, expect, describe } from 'bun:test';
 import { GitPanel } from './GitPanel';
 
-describe('GitPanel drill-down stack', () => {
-  test('starts in the changes view', () => {
-    const panel = new GitPanel.Class();
-    expect(panel.view.value).toBe('changes');
-    expect(panel.activeCommit.value).toBeNull();
-  });
-
-  test('openCommit → commitFiles; openFile → fileDiff; back unwinds', () => {
-    const panel = new GitPanel.Class();
-    panel.openCommit('sha1', [
-      { path: 'a.ts', status: 'M' },
-      { path: 'b.ts', status: 'A' },
-    ]);
-    expect(panel.view.value).toBe('commitFiles');
-    expect(panel.activeCommit.value).toBe('sha1');
-    expect(panel.commitFiles.value).toHaveLength(2);
-    expect(panel.commitFilesIndex.value).toBe(0);
-
-    panel.openFile('a.ts');
-    expect(panel.view.value).toBe('fileDiff');
-    expect(panel.activeFile.value).toBe('a.ts');
-
-    panel.back(); // fileDiff → commitFiles
-    expect(panel.view.value).toBe('commitFiles');
-    expect(panel.activeFile.value).toBeNull();
-    expect(panel.activeCommit.value).toBe('sha1'); // still in the commit
-
-    panel.back(); // commitFiles → changes
-    expect(panel.view.value).toBe('changes');
-    expect(panel.activeCommit.value).toBeNull();
-    expect(panel.commitFiles.value).toHaveLength(0);
-  });
-
-  test('back from changes is a no-op', () => {
-    const panel = new GitPanel.Class();
-    panel.back();
-    expect(panel.view.value).toBe('changes');
-  });
-});
+// The commit drill-down moved to the inline CommitExpansion model (git module) — its behavior is
+// covered by CommitExpansion.test.ts and git.log-rows.test.ts.
 
 describe('GitPanel split ratio', () => {
   test('clamps to [0.15, 0.85]', () => {
@@ -50,5 +13,20 @@ describe('GitPanel split ratio', () => {
     expect(panel.splitRatio.value).toBe(0.15);
     panel.setSplit(2);
     expect(panel.splitRatio.value).toBe(0.85);
+  });
+});
+
+describe('GitPanel multi-selection', () => {
+  test('toggle, bulk-select, and clear are path-keyed and identity-replaced', () => {
+    const panel = new GitPanel.Class();
+    panel.toggleSelected('a.ts');
+    panel.toggleSelected('b.ts');
+    expect([...panel.selectedPaths.value].sort()).toEqual(['a.ts', 'b.ts']);
+    panel.toggleSelected('a.ts');
+    expect([...panel.selectedPaths.value]).toEqual(['b.ts']);
+    panel.selectMany(['c.ts', 'd.ts']);
+    expect(panel.selectedPaths.value.size).toBe(3);
+    panel.clearSelectedPaths();
+    expect(panel.selectedPaths.value.size).toBe(0);
   });
 });

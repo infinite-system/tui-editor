@@ -3,8 +3,38 @@ import {
   LOG_FIELD_SEPARATOR,
   LOG_RECORD_SEPARATOR,
   parseLog,
+  parseNameStatus,
   parseStatusPorcelainV2,
 } from '../git.parsers';
+
+test('name-status parser yields one status letter + path per line', () => {
+  const output = ['M\tsrc/modules/git/GitCommands.ts', 'A\tdocs/new.md', 'D\told.txt', ''].join('\n');
+  expect(parseNameStatus(output)).toEqual([
+    { status: 'M', path: 'src/modules/git/GitCommands.ts' },
+    { status: 'A', path: 'docs/new.md' },
+    { status: 'D', path: 'old.txt' },
+  ]);
+});
+
+test('name-status parser shows a rename as its NEW path with glyph R and keeps the source', () => {
+  const output = 'R100\tsrc/old-name.ts\tsrc/new-name.ts\n';
+  expect(parseNameStatus(output)).toEqual([
+    { status: 'R', path: 'src/new-name.ts', originalPath: 'src/old-name.ts' },
+  ]);
+});
+
+test('name-status parser handles copies, quoted paths, and skips malformed lines', () => {
+  const output = [
+    'C75\tsource.ts\tcopy.ts',
+    '"\\321\\202\\320\\265\\321\\201\\321\\202.md"', // no tab/path -> skipped
+    'M\t"\\321\\202\\320\\265\\321\\201\\321\\202.md"', // git-quoted UTF-8 octal bytes
+    'not-a-status-line',
+  ].join('\n');
+  expect(parseNameStatus(output)).toEqual([
+    { status: 'C', path: 'copy.ts', originalPath: 'source.ts' },
+    { status: 'M', path: 'тест.md' },
+  ]);
+});
 
 test('porcelain v2 parser separates staged unstaged and untracked XY records', () => {
   const output = [

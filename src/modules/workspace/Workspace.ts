@@ -10,9 +10,11 @@ import { Editor } from '../editor/Editor';
 import { Files } from '../system/Files';
 import { GitRepository } from '../git/GitRepository';
 import { CommitLog } from '../git/CommitLog';
+import { CommitExpansion } from '../git/CommitExpansion';
 import { GitPanel } from './GitPanel';
 import { addImpulse, stepMomentum, isMoving, AT_REST } from '../ui/scroll-momentum';
 import { GitRows } from '../git/git.rows';
+import { GitLogRows, type CommitLogRow } from '../git/git.log-rows';
 import { GitCommands } from '../git/GitCommands';
 
 export type Focus = 'files' | 'editor' | 'git';
@@ -30,6 +32,7 @@ class $Workspace {
   // Git repository + commit log need the root, so they are created in open() (not field-init).
   protected createGit(root: string) { return new GitRepository.Class(root); }
   protected createCommitLog(root: string) { return new CommitLog.Class(root); }
+  protected createCommitExpansion(root: string) { return new CommitExpansion.Class(root); }
 
   get focus() {
     return ref<Focus>('files');
@@ -49,6 +52,9 @@ class $Workspace {
   get commitLog() {
     return shallowRef<CommitLog.Instance | null>(null);
   }
+  get commitExpansion() {
+    return shallowRef<CommitExpansion.Instance | null>(null);
+  }
 
   open(root: string): void {
     this.root = root;
@@ -58,8 +64,7 @@ class $Workspace {
     // Live-wire git: create the repository + log for this root and kick a non-blocking refresh.
     this.git.value = this.createGit(root);
     this.commitLog.value = this.createCommitLog(root);
-    this.gitPanel.back();
-    this.gitPanel.back();
+    this.commitExpansion.value = this.createCommitExpansion(root);
     void this.git.value.refresh();
   }
 
@@ -93,11 +98,89 @@ class $Workspace {
    */
   scrollGitLog(delta: number): void {
     const gitPanel = this.gitPanel;
-    const commitLog = this.commitLog.value;
-    const end = commitLog?.knownEnd.value ?? Number.POSITIVE_INFINITY;
-    const maxScrollTop = Number.isFinite(end) ? Math.max(0, (end as number) - 1) : gitPanel.logScrollTop.value + Math.max(0, delta);
+    const end = this.logFlatEnd();
+    const maxScrollTop = Number.isFinite(end) ? Math.max(0, end - 1) : gitPanel.logScrollTop.value + Math.max(0, delta);
     gitPanel.logScrollTop.value = Math.max(0, Math.min(gitPanel.logScrollTop.value + delta, maxScrollTop));
-    void commitLog?.ensureRange(gitPanel.logScrollTop.value, 50);
+    this.ensureLogWindow(gitPanel.logScrollTop.value);
+  }
+
+  // --- commit-log flat rows (inline commit expansion) ------------------------------------------
+  // The log region scrolls/selects over FLAT rows: a collapsed commit is 1 row; an expanded one is
+  // 1 + fileCount (or 1 + a loading row while its lazy fetch is in flight). The pure model lives in
+  // git.log-rows.ts and is shared with the renderer/hit-tester.
+  // invariant: Commit expansion is lazy and windowed (src/modules/git/git.invariants.md)
+
+  private expandedEntries() {
+    return this.commitExpansion.value?.entries.value ?? [];
+  }
+
+  /** One past the last flat log row (Infinity until the end of history is discovered). */
+  logFlatEnd(): number {
+    const end = this.commitLog.value?.knownEnd.value ?? Number.POSITIVE_INFINITY;
+    return GitLogRows.Class.totalFlatRows(this.expandedEntries(), end);
+  }
+
+  /** The flat log row at `flatIndex` (commit header / commit file / loading), or null. O(window). */
+  logRowAt(flatIndex: number): CommitLogRow | null {
+    const commitLog = this.commitLog.value;
+    if (!commitLog || flatIndex < 0) return null;
+    const rows = GitLogRows.Class.commitLogRows(
+      flatIndex,
+      1,
+      this.expandedEntries(),
+      (commitIndex) => commitLog.rows(commitIndex, 1)[0],
+      commitLog.knownEnd.value,
+    );
+    return rows[0] ?? null;
+  }
+
+  /** Ensure the COMMIT pages behind the flat window `[flatTop, flatTop+count)` are loaded —
+   *  expansion only shrinks how many commits a window shows, so `count` commits always cover it. */
+  ensureLogWindow(flatTop: number, count = 50): void {
+    const commitLog = this.commitLog.value;
+    if (!commitLog) return;
+    const firstCommitIndex = GitLogRows.Class.commitIndexAtFlatRow(this.expandedEntries(), Math.max(0, flatTop));
+    void commitLog.ensureRange(firstCommitIndex, count);
+  }
+
+  /** Enter/click on a flat log row: a commit header toggles its LAZY expansion (fetch on demand,
+   *  loading row until it lands); a file row opens that file's diff for that commit. */
+  activateLogRow(flatIndex: number): void {
+    const row = this.logRowAt(flatIndex);
+    const expansion = this.commitExpansion.value;
+    if (!row || !expansion) return;
+    if (row.kind === 'commit') {
+      if (row.record) expansion.toggle(row.commitIndex, row.record.sha);
+    } else if (row.kind === 'commitFile') {
+      void this.openCommitFileDiff(row.sha, row.path);
+    }
+  }
+
+  /** Left on a flat log row: collapse the expanded commit (from its header OR any of its file
+   *  rows), keeping the selection on the commit's header row. */
+  collapseLogRow(flatIndex: number): void {
+    const row = this.logRowAt(flatIndex);
+    const expansion = this.commitExpansion.value;
+    if (!row || !expansion) return;
+    const sha = row.kind === 'commit' ? row.record?.sha : row.sha;
+    if (!sha || !expansion.isExpanded(sha)) return;
+    expansion.collapse(sha);
+    const headerFlatIndex = GitLogRows.Class.commitFlatIndex(expansion.entries.value, row.commitIndex);
+    this.gitPanel.logIndex.value = headerFlatIndex;
+    if (this.gitPanel.logScrollTop.value > headerFlatIndex) {
+      this.gitPanel.logScrollTop.value = headerFlatIndex;
+    }
+  }
+
+  /** Open ONE file's diff as of ONE commit: `git diff <sha>^ <sha> -- <path>` (a root commit has
+   *  no parent — fall back to the commit's own patch). Read-only diff document in the editor; the
+   *  sidebar stays on the git panel (mirrors openChangeAtRow). */
+  async openCommitFileDiff(sha: string, filePath: string): Promise<void> {
+    let result = await GitCommands.Class.diffCommitFile(this.root, sha, filePath);
+    if (result.code !== 0) result = await GitCommands.Class.showCommitFile(this.root, sha, filePath);
+    const diffText = result.stdout.trimEnd() || '(no differences)';
+    this.editor.openDiff(`${filePath} @ ${sha.slice(0, 7)}`, diffText);
+    this.focus.value = 'editor'; // keyboard to the diff; sidebarView stays 'git'
   }
 
   /** A wheel notch: add a momentum impulse (the frame loop then glides the log). */

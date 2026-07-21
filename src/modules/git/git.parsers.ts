@@ -172,6 +172,42 @@ export function parseStatusPorcelainV2(output: string): GitStatusSnapshot {
   return snapshot;
 }
 
+export interface CommitFileChange {
+  /** One status letter: M/A/D/R/C/T/U — a rename/copy similarity score suffix (R100) is dropped. */
+  status: string;
+  /** The file's path in the commit (for a rename, the NEW path). */
+  path: string;
+  /** A rename/copy's source path. */
+  originalPath?: string;
+}
+
+/**
+ * Parse `git show --name-status --format=` output: one `<STATUS>\t<path>` line per changed file;
+ * renames/copies are `R<score>\t<old>\t<new>` (the new path is the file's identity).
+ */
+export function parseNameStatus(output: string): CommitFileChange[] {
+  const changes: CommitFileChange[] = [];
+
+  for (const rawLine of output.split(/\r?\n/)) {
+    if (!rawLine) continue;
+    const fields = rawLine.split('\t');
+    const statusField = fields[0];
+    const status = statusField?.[0];
+    if (!status || !/[A-Z]/.test(status) || fields.length < 2) continue;
+    if ((status === 'R' || status === 'C') && fields.length >= 3) {
+      changes.push({
+        status,
+        path: decodeGitPath(fields[2]!),
+        originalPath: decodeGitPath(fields[1]!),
+      });
+    } else {
+      changes.push({ status, path: decodeGitPath(fields[1]!) });
+    }
+  }
+
+  return changes;
+}
+
 export function parseLog(output: string): CommitRecord[] {
   const commits: CommitRecord[] = [];
 

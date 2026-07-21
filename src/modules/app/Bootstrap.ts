@@ -97,6 +97,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       gitLogScrollTop: workspace.gitPanel.logScrollTop.value,
       gitLogIndex: workspace.gitPanel.logIndex.value,
       gitLogLoaded: workspace.commitLog.value?.loadedCount ?? 0,
+      gitLogExpanded: workspace.commitExpansion.value?.entries.value.length ?? 0,
     });
   };
 
@@ -144,8 +145,10 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       void git.untracked.value;
       void git.refreshing.value;
     }
+    // Inline commit expansion is produced asynchronously (the lazy name-status fetch lands after
+    // Enter); observe the entries so the loading row is replaced by file rows without a keypress.
+    void workspace.commitExpansion.value?.entries.value;
     const gitPanel = workspace.gitPanel;
-    void gitPanel.view.value;
     void gitPanel.changesIndex.value;
     void gitPanel.logIndex.value;
     void gitPanel.logScrollTop.value;
@@ -293,19 +296,21 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       if (firstFile >= 0) workspace.gitPanel.changesIndex.value = firstFile;
     }
   };
+  // Up/Down walk the FLAT log rows (commit headers AND expanded file rows are both selectable) —
+  // logIndex is a flat-row index over the same row model the renderer draws.
   const moveLog = (delta: number): void => {
     const gitPanel = workspace.gitPanel;
     workspace.haltGitLogScroll(); // keyboard is precise — adopt-and-stop any glide (One-Writer)
-    const end = workspace.commitLog.value?.knownEnd.value ?? Number.POSITIVE_INFINITY;
+    const end = workspace.logFlatEnd();
     gitPanel.logIndex.value = Math.max(
       0,
-      Math.min(gitPanel.logIndex.value + delta, Number.isFinite(end) ? (end as number) - 1 : gitPanel.logIndex.value + delta),
+      Math.min(gitPanel.logIndex.value + delta, Number.isFinite(end) ? end - 1 : gitPanel.logIndex.value + delta),
     );
     const approximateVisible = 12;
     if (gitPanel.logIndex.value < gitPanel.logScrollTop.value) gitPanel.logScrollTop.value = gitPanel.logIndex.value;
     else if (gitPanel.logIndex.value >= gitPanel.logScrollTop.value + approximateVisible)
       gitPanel.logScrollTop.value = gitPanel.logIndex.value - approximateVisible + 1;
-    void workspace.commitLog.value?.ensureRange(gitPanel.logScrollTop.value, 50);
+    workspace.ensureLogWindow(gitPanel.logScrollTop.value);
   };
   const moveChanges = (direction: 1 | -1): void => {
     const gitPanel = workspace.gitPanel;
@@ -356,13 +361,35 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       if (workspace.gitPanel.region.value === 'log') moveLog(10);
     },
     'git.stageToggle': () => {
+      // Enter in the LOG region activates the flat row: commit header = toggle inline expansion
+      // (lazy fetch); file row = open that file's diff for that commit.
+      if (workspace.gitPanel.region.value === 'log') {
+        workspace.activateLogRow(workspace.gitPanel.logIndex.value);
+        return;
+      }
       normalizeChangesIndex();
-      if (workspace.gitPanel.region.value === 'changes')
-        void workspace.toggleStageAtRow(workspace.gitPanel.changesIndex.value);
+      void workspace.toggleStageAtRow(workspace.gitPanel.changesIndex.value);
     },
     'git.openFile': () => {
+      if (workspace.gitPanel.region.value === 'log') {
+        workspace.activateLogRow(workspace.gitPanel.logIndex.value);
+        return;
+      }
       normalizeChangesIndex();
       void workspace.openChangeAtRow(workspace.gitPanel.changesIndex.value);
+    },
+    'git.expandRight': () => {
+      // Right on a collapsed commit expands it; on an expanded one steps into its first file row
+      // (tree parity). No-op outside the log region.
+      if (workspace.gitPanel.region.value !== 'log') return;
+      const row = workspace.logRowAt(workspace.gitPanel.logIndex.value);
+      if (row?.kind !== 'commit') return;
+      if (row.expanded) moveLog(1);
+      else workspace.activateLogRow(workspace.gitPanel.logIndex.value);
+    },
+    'git.collapseLeft': () => {
+      if (workspace.gitPanel.region.value === 'log')
+        workspace.collapseLogRow(workspace.gitPanel.logIndex.value);
     },
     'git.discard': () => {
       normalizeChangesIndex();
