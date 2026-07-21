@@ -51,3 +51,10 @@ Performance invariants that bind your module:
 VERIFY before finishing: `bun test src/modules/<MODULE>` passes and `bunx tsc --noEmit` reports no new errors from your files. Then `git add -A && git commit`. In your final message, list files created, interface assumptions about other modules, and any invariant you could not yet verify.
 
 == YOUR MODULE AND SCOPE ==
+MODULE: markdown   (brief milestone M6; lazy split preview)
+Files (write under src/modules/markdown/):
+- MarkdownParser.ts — plain class. Incremental/debounced block-level parse into compact BlockRecord[] {kind: heading|paragraph|list|listitem|code|blockquote|table|hr, level?, text/spans, range}. Support headings, paragraphs, lists, links, code blocks, emphasis, blockquotes, tables if practical. No object per token — compact array.
+- MarkdownDocument.ts — Reactive model bridging a source buffer to parsed blocks via a revision ref: re-parse on buffer revision change (debounced), stamp results with the revision, discard stale. Lazy: no parse until opened.
+- MarkdownPreview.ts — Reactive model. LAZY + DISPOSABLE: no model/effects until opened; on close call `this.$stopEffects()` and drop everything. Only visible lines rendered. Reads MarkdownDocument late.
+- MarkdownRenderable.ts — custom OpenTUI renderable drawing blocks into cells (headings emphasized, list markers, code boxed, links styled, blockquote bar, tables if practical). Pull visible blocks at render; no retained per-line object.
+Load-bearing: lazy + disposable + revision-stamped. Tests: parse each block kind; lazy lifecycle (no effects before open, none after close); stale re-parse discarded. You may assume a minimal buffer interface `{ text(): string; get revision(): {value:number} }` and note the assumption.

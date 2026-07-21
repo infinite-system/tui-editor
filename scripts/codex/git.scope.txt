@@ -1,0 +1,8 @@
+MODULE: git   (brief milestone M4; git integration, no diff UI here)
+Files (write under src/modules/git/):
+- GitCommands.ts — capability class (namespace with `let Class = $GitCommands`, NOT Reactive) wrapping `git` via Bun.spawn. Methods return raw stdout: statusPorcelainV2Branch(cwd), diffNameStatus(cwd,{cached?}), log({cwd,branch?,limit,cursor?}) using `--format` + `--date=iso-strict`, show(cwd,ref), branchShowCurrent(cwd), stage(cwd,paths[]), unstage(cwd,paths[]). Never throw into callers on nonzero exit — return {code,stdout,stderr}.
+- git.parsers.ts — pure functions: parse `--porcelain=v2 --branch` into {branch,head,staged[],unstaged[],untracked[]} with XY codes; parse log into compact CommitRecord[] {sha,shortSha,author,dateIso,subject,refs[]}. No reactive objects.
+- GitRepository.ts — Reactive model. ref-getters: branch, head, staged, unstaged, untracked, historyPage (compact CommitRecord[]), refreshing, lastRefreshAt, error. refresh() async + NON-BLOCKING + supersede stale via a monotonic refresh id (discard results from an older id). stage/unstage/stageAll/unstageAll then refresh. loadHistory({branch,limit,cursor}) paged. Reads GitCommands + parsers late.
+- GitStatus.ts, GitHistory.ts — thin reactive views over GitRepository, OR fold into GitRepository if cleaner (keep minimal). History MUST be paged + virtualized-ready (compact records, no rich model per commit).
+- GitWatcher.ts — plain class, watches working dir (fs watch), debounces storms, triggers GitRepository.refresh(); disposable.
+Load-bearing: async/non-blocking/stale-supersede; compact virtualized history. Tests: parser units (porcelain v2 + log); refresh supersede (older id discarded); stage/unstage transitions against a temp `git init` fixture created in the test.
