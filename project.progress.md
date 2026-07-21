@@ -218,6 +218,18 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
    (Ctrl+click likely reaches the terminal; Cmd+click may be swallowed — drive-verify), install
    typescript-language-server or vtsls (tsserver ≠ LSP), reuse editor.coordinates graphemeToU16/u16ToGrapheme.
 
+8. **FUZZY-PICKER DISTILLATION (user architectural ask — THE reduction; do when wiring branch switcher +
+   Search, DON'T copy quick-open):** ONE `FuzzyPicker` capability (modal + query + CommandScoring.fuzzyScore
+   + up/down nav + render + onSelect(item)) with N instances: command palette, Ctrl+P quick-open, AND the
+   git branch switcher all become instances. Same "one capability, many instances" as scrollbar-geometry/
+   SplitterModel/TabStrip. Extract from the existing palette+quick-open overlay pattern; each instance
+   supplies its items + item-renderer + onSelect.
+9. **GIT BRANCH SWITCHER:** a branch-header row at the TOP of the git panel rectangle (ABOVE the commit
+   log): current branch + a switch control. Clicking it (or the status-bar branch display, item 2) opens a
+   FuzzyPicker of branches (GitCommands lists them); selecting → checkout → refresh git+tree (GitWatcher
+   catches it) + revision-stamp/reload open buffers changed on disk (async-outlives-state invariant).
+   Status-bar also shows the CURRENT BRANCH (clickable → same picker).
+
 **WORKSPACE/PROJECT TABS (10b) — sequence AFTER the priority block (isolated parts parallelizable):**
 - Multiple PROJECTS open, switchable via a WORKSPACE-level tab strip (distinct from buffer tabs which live
   WITHIN a workspace) + "New project / Open folder" action (reuse quick-open-dir flow).
