@@ -110,9 +110,14 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   keybindings · destructive ops need confirmation · authoritative-channel verification · delegation
   = full-parity packet, worktree/disjoint isolation, IBR+invariants embedded.
 
-## RESUME HERE (frontier as of commit ab98fb8)
-- **State:** 252 tests pass · tsc green · checker 0 problems · conventions-gate PASS · smoke ALL-PASS
-  (incl. the NEW always-run **idle frame-delta == 0** assertion). `conventions @ f41a241`.
+## RESUME HERE (frontier as of commit 77dee65)
+- **State:** 256 tests pass · tsc green · checker 0 problems · conventions-gate PASS · smoke ALL-PASS
+  (incl. always-run **idle frame-delta == 0**). smoke-wrap ALL-PASS. `conventions @ f41a241`.
+- **ALL 4 STALLED WORKERS NOW MERGED** (D perf-baselines b076759 · C word-wrap 23ee28f · A context
+  menu+tooltip+git-multiselect ab98fb8 · codex wheel-momentum-parity 77dee65). The momentum merge
+  was the high-risk one and was verified clean on all three flagged axes: demand-driven liveness
+  (idle delta 0 + a real wheel glide observed to carry past input, settle, and STOP), the
+  applyingBarGeometry guard (kept HEAD's per-bar mechanism), and the commit-log glide (unchanged).
 - **LANDED THIS BLOCK:**
   - Conventions infrastructure: file-name-follows-content + atomic-bind + `$`-raw-form (replaces the
     `...Implementation` suffix) + fractal-delegation, all with HARD conventions-gate checks
@@ -127,21 +132,23 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
     current HEAD: idle delta 0, CPU 0.60%, input latency p50 5ms/p95 7ms (the fix improved latency too).
   - Merged 3 of 4 stalled workers: D (perf-baselines, b076759), C (word wrap, 23ee28f), A (context
     menu + tooltip + git multi-select, ab98fb8). Each reconciled to current conventions on merge.
-- **NEXT (in order — momentum before tabs; they touch the same files):**
-  1. **Merge codex-momentum (LAST stalled worker, HIGH RISK).** Rewrites Workspace.ts (~93 lines) +
-     RootView.ts (~156) + Editor/Viewport/FileTree/GitPanel + Workspace.scroll.test.ts for
-     editor/tree wheel-momentum parity. Work is UNCOMMITTED in `.claude/worktrees/codex-momentum`
-     (commit on its branch, then cherry-pick onto main like C/A). MUST verify it does NOT regress the
-     working scroll-glide + the `applyingBarGeometry` onChange guard (the "wheel not smooth" fix), and
-     that idle-quiescence smoke stays green. Codex worktree → review `git status` for unexpected
-     deletions before committing.
-  2. **Item 10a buffer tabs** — foundation `OpenBufferSet.ts` already landed (e193574); integrate into
-     Workspace/RootView/Editor (tab bar, open=add-or-focus, flyweight dispose). AFTER momentum.
-  3. **Item 14 side-by-side diff.**
-  4. Item 9 tail: convert editor.coordinates/scroll-momentum/RootView to Static (deferred while these
-     files churned under the merges); item 11b scroll-feel tune.
-  5. → M5 diagnostics/definition + editable diff → M6 markdown split-preview → multi-workspace →
+- **NEXT (in order):**
+  1. **Item 10a buffer tabs (SELF-DO).** Foundation `OpenBufferSet.ts` already landed (e193574,
+     Reactive flyweight set with injected create/dispose seams + tests). Integrate into
+     Workspace/RootView/Editor: open = add-or-focus (never replace), a tab bar above the editor
+     (name + dirty dot + close ✕, active highlighted), click=activate, ✕/Ctrl+W=close (dirty→confirm),
+     Ctrl+Tab / Ctrl+PageUp-Down cycle. FLYWEIGHT/dispose discipline: only the active buffer (and any
+     dirty background tab) holds a live document; clean background tabs dehydrate to a light handle
+     and rehydrate on activation; close fully disposes. Impossibility to preserve: "N open tabs do not
+     cost N live documents." Buffer tabs are the EDITOR layer; workspace/project tabs are 10b.
+  2. **Item 14 side-by-side diff.**
+  3. Item 9 tail: convert editor.coordinates/scroll-momentum/RootView to Static (deferred while these
+     files churned under the merges); item 11b scroll-feel tune. NOTE: `scroll-momentum.ts` is still a
+     bare-function module (on the gate allowlist) — good candidate to convert to `ScrollMomentum.ts`.
+  4. → M5 diagnostics/definition + editable diff → M6 markdown split-preview → multi-workspace →
      search → piece-table undo → M7 plugins → 5-pass gauntlet → blackline acceptance → §5.1 gate.
+- **Worktrees:** all 4 worker worktrees are merged; their `.claude/worktrees/*` dirs can be pruned
+  (`git worktree remove`) when convenient — they hold committed-and-merged branches now.
 
 ## Environment (established)
 - Bun `~/.bun/bin/bun` (v1.3.14). Prefix: `export PATH="$HOME/.bun/bin:$PATH"`. Node also on PATH.
