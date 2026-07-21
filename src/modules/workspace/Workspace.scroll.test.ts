@@ -6,6 +6,7 @@ import type { CommitRecord } from '../git/GitParsers';
 import { mkdtempSync as makeTemporaryDirectorySync, rmSync as removeSync, writeFileSync } from 'node:fs';
 import { tmpdir as temporaryDirectory } from 'node:os';
 import { join } from 'node:path';
+import { Settings } from '../settings/Settings';
 
 function makeCommit(index: number): CommitRecord {
   return { sha: `sha${index}`, shortSha: `s${index}`, author: 'a', dateIso: 'd', subject: `c${index}`, refs: [] };
@@ -154,5 +155,34 @@ describe('Workspace.tickScrollAnimations', () => {
     expect(workspace.editor.viewport.horizontalScrollMomentum.value.velocity).toBe(0);
     expect(workspace.tree.selectionMomentum.value.velocity).toBe(0);
     expect(workspace.gitPanel.changesMomentum.value.velocity).toBe(0);
+  });
+});
+
+describe('Workspace live-applies scroll physics from Settings', () => {
+  test('the vertical momentum ceiling comes from the attached Settings (live-apply)', () => {
+    const workspace = new Workspace.Class();
+    // Default (no settings): the editor vertical fling caps at the tuned VERTICAL_MOMENTUM.max (220).
+    for (let notch = 0; notch < 40; notch += 1) workspace.impulseEditorVerticalScroll(1);
+    expect(workspace.editor.viewport.verticalScrollMomentum.value.velocity).toBe(220);
+
+    // Attach a Settings store with a raised ceiling -> the SAME impulses now cap higher, no restart.
+    const store: Record<string, string> = {};
+    const settings = new Settings.Class({
+      fileSystem: {
+        readTextFile: (path) => store[path] ?? null,
+        writeTextFile: (path, content) => {
+          store[path] = content;
+        },
+        homeDirectory: () => '/home/test',
+      },
+    });
+    settings.load({});
+    settings.set('verticalFlingCeiling', 600);
+    settings.set('scrollAccelGain', 50);
+    workspace.attachSettings(settings);
+
+    workspace.editor.viewport.verticalScrollMomentum.value = { velocity: 0, residual: 0 };
+    for (let notch = 0; notch < 40; notch += 1) workspace.impulseEditorVerticalScroll(1);
+    expect(workspace.editor.viewport.verticalScrollMomentum.value.velocity).toBe(600); // 40*50 capped at 600
   });
 });

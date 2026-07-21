@@ -71,6 +71,9 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   // Reactive settings store (item G): load user + project settings; changes live-apply + persist.
   const settings = new Settings.Class();
   settings.load({ workspaceRoot: options.root ?? Environment.Class.cwd });
+  // Live-apply the scroll physics: the momentum engine reads its ceiling/gain/friction from here, so
+  // editing them in the Ctrl+, panel changes scrolling immediately (no restart).
+  workspace.attachSettings(settings);
 
   // App-level overlay view models (the view projects them; input routes through here).
   const contextMenu = new ContextMenu.Class();
