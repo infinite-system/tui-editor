@@ -13,7 +13,8 @@ export const canonicalBindings: Keybinding[] = [
   // Emacs-style quit chord (VS Code's terminal intercepts Ctrl+Q). In the editor WITH a selection,
   // the guarded single below wins and Ctrl+X stays cut.
   { steps: [{ key: 'x', ctrl: true }, { key: 'c', ctrl: true }], action: 'app.quit' },
-  { chord: { key: 'p', ctrl: true }, action: 'palette.open' },
+  { chord: { key: 'p', ctrl: true }, action: 'quickopen.open' }, // VS Code: Ctrl+P = go-to-file
+  { chord: { key: 'p', ctrl: true, shift: true }, action: 'palette.open' }, // Ctrl+Shift+P = command palette
   { chord: { key: 'g', ctrl: true }, action: 'git.togglePanel' },
   { chord: { key: 'tab' }, action: 'focus.toggle' },
   // Editor buffer tabs (item 10a) — global (work in any focus). Ctrl+Tab needs the kitty keyboard

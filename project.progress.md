@@ -189,6 +189,44 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   keybindings · destructive ops need confirmation · authoritative-channel verification · delegation
   = full-parity packet, worktree/disjoint isolation, IBR+invariants embedded.
 
+## FULL-POWER BLOCK (user greenlit everything, 2026-07-21) — priority order
+
+**PRIORITY (search suite + discoverability; RootView integration = mine, conductor feeds capabilities):**
+1. **ACTIVITY BAR** (conductor-activitybar → ActivityBar.ts): VS Code icon strip (Explorer/Search/
+   SourceControl + Settings gear), ONE sidebar view at a time; Ctrl+Shift+E/F/G (DRIVE-verify arrival) +
+   click; active highlight; last-view persisted to a new setting (+ applied-effect test). Home of Search view.
+2. ✅ **QUICK-OPEN (Ctrl+P)** — conductor-quickopen adopted (QuickOpen.ts: rg --files + CommandScoring
+   fuzzy, revision-stamped async, 5 tests). WIRING IN PROGRESS: Ctrl+P modal → activate() → openFileInTab.
+3. **SEARCH VIEW** (conductor-ripgrep → RipgrepSearch.ts): find-in-files inside the activity bar (query,
+   results grouped by file, click hit → open at line, glob/case/word/regex) + smoke.
+4. **SHORTCUTS PAGE** (conductor-shortcuts → ShortcutsView.ts: consumes KeybindingRegistry.effectiveBindings()
+   [DEAD, no consumer]) + open key (F1 or Ctrl+/) + Esc + STATUS-BAR "?" button. Status bar gets clickable
+   "?" (shortcuts) + gear (settings) buttons, hover/press + tooltips (discoverability "for noobies").
+
+**WORKSPACE/PROJECT TABS (10b) — sequence AFTER the priority block (isolated parts parallelizable):**
+- Multiple PROJECTS open, switchable via a WORKSPACE-level tab strip (distinct from buffer tabs which live
+  WITHIN a workspace) + "New project / Open folder" action (reuse quick-open-dir flow).
+- Setting `workspaceTabPosition: 'top' | 'left'` (default top): top=horizontal strip; left=vertical column
+  (sits in the activity-bar left region — coordinate layout). Live-apply + applied-effect test.
+- **THE REDUCTION — do NOT build a 2nd tab bar:** generalize the buffer tab strip (10a) into ONE
+  orientation-aware **TabStrip capability** (horizontal|vertical), TWO instances (buffer-tabs + workspace-
+  tabs). Same "one capability, many instances" as scrollbar-geometry/SplitterModel.
+- Model: **WorkspaceSet** (flyweight, mirror OpenBufferSet 10a) — N Workspace instances + activeWorkspaceIndex;
+  openWorkspace(path) add-or-focus.
+- **FLYWEIGHT/MEMORY (load-bearing, ~100MB/workspace with its GitWatcher+tree+buffers):** ONLY the active
+  workspace holds live reactive state; inactive workspaces SUSPENDED (dispose GitWatcher/reactive, restore on
+  activate) — N projects don't multiply watchers/memory. Driven test: switch away → GitWatcher disposed;
+  switch back → restored (no leak).
+- Gated contract: switching workspaces changes active tree/git/editor; inactive hold no live watcher;
+  workspaceTabPosition top vs left moves the strip (FrameProbe).
+
+**THEN (fan out disjoint workers):** 5 invariants.md bootstraps (kernel/storage/syntax/theme/commands —
+REAL load-bearing, each shrinks the map-gate allowlist + weaves the module tier into lattice; Fable workers,
+judgment-heavy, gate via check_invariants.mjs) · UI polish (grip handles, context-menu adaptive positioning,
+tab count ▾ caret, git-glyph row simplification [remove checkbox; LOCKED pencil/✗/+/?/→ + section stage-all],
+file-tree tighter indent + remove chevron) · project-replace (after ripgrep) · piece-table undo.
+RULES: each integration = merge→wire→driving smoke in ONE commit under `bun run gate`; verify by DRIVING.
+
 ## PANE SUBSTRATE — the structural fix for the DiffView scroll regression (user's IBR reduction)
 
 **Regression:** DiffView mount (fae9349) swapped the editorArea SINGLETON in/out via add/remove; that

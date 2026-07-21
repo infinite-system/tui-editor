@@ -18,6 +18,8 @@ import { Tooltip } from '../ui/Tooltip';
 import { Settings } from '../settings/Settings';
 import { SettingsPanel } from '../settings/SettingsPanel';
 import { FindBar } from '../search/FindBar';
+import { QuickOpen } from '../search/QuickOpen';
+import { Files } from '../system/Files';
 import { StatusChannel } from '../system/StatusChannel';
 import { FrameProbe } from '../system/FrameProbe';
 import { ScrollPhysics } from '../ui/ScrollPhysics';
@@ -82,8 +84,9 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   const tooltip = new Tooltip.Class();
   const settingsPanel = new SettingsPanel.Class(settings);
   const findBar = new FindBar.Class();
+  const quickOpen = new QuickOpen.Class();
 
-  const view = buildRootView(renderer, workspace, theme, commands, app, contextMenu, tooltip, settingsPanel, findBar);
+  const view = buildRootView(renderer, workspace, theme, commands, app, contextMenu, tooltip, settingsPanel, findBar, quickOpen);
 
   // Reveal the find bar's current match in the editor (the ONE writer of the editor selection): select
   // the match range (anchor=start, cursor=end) and scroll it into view. Called after every find action.
@@ -250,6 +253,10 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     void tooltip.anchorY.value;
     void commands.open.value;
     void commands.query.value;
+    void quickOpen.open.value; // repaint the quick-open modal on open/query/selection change
+    void quickOpen.query.value;
+    void quickOpen.selectedIndex.value;
+    void findBar.open.value;
     void commands.selectedIndex.value;
     void theme.paletteName.value;
     void app.quitChordArmed.value;
@@ -449,6 +456,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       findBar.openFor(workspace.editor.document, 'replace');
       revealFindMatch();
     },
+    'quickopen.open': () => void quickOpen.show(workspace.root), // Ctrl+P: fuzzy go-to-file over rg --files
     'palette.open': () => commands.openPalette(),
     'palette.close': () => commands.closePalette(),
     'palette.run': () => commands.runSelected(),
@@ -635,9 +643,44 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       ? 'settings'
       : commands.open.value
         ? 'palette'
-        : findBar.open.value
-          ? 'find'
-          : workspace.focus.value;
+        : quickOpen.open.value
+          ? 'quickopen'
+          : findBar.open.value
+            ? 'find'
+            : workspace.focus.value;
+
+    // Quick-open (Ctrl+P) modal: type filters the fuzzy file list live, ↑/↓ move, Enter opens the
+    // selected file as a tab (add-or-focus), Esc closes. Inline like the palette's query editing.
+    if (context === 'quickopen') {
+      if (key.name === 'escape') {
+        quickOpen.close();
+        return;
+      }
+      if (key.name === 'up') {
+        quickOpen.moveSelection(-1);
+        return;
+      }
+      if (key.name === 'down') {
+        quickOpen.moveSelection(1);
+        return;
+      }
+      if (key.name === 'return') {
+        const path = quickOpen.activate(); // a project-ROOT-relative path (rg/git ls-files)
+        quickOpen.close();
+        // Resolve against the workspace root — openFileInTab (like the tree) reads an ABSOLUTE path.
+        if (path) workspace.openFileInTab(Files.Class.join(workspace.root, path));
+        return;
+      }
+      if (key.name === 'backspace') {
+        quickOpen.setQuery(quickOpen.query.value.slice(0, -1));
+        return;
+      }
+      if (isTypedCharacter(key)) {
+        quickOpen.setQuery(quickOpen.query.value + key.sequence);
+        return;
+      }
+      return;
+    }
 
     // Find/replace bar has keyboard: type edits the focused field (live find), Enter/Shift+Enter cycle
     // matches, Ctrl+Enter replaces, Tab switches field, Esc closes. Handled inline (not via the registry)

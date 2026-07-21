@@ -37,6 +37,7 @@ import type { Tooltip } from './Tooltip';
 import type { SettingsPanel } from '../settings/SettingsPanel';
 import type { ScrollModifier } from '../settings/Settings';
 import type { FindBar } from '../search/FindBar';
+import type { QuickOpen } from '../search/QuickOpen';
 import { SplitterModel } from '../layout/SplitterModel';
 import { Logging } from '../system/Logging';
 
@@ -97,6 +98,7 @@ export function buildRootView(
   tooltip: Tooltip.Instance,
   settingsPanel: SettingsPanel.Instance,
   findBar: FindBar.Instance,
+  quickOpen: QuickOpen.Instance,
 ): RootView {
   const root = renderer.root;
   const readPalette = () => theme.palette;
@@ -319,6 +321,27 @@ export function buildRootView(
   const findBarText = new TextRenderable(renderer, { id: 'find-bar-text', content: '' });
   findBarBox.add(findBarText);
   root.add(findBarBox);
+
+  // Quick-open (Ctrl+P): a centered modal — a query input + the fuzzy-ranked project-file list. Mirrors
+  // the command palette; content projected from the QuickOpen model each paint.
+  const quickOpenBox = new BoxRenderable(renderer, {
+    id: 'quick-open',
+    position: 'absolute',
+    left: '20%',
+    top: 2,
+    width: '60%',
+    border: true,
+    borderStyle: 'rounded',
+    title: 'Go to File',
+    flexDirection: 'column',
+    visible: false,
+    zIndex: 100,
+  });
+  const quickOpenInput = new TextRenderable(renderer, { id: 'quick-open-input', content: '' });
+  const quickOpenList = new TextRenderable(renderer, { id: 'quick-open-list', content: '' });
+  quickOpenBox.add(quickOpenInput);
+  quickOpenBox.add(quickOpenList);
+  root.add(quickOpenBox);
 
   // Destructive-action confirmation (discard) — a small modal strip; y confirms, anything else
   // cancels. invariant: Destructive working-tree operations require confirmation (src/modules/git/git.invariants.md)
@@ -1466,6 +1489,24 @@ export function buildRootView(
       lines.push(replaceMode ? '↵ next · ⇧↵ prev · ⌃↵ replace · ⌃⇧↵ all · ⇥ field · esc' : '↵ next · ⇧↵ prev · esc close');
       findBarText.content = lines.join('\n');
       findBarText.fg = palette.fg;
+    }
+
+    // Quick-open (Ctrl+P) overlay.
+    quickOpenBox.visible = quickOpen.open.value;
+    if (quickOpen.open.value) {
+      quickOpenBox.borderColor = palette.borderActive;
+      quickOpenBox.titleColor = palette.accent;
+      quickOpenBox.backgroundColor = palette.panel;
+      quickOpenInput.content = `${theme.actionIcons.open} ${quickOpen.query.value}▏`;
+      quickOpenInput.fg = palette.fg;
+      const matches = quickOpen.matches.value.slice(0, 14);
+      const selectedIndex = quickOpen.selectedIndex.value;
+      quickOpenList.content = matches.length
+        ? matches.map((match, index) => `${index === selectedIndex ? '›' : ' '} ${match.path}`).join('\n')
+        : quickOpen.query.value
+          ? '  (no matching files)'
+          : '  (type to filter project files)';
+      quickOpenList.fg = palette.dim;
     }
 
     const pendingDiscard = workspace.gitPanel.confirmDiscard.value;

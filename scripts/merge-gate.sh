@@ -42,6 +42,7 @@ if [ "${FAST:-0}" != "1" ]; then
   step "smoke: wrap"        bash scripts/smoke-wrap.sh
   step "smoke: git-watch"   bash scripts/smoke-git-watch.sh
   step "smoke: find"        bash scripts/smoke-find.sh
+  step "smoke: quick-open"  bash scripts/smoke-quickopen.sh
   # 5) The REAL settings applied-effect drives (all 13 fields, not just the --meta enumeration).
   step "settings applied-effect (all 13 driven)" bash scripts/smoke-settings-applied.sh
 else
