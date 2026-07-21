@@ -8,7 +8,7 @@ import { ref } from 'vue';
 import { TextDocument } from './TextDocument';
 import { Viewport } from './Viewport';
 import { Cursor } from './Cursor';
-import { graphemeCount } from './editor.coordinates';
+import { graphemeCount, displayColumn, graphemeAtDisplayColumn } from './editor.coordinates';
 import { UndoStore, type EditKind } from '../storage/UndoStore';
 import { Files } from '../system/Files';
 import { Clock } from '../system/Clock';
@@ -35,7 +35,7 @@ class $Editor {
 
   openFile(path: string): void {
     this.document.loadFromFile(path);
-    this.cursor.set(0, 0);
+    this.placeCursor(0, 0);
     this.cursor.clearSelection();
     this.viewport.scrollTop.value = 0;
     this.hasDocument.value = true;
@@ -57,9 +57,9 @@ class $Editor {
   selectAll(): void {
     if (!this.hasDocument.value) return;
     const last = this.document.lineCount - 1;
-    this.cursor.set(0, 0);
+    this.placeCursor(0, 0);
     this.cursor.setAnchorHere();
-    this.cursor.set(last, graphemeCount(this.document.line(last)));
+    this.placeCursor(last, graphemeCount(this.document.line(last)));
   }
 
   /** Delete the active selection (no undo capture — caller captures). Returns whether it removed. */
@@ -67,9 +67,14 @@ class $Editor {
     const range = this.cursor.selectionRange();
     if (!range) return false;
     const position = this.document.deleteRange(range.start, range.end);
-    this.cursor.set(position.line, position.col);
+    this.placeCursor(position.line, position.col);
     this.cursor.clearSelection();
     return true;
+  }
+
+  /** Place the cursor at a grapheme column, recording the matching DISPLAY column as the goal. */
+  placeCursor(line: number, column: number): void {
+    this.cursor.set(line, column, displayColumn(this.document.line(line), column));
   }
 
   /** Set/extend the anchor for a movement (extend) or drop the selection (plain move). */
@@ -100,7 +105,7 @@ class $Editor {
     this.captureBefore('insert');
     this.removeSelection();
     const column = this.document.insertInline(this.cursor.line.value, this.cursor.col.value, text);
-    this.cursor.set(this.cursor.line.value, column);
+    this.placeCursor(this.cursor.line.value, column);
     this.viewport.scrollToLine(this.cursor.line.value, this.document.lineCount);
   }
 
@@ -114,9 +119,9 @@ class $Editor {
     const position = this.document.splitLine(this.cursor.line.value, this.cursor.col.value);
     if (indent) {
       const column = this.document.insertInline(position.line, 0, indent);
-      this.cursor.set(position.line, column);
+      this.placeCursor(position.line, column);
     } else {
-      this.cursor.set(position.line, position.col);
+      this.placeCursor(position.line, position.col);
     }
     this.viewport.scrollToLine(this.cursor.line.value, this.document.lineCount);
   }
@@ -129,7 +134,7 @@ class $Editor {
       return;
     }
     const position = this.document.deleteBackward(this.cursor.line.value, this.cursor.col.value);
-    this.cursor.set(position.line, position.col);
+    this.placeCursor(position.line, position.col);
     this.viewport.scrollToLine(position.line, this.document.lineCount);
   }
 
@@ -166,7 +171,7 @@ class $Editor {
     this.captureBefore('insert');
     this.removeSelection();
     const position = this.document.insertMultiline(this.cursor.line.value, this.cursor.col.value, text);
-    this.cursor.set(position.line, position.col);
+    this.placeCursor(position.line, position.col);
     this.viewport.scrollToLine(position.line, this.document.lineCount);
   }
 
@@ -183,7 +188,7 @@ class $Editor {
     if (!target) return;
     this.document.restore(target.lines);
     this.document.dirty.value = true;
-    this.cursor.set(target.cursor.line, target.cursor.col);
+    this.placeCursor(target.cursor.line, target.cursor.col);
     this.cursor.clearSelection();
     this.viewport.scrollToLine(target.cursor.line, this.document.lineCount);
   }
@@ -199,7 +204,7 @@ class $Editor {
     if (!target) return;
     this.document.restore(target.lines);
     this.document.dirty.value = true;
-    this.cursor.set(target.cursor.line, target.cursor.col);
+    this.placeCursor(target.cursor.line, target.cursor.col);
     this.cursor.clearSelection();
     this.viewport.scrollToLine(target.cursor.line, this.document.lineCount);
   }
@@ -228,7 +233,8 @@ class $Editor {
     const target = this.cursor.line.value + delta;
     const maxLine = this.document.lineCount - 1;
     const clamped = Math.max(0, Math.min(target, maxLine));
-    this.cursor.setLinePreserveGoal(clamped, graphemeCount(this.document.line(clamped)));
+    const landingColumn = graphemeAtDisplayColumn(this.document.line(clamped), this.cursor.goalColumn.value);
+    this.cursor.moveToLineKeepingGoal(clamped, landingColumn);
     this.viewport.scrollToLine(clamped, this.document.lineCount);
   }
 
@@ -251,17 +257,17 @@ class $Editor {
         column = this.currentLineLength();
       }
     }
-    this.cursor.set(line, column);
+    this.placeCursor(line, column);
     this.viewport.scrollToLine(line, this.document.lineCount);
   }
 
   moveToLineStart(extend = false): void {
     this.beginMove(extend);
-    this.cursor.set(this.cursor.line.value, 0);
+    this.placeCursor(this.cursor.line.value, 0);
   }
   moveToLineEnd(extend = false): void {
     this.beginMove(extend);
-    this.cursor.set(this.cursor.line.value, this.currentLineLength());
+    this.placeCursor(this.cursor.line.value, this.currentLineLength());
   }
   pageDown(extend = false): void {
     this.moveVertical(this.viewport.height.value - 1, extend);
@@ -271,13 +277,13 @@ class $Editor {
   }
   gotoTop(extend = false): void {
     this.beginMove(extend);
-    this.cursor.set(0, 0);
+    this.placeCursor(0, 0);
     this.viewport.scrollToLine(0, this.document.lineCount);
   }
   gotoBottom(extend = false): void {
     this.beginMove(extend);
     const last = this.document.lineCount - 1;
-    this.cursor.set(last, 0);
+    this.placeCursor(last, 0);
     this.viewport.scrollToLine(last, this.document.lineCount);
   }
 }

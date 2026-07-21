@@ -431,14 +431,14 @@ export function buildRootView(
     if (process.env.TUI_DEBUG_MOUSE === '1') Logging.Class.info(`mouseDown (${event.x},${event.y}) hit=${JSON.stringify(hit)}`);
     if (!hit) return;
     workspace.focusEditor(); // click-to-focus
-    workspace.editor.cursor.set(hit.line, hit.column);
+    workspace.editor.placeCursor(hit.line, hit.column);
     workspace.editor.cursor.setAnchorHere(); // anchor at the press; dragging extends from here
   };
   codeBody.onMouseDrag = (event) => {
     const hit = documentPositionAtCell(event.x, event.y);
     if (process.env.TUI_DEBUG_MOUSE === '1') Logging.Class.info(`mouseDrag (${event.x},${event.y}) hit=${JSON.stringify(hit)}`);
     if (!hit) return;
-    workspace.editor.cursor.set(hit.line, hit.column); // anchor stays — selection = anchor -> cursor
+    workspace.editor.placeCursor(hit.line, hit.column); // anchor stays — selection = anchor -> cursor
   };
   codeBody.onMouseUp = () => {
     // A plain click (no drag) leaves anchor == cursor: clear it so no empty selection lingers.

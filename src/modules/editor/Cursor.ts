@@ -17,7 +17,8 @@ class $Cursor {
   get col() {
     return ref(0);
   }
-  // Preferred column for up/down movement across short lines.
+  // Preferred column for up/down movement, in DISPLAY columns (visual x, tab/wide aware) — the
+  // goal survives whole vertical runs and only the landing column clamps to shorter lines.
   get goalColumn() {
     return ref(0);
   }
@@ -26,15 +27,20 @@ class $Cursor {
     return shallowRef<Position | null>(null);
   }
 
-  set(line: number, column: number): void {
+  /**
+   * Place the cursor. `goalDisplayColumn` is the visual x this position corresponds to (the owner
+   * computes it via the coordinate model); defaults to the grapheme column for plain-ASCII callers.
+   */
+  set(line: number, column: number, goalDisplayColumn = column): void {
     this.line.value = Math.max(0, line);
     this.col.value = Math.max(0, column);
-    this.goalColumn.value = this.col.value;
+    this.goalColumn.value = Math.max(0, goalDisplayColumn);
   }
 
-  setLinePreserveGoal(line: number, lineLength: number): void {
+  /** Vertical landing: move to `line` at `column` WITHOUT touching the goal (it survives the run). */
+  moveToLineKeepingGoal(line: number, column: number): void {
     this.line.value = Math.max(0, line);
-    this.col.value = Math.min(this.goalColumn.value, lineLength);
+    this.col.value = Math.max(0, column);
   }
 
   setAnchorHere(): void {
