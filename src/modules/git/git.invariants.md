@@ -158,6 +158,40 @@ storm accumulating one timer per event.
 
 **Last refined:** 2026-07-21
 
+### The watcher never watches inside an ignored directory
+
+**Invariant:** If `GitWatcher` establishes its watches, then no watch handle is ever opened inside a
+directory git ignores or inside `.git`; a change to a tracked file at any depth still refreshes, and
+a change inside an ignored directory never does.
+
+**Scope:** One `GitWatcher` instance's watch set, from construction through `dispose`, including
+directories that appear after start.
+
+**Mechanism:** The watcher WALKS the working tree from the root and opens one non-recursive
+`fs.watch` per directory, pruning any child git reports through `git check-ignore` (and always
+`.git`) before its watch is created; a new subdirectory event re-runs the same ignore test before
+gaining a watch. A recursive root watch is not used — it would open a handle per directory inside
+ignored subtrees like `node_modules`. When git cannot answer (no repository or git unavailable) a
+fixed fallback skip set stands in.
+
+**Generates:** Bounded watch-handle count on large projects; no filesystem-handle or memory growth
+from ignored subtrees; refreshes driven only by relevant working-tree changes.
+
+**Evidence:** `src/modules/git/GitWatcher.ts` (`walkAndWatch`, `filterIgnoredChildren`,
+`queryIgnoredNames`, `onDirectoryEvent`); `no watch handle is ever opened inside an ignored
+directory`, `a nested tracked change refreshes but a change inside an ignored directory does not`,
+and `a newly created nested directory is watched but a new ignored directory is not` in
+`src/modules/git/__tests__/GitWatcher.test.ts`.
+
+**Impossible if true:** A watch handle open on any path under `node_modules`, or a write inside an
+ignored directory scheduling a repository refresh.
+
+**Verification:** `bun test src/modules/git/__tests__/GitWatcher.test.ts`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-21
+
 ### Commit expansion is lazy and windowed
 
 **Invariant:** If a commit in the log is expanded inline, then its changed-file list was fetched on
