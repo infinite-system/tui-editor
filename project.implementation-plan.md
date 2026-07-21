@@ -225,9 +225,15 @@ removed, and its architecture reads cleanly.
   render, no per-line reactive models, highlight updates while typing, icons + palette degrade
   correctly on a 16-color / no-nerd-font terminal.
 - **M3 — Editing.** `editor` (buffer/cursor/selection/undo/movement), `storage` (piece
-  table/undo). Insert/delete/select/save, dirty state, undo/redo, accelerated arrows, mouse
-  cursor, file search, command palette. Verifies: non-modal editing, predictable
-  acceleration, responsive under repeat.
+  table/undo), `system` (Clipboard). Insert/delete/save, dirty state, undo/redo, accelerated
+  arrows, mouse cursor, file search, command palette. **Text selection** (anchor on Cursor;
+  shift+arrow extend; mouse drag; selection-aware insert/delete = replace-selection) and
+  **copy / cut / paste** via a `Clipboard` system capability (wl-copy/xclip/pbcopy with an
+  OSC 52 fallback), both built on the settled coordinate model so spans and clipboard text
+  respect grapheme boundaries. A real caret renders at the cursor column (not just a gutter
+  marker). Verifies: non-modal editing, predictable acceleration, responsive under repeat,
+  selection + copy/cut/paste round-trip, caret at correct display column across
+  Unicode/wide/tab.
 - **M4 — Git + diff.** `git`, `diff`. Branch, staged/unstaged/untracked, stage/unstage, async
   debounced refresh, branch history, commit detail. **Selecting a changed file splits into a
   side-by-side diff: read-only previous version on the left, the live editable buffer with
