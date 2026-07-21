@@ -29,3 +29,11 @@ defects the verification layers catch. A deprecated agent's output is discarded,
 - Model: fork built the editor core fast but ungoverned; codex now builds forward modules governed (own worktree, own contract, reviewed before merge).
 
 _Percentages are rough estimates of each task's share of total build effort; updated as work lands._
+
+| 5 | codex (worktree `codex/selection`) | Root-cause the selection-render coord bug | selection / ui | ~254k tok | DONE — confirmed root cause (FrameProbe read bg as 1 val/cell; OpenTUI = 4 RGBA lanes/cell; native render was correct). Changes: remove gate + doc comments. REVIEWED: independently reproduced with fixed FrameProbe; applied equivalent minimal fix in main tree (which also carries the FrameProbe stride fix codex only worked around in its verify script). Merged conceptually (not cp'd — main tree had the real tool fix). Worktree removed. | 43cb602 | Good delegation: precise scoped probe + FrameProbe oracle; codex reached correct root cause. Credited co-author. |
+
+**Delegation lesson (selection):** the value here was codex as an INDEPENDENT cross-check on a
+diagnosis, not as a builder — it confirmed the real bug was in our verification tool (FrameProbe), not
+the code under test. Reinforces: when a visual/oracle-based verdict looks like a deep bug, suspect the
+oracle's decode of the substrate first. Also: give codex the exact repro + the source-of-truth files;
+it correctly read the OpenTUI Zig + compiled buffer source to find the 4-lane layout.

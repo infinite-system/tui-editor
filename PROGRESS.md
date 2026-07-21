@@ -4,8 +4,8 @@ Live status ledger for the autonomous build. Updated every turn so state survive
 compaction. **If you are resuming: read this, then `HANDOFF.md`, then continue at the first
 unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
-## RESUME HERE (frontier as of commit 9405845)
-- **State:** 11 module contracts · 107 tests pass · tsc green · checker 0 problems · end-to-end tmux
+## RESUME HERE (frontier as of commit 43cb602)
+- **State:** 11 module contracts · 108 tests pass · tsc green · checker 0 problems · end-to-end tmux
   smoke ALL-PASS. codex modules git/markdown/lsp INTEGRATED. Editor rework: reactive frame
   (established), grapheme coordinate model, native-cursor caret, selection + clipboard (model works),
   editor split into gutter + `SelectableText` code renderable. **FrameProbe visual-observation
@@ -16,16 +16,16 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   (built). Only reach for a headless xterm emulator (xterm-headless / MS `tui-test`) to verify the
   SGR *encoder* end-to-end — low priority. Frame-diff (before/after) isolates a change's cells with
   no offset/color math — that's the gold-standard visual assertion.
-- **Selection render — DONE (architecture) + BLOCKED (OpenTUI coord bug), gated off:** editor now
-  splits into a gutter renderable + a `SelectableText` code renderable (`SelectableText.ts`), and
-  `applySelection` drives native `TextBufferView.setLocalSelection`. BUT FrameProbe proved
-  `setLocalSelection` mis-maps coords (~4× scale + offset: a fixed `(0,0,5,0)` probe shades y=5,
-  x=28..46 in period-4 groups; real selection on doc line N lands ~`5+4N` rows low). Highlight gated
-  OFF (`TUI_SEL_RENDER=1` to experiment); model works fully. **To unblock:** find the coord space
-  `setLocalSelection` wants — suspect a viewport issue (`TextBufferView.setViewport` /
-  `setFirstLineOffset`, or logical-vs-visual line, or the code renderable's yoga size not yet
-  computed when applySelection runs). Verify via FrameProbe frame-diff (noise-free, control-tested).
-  Good codex-delegation candidate (scoped OpenTUI-internals probe with the FrameProbe as oracle).
+- **Selection highlight — DONE, ungated, invariant established.** Editor splits into a gutter
+  renderable + a `SelectableText` code renderable; `applySelection` drives native
+  `TextBufferView.setLocalSelection` with viewport-local cells. The earlier "~4× coord bug" was a
+  **FrameProbe defect**, not a render bug: OpenTUI stores fg/bg as FOUR Uint16 RGBA lanes per cell,
+  and FrameProbe read stride-1 (aliasing one cell's change across four). FrameProbe now decodes 4
+  lanes (regression-tested). Verified by frame-diff: selection on line N shades line N's row at the
+  selected code columns, multi-line = anchor→EOL then BOL→cursor, no gutter. Delegated the root-cause
+  probe to a codex worktree; it independently confirmed + I applied the minimal fix in main tree.
+  **LESSON:** a visual-oracle is only as good as its decode of the buffer layout — verify the tool
+  before trusting its verdict (the frame-diff was noise-free, but the per-cell decode was wrong).
 
 - **NEW REQUIREMENT — M4 git sidebar (VSCode-style, when git pane active):**
   - **Top region:** changes list — staged / unstaged / created / deleted (git module already parses
