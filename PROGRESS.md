@@ -4,8 +4,8 @@ Live status ledger for the autonomous build. Updated every turn so state survive
 compaction. **If you are resuming: read this, then `HANDOFF.md`, then continue at the first
 unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
-## RESUME HERE (frontier as of commit 922f373)
-- **State:** 11 module contracts · 98 tests pass · tsc green · checker 0 problems · end-to-end tmux
+## RESUME HERE (frontier as of commit 9405845)
+- **State:** 11 module contracts · 107 tests pass · tsc green · checker 0 problems · end-to-end tmux
   smoke ALL-PASS. codex modules git/markdown/lsp INTEGRATED. Editor rework: reactive frame
   (established), grapheme coordinate model, native-cursor caret, selection + clipboard (model works),
   editor split into gutter + `SelectableText` code renderable. **FrameProbe visual-observation
@@ -32,9 +32,15 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
     porcelain-v2), each row stage/unstage-able (mouse click + key); a commit-message input box
     (clickable) that commits the staged set.
   - **Bottom region:** the commit log as a **virtualized** list (render only the visible window; do
-    NOT materialize 10k commits) — backed by a compact paged git-log source (`git log --skip/-n` or
-    a revwalk), one lightweight record per row, evicted outside the window. Realizes the existing
-    *Cost tracks the actively observed set* invariant.
+    NOT materialize 10k commits) — backed by a compact paged git-log source, one lightweight record
+    per row, evicted outside the window. Realizes *Cost tracks the actively observed set*.
+    DONE (foundation): `git.window.ts` (`missingRanges` + `evictable`, pure, 9 tests) +
+    `GitCommands.log` offset paging (`--skip=N`). TODO: the reactive `CommitLog` window model
+    (sparse cache + `ensureRange` via the paged source, stale-superseded by revision) + the list UI.
+  - **Commit drill-down (VSCode-style):** click/open a commit in the log → show that commit's
+    CHANGED FILES (`git show --name-status <sha>` / `diff-tree`) → open a file → show its DIFF in the
+    editor area (reuse the planned `diff` module: DiffEngine/DiffModel/DiffView, or `git show <sha>
+    -- <path>`). A back/breadcrumb path: log → commit files → file diff.
   - **Draggable:** the sidebar width AND the top/bottom separator — a thin divider renderable that
     captures mouse-drag → updates a reactive split-ratio (ivue state) → yoga re-layout via the frame
     effect.
