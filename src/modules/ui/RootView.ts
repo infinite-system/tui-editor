@@ -34,6 +34,7 @@ import { ScrollbarGeometry } from './ScrollbarGeometry';
 import type { ContextMenu, ContextMenuItem } from './ContextMenu';
 import type { Tooltip } from './Tooltip';
 import type { SettingsPanel } from '../settings/SettingsPanel';
+import type { ScrollModifier } from '../settings/Settings';
 import { SplitterModel } from '../layout/SplitterModel';
 import { Logging } from '../system/Logging';
 
@@ -1489,7 +1490,30 @@ export function buildRootView(
   // regime: wrap mode's scroll bound is lineCount-1 (a wrapped line occupies many visual rows), which
   // the momentum regime's scrollBy clamp (lineCount - height) does not model. Non-wrap wheel goes
   // through momentum (impulse) below.
-  const WHEEL_STEP = 3;
+  // Is the configured scroll modifier held on this wheel event? 'none' is never held (the control is
+  // off, not misleading). Single source: the modifier comes from Settings, never hardcoded.
+  const scrollModifierHeld = (event: { modifiers: { alt: boolean; shift: boolean; ctrl: boolean } }, modifier: ScrollModifier): boolean => {
+    switch (modifier) {
+      case 'alt':
+        return event.modifiers.alt;
+      case 'shift':
+        return event.modifiers.shift;
+      case 'ctrl':
+        return event.modifiers.ctrl;
+      default:
+        return false; // 'none'
+    }
+  };
+  // Rows per wheel notch = settings.linesPerNotch (was a hardcoded 3), multiplied by the fast-scroll
+  // factor when the fast-scroll modifier is held (settings.fastScrollMultiplier; modifier defaults to
+  // 'none' = off). One expression feeds BOTH the wrap-mode direct step and the momentum impulse.
+  const wheelStep = (event: { modifiers: { alt: boolean; shift: boolean; ctrl: boolean } }): number => {
+    const notch = Math.max(1, Math.round(settings.linesPerNotch.value));
+    const fast = scrollModifierHeld(event, settings.fastScrollModifier.value)
+      ? Math.max(1, Math.round(settings.fastScrollMultiplier.value))
+      : 1;
+    return notch * fast;
+  };
   const scrollEditorVertically = (delta: number): void => {
     const editorViewport = workspace.editor.viewport;
     if (workspace.editor.wordWrap.value) {
@@ -1511,20 +1535,23 @@ export function buildRootView(
     //     survives real terminals; Shift (+4 -> 68/69) is a bonus (most terminals swallow it).
     // Delivery of any given modifier is terminal-dependent — supporting all of them is the robust fix.
     const direction = event.scroll?.direction;
+    const step = wheelStep(event);
     if (workspace.editor.wordWrap.value) {
       // Wrap mode: ONE scroll axis — horizontal gestures route to the vertical window and
       // scrollLeft stays 0 (inert).
       const backward = direction === 'left' || direction === 'up';
-      scrollEditorVertically((backward ? -1 : 1) * WHEEL_STEP);
+      scrollEditorVertically((backward ? -1 : 1) * step);
       return;
     }
-    const modifierHorizontal = event.modifiers.alt || event.modifiers.shift; // Option maps to alt
+    // The horizontal modifier is configurable (settings.horizontalScrollModifier, default 'alt' = the
+    // Option-wheel path that survives real terminals); native left/right direction is always horizontal.
+    const modifierHorizontal = scrollModifierHeld(event, settings.horizontalScrollModifier.value);
     const horizontal = direction === 'left' || direction === 'right' || modifierHorizontal;
     if (horizontal) {
       const backward = direction === 'left' || direction === 'up';
-      workspace.impulseEditorHorizontalScroll(backward ? -1 : 1);
+      workspace.impulseEditorHorizontalScroll((backward ? -1 : 1) * step);
     } else {
-      workspace.impulseEditorVerticalScroll(direction === 'up' ? -1 : 1);
+      workspace.impulseEditorVerticalScroll((direction === 'up' ? -1 : 1) * step);
     }
   };
 
