@@ -28,15 +28,16 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 - [x] M3 core — insert/delete/undo/redo/accel-arrows/palette — fork-built, audited.
 - [ ] **EDITOR REWORK (current, mine):** (a) reactive frame effect — DONE (3b244b2, app.invariants.md);
       (b) grapheme-safe coordinate model — DONE (2a06da1, editor.coordinates.ts + Unicode matrix);
-      (c) real caret at display column ← NEXT; (d) selection + copy/cut/paste (Clipboard capability);
-      (e) multi-workspace; (f) search; (g) piece-table undo.
+      (c) real caret at display column — DONE (e560996, OpenTUI native cursor; tmux-visual pending);
+      (d) selection + copy/cut/paste (Clipboard capability) ← NEXT; (e) multi-workspace; (f) search;
+      (g) piece-table undo. Then a tmux end-to-end smoke to promote frame/coordinate/caret invariants.
 - [~] M4 — git module INTEGRATED (b5cf988, 7 tests). Remaining: `diff` module (DiffEngine/DiffModel/
       DiffView/DiffRenderable) + the git sidebar UI (staged/unstaged, stage/unstage) + the
       split editable-diff view (left read-only blob, right live buffer).
 - [~] M5 — lsp module: codex code + subagent completing contract+tests+2 tsc fixes (running). Then
       integrate + wire to editor (diagnostics render; definition jump; coordinate map grapheme↔UTF-16).
-- [~] M6 — markdown module: codex code + subagent completing contract+tests (running). Then integrate
-      + the split-preview UI + toggle command.
+- [~] M6 — markdown MODULE integrated (6cae817, 17 tests, 1+5 contract). Remaining: split-preview UI
+      (MarkdownRenderable in a split pane) + toggle command + revision-synced refresh wiring.
 - [ ] M7 — plugin demo (kernel composition + one contribution plugin).
 - [ ] Gauntlet — 5 refinement passes + independent subagent panel + completeness-critic-until-dry.
 - [ ] §5.1 gate green — traceability matrix + checker + lifecycle audit + benchmarks + panel + critic
@@ -70,24 +71,22 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 - tsc green + tests pass at every commit; dispose resources; record benchmarks.
 
 ## Next action (precise, in order)
-1. **Integrate markdown + lsp** when the two completion subagents return (they write
-   contract+tests into `.claude/worktrees/codex-{markdown,lsp}`): review the subagent's output +
-   any code fixes, run `bunx tsc --noEmit` + `bun test src/modules/<m>` + checker in the worktree,
-   then `cp -r .claude/worktrees/codex-<m>/src/modules/<m>/. src/modules/<m>/ && rm -f
-   src/modules/<m>/.gitkeep`, verify on master, commit crediting codex + subagent. (git already done.)
-2. **Real caret at display column** — `src/modules/ui/RootView.ts` `renderEditorStyled()` (~line 185):
-   replace the gutter `▏` bar with a caret at `displayColumn(text, cursor.col)` on the cursor's line
-   (import from `../editor/editor.coordinates`). First `grep -ri cursor node_modules/@opentui/core`
-   for a native terminal-cursor API; else render a block caret (invert the grapheme cell:
-   split the line at `graphemeToU16(text, col)`, render that grapheme with bg=accent/fg=bg, or an
-   inverted space at end-of-line). Add a RootView/caret test + tmux visual check.
-3. **Selection + copy/cut/paste** — anchor on `Cursor` (add `anchorLine/anchorCol`), shift+arrow +
-   mouse-drag extend, selection-aware insert/delete (replace-selection), a `Clipboard` system
-   capability (`src/modules/system/Clipboard.ts`, Static: wl-copy/xclip/pbcopy + OSC 52 fallback),
-   selection highlight in RootView. All grapheme-boundary correct.
-4. Then M4 diff, M5/M6 UI wiring, M7 plugins, gauntlet, blackline test (VERIFICATION_RESULTS.md), gate.
-Promote the reactive-frame + coordinate + git invariants toward `established` after a tmux end-to-end smoke.
+1. **Integrate lsp** when its completion subagent returns (writes fixes+contract+tests into
+   `.claude/worktrees/codex-lsp`): review output, run `bunx tsc --noEmit` + `bun test src/modules/lsp`
+   + checker in the worktree, then `cp -r .claude/worktrees/codex-lsp/src/modules/lsp/. src/modules/lsp/
+   && rm -f src/modules/lsp/.gitkeep`, verify on master, commit crediting codex + subagent.
+   (git + markdown already integrated.)
+2. **Selection + copy/cut/paste** (active editor item) — anchor on `Cursor` (add `anchor {line,col}`,
+   set/clear + `hasSelection`), shift+arrow + mouse-drag extend, selection-aware insert/delete
+   (replace-selection), a `Clipboard` capability (`src/modules/system/Clipboard.ts`, Static:
+   wl-copy/xclip/pbcopy + OSC 52 fallback), selection highlight in RootView (bg over the selected
+   graphemes via StyleAttrs.bg/reverse). All grapheme-boundary correct (use editor.coordinates).
+3. **tmux end-to-end smoke** — build a `scripts/tui-harness.sh` (settle-signal wait via status.json,
+   not sleep), drive boot + edit + caret; promote reactive-frame/coordinate/caret invariants to established.
+4. Then M4 `diff` module + git sidebar UI + split editable-diff; M5 lsp editor wiring (diagnostics/
+   definition, grapheme↔UTF-16 map); M6 markdown split-preview UI + toggle; M7 plugins; gauntlet;
+   blackline large-project test (VERIFICATION_RESULTS.md, isolated worktree); §5.1 gate.
 
 ## Last commit
-b5cf988 — M4 git module integrated (codex, reviewed+fixed). (Editor rework: 3b244b2 reactive frame,
-2a06da1 grapheme coordinate model. Governance: 0448932.)
+6cae817 — M6 markdown module integrated. (Also: b5cf988 git module; editor rework 3b244b2 reactive
+frame, 2a06da1 grapheme coordinate model, e560996 native-cursor caret; handoff 6591b0e.)
