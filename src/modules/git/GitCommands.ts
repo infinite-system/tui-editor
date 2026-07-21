@@ -76,6 +76,19 @@ class $GitCommands {
     return this.run(options.cwd, arguments_);
   }
 
+  /**
+   * Discard a file's changes in the working tree — DESTRUCTIVE (guarded by an explicit user
+   * confirmation upstream; see 'Destructive working-tree operations require confirmation' in
+   * git.invariants.md). untracked -> clean; staged -> restore index+worktree from HEAD;
+   * unstaged -> restore worktree.
+   */
+  static discard(cwd: string, filePath: string, bucket: 'staged' | 'unstaged' | 'untracked'): Promise<GitCommandResult> {
+    if (bucket === 'untracked') return this.run(cwd, ['clean', '-f', '--', filePath]);
+    if (bucket === 'staged')
+      return this.run(cwd, ['restore', '--staged', '--worktree', '--source=HEAD', '--', filePath]);
+    return this.run(cwd, ['restore', '--', filePath]);
+  }
+
   static show(cwd: string, ref: string): Promise<GitCommandResult> {
     return this.run(cwd, ['show', '--no-ext-diff', '--no-color', '--decorate=short', ref, '--']);
   }

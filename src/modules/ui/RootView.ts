@@ -169,7 +169,7 @@ export function buildRootView(
     width: 1,
     showArrows: false,
     onChange: (position) => {
-      workspace.editor.viewport.scrollTop.value = Math.max(0, Math.round(position));
+      workspace.editor.viewport.scrollTop.value = trueScrollPosition(editorVerticalBar, position);
     },
   });
   const editorHorizontalBar = new ScrollBarRenderable(renderer, {
@@ -181,7 +181,7 @@ export function buildRootView(
     height: 1,
     showArrows: false,
     onChange: (position) => {
-      workspace.editor.viewport.scrollLeft.value = Math.max(0, Math.round(position));
+      workspace.editor.viewport.scrollLeft.value = trueScrollPosition(editorHorizontalBar, position);
     },
   });
   editorArea.add(editorVerticalBar);
@@ -191,10 +191,10 @@ export function buildRootView(
     orientation: 'vertical',
     position: 'absolute',
     right: 0,
-    width: 1,
+    width: 2,
     showArrows: false,
     onChange: (position) => {
-      workspace.gitPanel.changesScrollTop.value = Math.max(0, Math.round(position));
+      workspace.gitPanel.changesScrollTop.value = trueScrollPosition(changesBar, position);
     },
   });
   const logBar = new ScrollBarRenderable(renderer, {
@@ -202,11 +202,11 @@ export function buildRootView(
     orientation: 'vertical',
     position: 'absolute',
     right: 0,
-    width: 1,
+    width: 2,
     showArrows: false,
     onChange: (position) => {
       workspace.haltGitLogScroll(); // thumb drag adopts authority (One-Writer)
-      workspace.gitPanel.logScrollTop.value = Math.max(0, Math.round(position));
+      workspace.gitPanel.logScrollTop.value = trueScrollPosition(logBar, position);
       void workspace.commitLog.value?.ensureRange(workspace.gitPanel.logScrollTop.value, 50);
     },
   });
@@ -214,14 +214,52 @@ export function buildRootView(
   sidebar.add(logBar);
 
   // Sync bar geometry + positions from the models each paint (bars auto-hide when content fits).
+  // MIN THUMB: OpenTUI sizes the thumb proportionally with no floor; on huge content it vanishes.
+  // We inflate the REPORTED viewportSize so the thumb never drops below MIN_THUMB_CELLS, and store
+  // the resulting scale so onChange maps the reported position back to the TRUE scroll range
+  // (standard scrollbar math: reported and true ranges are proportional).
+  const MIN_THUMB_CELLS = 2;
+  const barScales = new Map<object, number>();
+  function syncBar(
+    bar: ScrollBarRenderable,
+    trackCells: number,
+    scrollSize: number,
+    viewportSize: number,
+    scrollPosition: number,
+  ): void {
+    let reportedViewport = viewportSize;
+    if (scrollSize > 0 && trackCells > 0) {
+      const minViewportForThumb = Math.ceil((MIN_THUMB_CELLS * scrollSize) / trackCells);
+      reportedViewport = Math.min(scrollSize, Math.max(viewportSize, minViewportForThumb));
+    }
+    const trueRange = Math.max(0, scrollSize - viewportSize);
+    const reportedRange = Math.max(0, scrollSize - reportedViewport);
+    barScales.set(bar, reportedRange > 0 ? trueRange / reportedRange : 0);
+    bar.scrollSize = scrollSize;
+    bar.viewportSize = reportedViewport;
+    bar.scrollPosition =
+      trueRange > 0 ? Math.round((scrollPosition / trueRange) * reportedRange) : 0;
+  }
+  /** Map a bar onChange position (reported range) back to the true scroll range. */
+  function trueScrollPosition(bar: ScrollBarRenderable, reportedPosition: number): number {
+    return Math.max(0, Math.round(reportedPosition * (barScales.get(bar) ?? 1)));
+  }
+
   function syncScrollbars(): void {
     const editor = workspace.editor;
     const editorVisible = editor.hasDocument.value;
     const viewportHeight = editorViewportHeight();
-    editorVerticalBar.height = viewportHeight;
-    editorVerticalBar.scrollSize = editorVisible ? editor.document.lineCount : 0;
-    editorVerticalBar.viewportSize = viewportHeight;
-    editorVerticalBar.scrollPosition = editor.viewport.scrollTop.value;
+    // Vertical track: exactly the pane's inner rows (top 0 relative to the content box), minus the
+    // bottom corner cell shared with the horizontal bar.
+    editorVerticalBar.top = 0;
+    editorVerticalBar.height = Math.max(1, viewportHeight - 1);
+    syncBar(
+      editorVerticalBar,
+      Math.max(1, viewportHeight - 1),
+      editorVisible ? editor.document.lineCount : 0,
+      viewportHeight,
+      editor.viewport.scrollTop.value,
+    );
     const viewportWidth = editorViewportWidth();
     let widestVisible = 0;
     if (editorVisible) {
@@ -230,36 +268,60 @@ export function buildRootView(
         widestVisible = Math.max(widestVisible, lineWidth(line));
       }
     }
-    editorHorizontalBar.width = Math.max(1, (editorArea.width as number) - 2);
-    editorHorizontalBar.scrollSize = widestVisible;
-    editorHorizontalBar.viewportSize = viewportWidth;
-    editorHorizontalBar.scrollPosition = editor.viewport.scrollLeft.value;
+    // Horizontal track: the code area's inner columns (starts at the code body's left edge inside
+    // the pane), minus the right corner cell.
+    const horizontalTrack = Math.max(1, viewportWidth - 1);
+    editorHorizontalBar.left = Math.max(0, codeBody.x - (editorArea.x + 1));
+    editorHorizontalBar.width = horizontalTrack;
+    syncBar(
+      editorHorizontalBar,
+      horizontalTrack,
+      widestVisible,
+      viewportWidth,
+      editor.viewport.scrollLeft.value,
+    );
 
     const gitVisible = workspace.focus.value === 'git' && workspace.git.value !== null;
     const changeRowCount = gitVisible ? gitChangeRowsNow().length : 0;
     changesBar.top = 2;
     changesBar.height = Math.max(1, gitPanelGeometry.changesRows);
-    changesBar.scrollSize = gitVisible ? changeRowCount : 0;
-    changesBar.viewportSize = gitPanelGeometry.changesRows;
-    changesBar.scrollPosition = workspace.gitPanel.changesScrollTop.value;
+    syncBar(
+      changesBar,
+      Math.max(1, gitPanelGeometry.changesRows),
+      gitVisible ? changeRowCount : 0,
+      gitPanelGeometry.changesRows,
+      workspace.gitPanel.changesScrollTop.value,
+    );
     const knownEnd = workspace.commitLog.value?.knownEnd.value ?? Number.POSITIVE_INFINITY;
     logBar.top = gitPanelGeometry.dividerRow + 1;
     logBar.height = Math.max(1, gitPanelGeometry.logRows);
     // Unknown history length: a rolling virtual size keeps the thumb draggable; it refines once
     // the end is discovered (a short page sets knownEnd).
-    logBar.scrollSize = gitVisible
-      ? Number.isFinite(knownEnd)
-        ? (knownEnd as number)
-        : workspace.gitPanel.logScrollTop.value + gitPanelGeometry.logRows * 4
-      : 0;
-    logBar.viewportSize = gitPanelGeometry.logRows;
-    logBar.scrollPosition = workspace.gitPanel.logScrollTop.value;
+    syncBar(
+      logBar,
+      Math.max(1, gitPanelGeometry.logRows),
+      gitVisible
+        ? Number.isFinite(knownEnd)
+          ? (knownEnd as number)
+          : workspace.gitPanel.logScrollTop.value + gitPanelGeometry.logRows * 4
+        : 0,
+      gitPanelGeometry.logRows,
+      workspace.gitPanel.logScrollTop.value,
+    );
   }
 
 
   // Interior height of a bordered box = box height - 2 (top+bottom border).
   const editorViewportHeight = () => Math.max(1, (editorArea.height as number) - 2);
-  const editorViewportWidth = () => Math.max(1, (editorArea.width as number) - 2 - 6); // gutter
+  // Layout-anchored (never hand-derived): the code renderable's own laid-out width, minus the one
+  // column the overlay vertical scrollbar occupies — so the final column of a line is always
+  // reachable and visible at max scrollLeft (the old hardcoded gutter guess broke on 3-digit
+  // line counts: the last columns of long lines were unreachable).
+  const editorViewportWidth = () => {
+    const laidOut = codeBody.width as number;
+    if (laidOut && laidOut > 1) return Math.max(1, laidOut - 1);
+    return Math.max(1, (editorArea.width as number) - 2 - 6);
+  };
 
   // First visible tree row (the render window slides to keep the selection on screen); shared by
   // the renderer and the mouse hit-test so clicks land on the row the user actually sees.

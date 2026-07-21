@@ -44,6 +44,10 @@ class $GitPanel {
   get logHovered() {
     return ref(-1);
   }
+  // Pending destructive confirmation (discard) — rendered as a y/N overlay; null = none.
+  get confirmDiscard() {
+    return shallowRef<{ path: string; bucket: 'staged' | 'unstaged' | 'untracked' } | null>(null);
+  }
   // Momentum state for the commit-log wheel glide (see ui/scroll-momentum).
   get logMomentum() {
     return shallowRef<ScrollMomentum>(AT_REST);

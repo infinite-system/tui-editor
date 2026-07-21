@@ -14,6 +14,16 @@ test('key acceleration: quiet start, monotonic build, capped', () => {
   expect(ScrollPhysics.Class.keyAcceleration(15)).toBeGreaterThanOrEqual(20); // NOTICEABLE mid-hold
 });
 
+test('the ramp kicks in almost immediately on hold (user tune: fast early phase)', () => {
+  // Within the FIRST 10 repeats the traversal must already be substantial…
+  let earlyLines = 0;
+  for (let run = 0; run < 10; run++) earlyLines += ScrollPhysics.Class.keyAcceleration(run);
+  expect(earlyLines).toBeGreaterThanOrEqual(60);
+  // …while tapping stays exactly 1:1.
+  expect(ScrollPhysics.Class.keyAcceleration(0)).toBe(1);
+  expect(ScrollPhysics.Class.keyAcceleration(1)).toBe(1);
+});
+
 test('a two-second hold traverses ~1000 lines (feel target)', () => {
   // Key repeat ≈ 28/s after the initial delay -> ~56 repeats in 2s.
   let lines = 0;

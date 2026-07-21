@@ -7,10 +7,12 @@ class $ScrollPhysics {
   /** Key repeats within this window continue an acceleration run; a gap resets it. */
   static readonly KEY_RUN_WINDOW_MS = 150;
 
-  /** Held-arrow ramp: quiet start, then a strong quadratic build. Hand-tuned. */
-  static readonly KEY_ACCEL_START_RUN = 3; // presses before any acceleration
-  static readonly KEY_ACCEL_QUADRATIC = 0.15; // rows += this * (run - start)^2
-  static readonly KEY_ACCEL_CAP_ROWS = 45; // max rows per repeat — ~1000 lines in ~2s of holding
+  /** Held-arrow ramp: near-immediate onset, steep build (user-tuned 2026-07-21: the ramp kicks in
+   *  after ~2 fast repeats and climbs hard — holding feels fast almost immediately, while a single
+   *  press or slow taps still move exactly 1 row). */
+  static readonly KEY_ACCEL_START_RUN = 2; // presses before any acceleration (was 3)
+  static readonly KEY_ACCEL_QUADRATIC = 0.4; // rows += this * (run - start)^2 (was 0.15)
+  static readonly KEY_ACCEL_CAP_ROWS = 50; // max rows per repeat (was 45)
 
   /** Ctrl+Up/Down big-jump traversal: a screenful-ish stride that also ramps. Hand-tuned. */
   static readonly JUMP_BASE_ROWS = 15;

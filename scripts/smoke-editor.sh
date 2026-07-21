@@ -105,6 +105,17 @@ echo "== mouse input path (real SGR click arrives) =="
 mouse="$(f mouse)"
 if [ -n "$mouse" ] && [ "$mouse" != "null" ]; then echo "  PASS  mouse click registered ($mouse)"; else echo "  FAIL  mouse click did not register"; fail=1; fi
 
+echo "== h-scroll range: End reveals the long line's end (scrollbar geometry regression) =="
+"$H" click "$S" 40 1 >/dev/null   # put the cursor ON the long line (row y=1 = doc line 0)
+tmux send-keys -t "$S" End; sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
+end_visible="$("$BUN" -e '
+const f=JSON.parse(require("fs").readFileSync("artifacts/frame.json"));
+let ok=false;for(let y=0;y<f.height;y++) if(f.rows[y].text.includes("desync)")){ok=true;break}
+console.log(ok?"OK":"CUT");
+')"
+if [ "$end_visible" = "OK" ]; then echo "  PASS  line end visible at max scrollLeft"; else echo "  FAIL  line end cut off at max scrollLeft"; fail=1; fi
+tmux send-keys -t "$S" Home; sleep 0.3
+
 echo "== drag-edge auto-scroll: hold at right edge scrolls + extends selection =="
 tmux send-keys -t "$S" -l "$(printf '\033[<0;50;2M')"; sleep 0.1     # press on line 0 (long line)
 tmux send-keys -t "$S" -l "$(printf '\033[<32;118;2M')"; sleep 0.1   # drag to right edge, HOLD

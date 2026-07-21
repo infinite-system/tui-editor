@@ -175,6 +175,16 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     // Drag-edge auto-scroll: while a selection drag holds at a pane edge, keep scrolling +
     // extending the selection (the view returns true while active so frames keep coming).
     if (view.tickDragAutoScroll(dt)) renderer.requestRender();
+    // Converge the viewport size with the LAID-OUT layout (gutter width changes when a file opens
+    // or its line count crosses a digit boundary; boot/resize alone goes stale). Mutating outside
+    // the reactive effect: the write triggers one repaint and converges — no feedback loop.
+    const editorViewport = workspace.editor.viewport;
+    const laidOutWidth = view.editorViewportWidth();
+    const laidOutHeight = view.editorViewportHeight();
+    if (editorViewport.width.value !== laidOutWidth || editorViewport.height.value !== laidOutHeight) {
+      editorViewport.setSize(laidOutWidth, laidOutHeight);
+      renderer.requestRender();
+    }
     StatusChannel.Class.settle(frame);
     // Exact per-cell visual snapshot for tests (env-gated; no-op otherwise).
     FrameProbe.Class.dump(renderer, framePath);

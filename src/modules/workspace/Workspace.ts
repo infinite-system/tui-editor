@@ -13,6 +13,7 @@ import { CommitLog } from '../git/CommitLog';
 import { GitPanel } from './GitPanel';
 import { addImpulse, stepMomentum, isMoving, AT_REST } from '../ui/scroll-momentum';
 import { buildChangeRows } from '../git/git.rows';
+import { GitCommands } from '../git/GitCommands';
 
 export type Focus = 'files' | 'editor' | 'git';
 
@@ -128,6 +129,41 @@ class $Workspace {
     gitPanel.logMomentum.value = momentum;
     if (rows !== 0) this.scrollGitLog(rows);
     return isMoving(momentum);
+  }
+
+  /** Open the FILE at a changes-row in the editor (row click / 'o'). */
+  openChangeAtRow(rowIndex: number): void {
+    const git = this.git.value;
+    if (!git) return;
+    const rows = buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
+    const row = rows[rowIndex];
+    if (row?.kind !== 'file') return;
+    this.editor.openFile(Files.Class.join(this.root, row.path));
+    this.focus.value = 'editor';
+  }
+
+  /** Request a discard — DESTRUCTIVE, so it only arms the confirmation overlay (y confirms).
+   *  invariant: Destructive working-tree operations require confirmation (src/modules/git/git.invariants.md) */
+  requestDiscardAtRow(rowIndex: number): void {
+    const git = this.git.value;
+    if (!git) return;
+    const rows = buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
+    const row = rows[rowIndex];
+    if (row?.kind !== 'file') return;
+    this.gitPanel.confirmDiscard.value = { path: row.path, bucket: row.bucket };
+  }
+
+  async confirmDiscard(): Promise<void> {
+    const pending = this.gitPanel.confirmDiscard.value;
+    const git = this.git.value;
+    this.gitPanel.confirmDiscard.value = null;
+    if (!pending || !git) return;
+    await GitCommands.Class.discard(this.root, pending.path, pending.bucket);
+    await git.refresh();
+  }
+
+  cancelDiscard(): void {
+    this.gitPanel.confirmDiscard.value = null;
   }
 
   /** Activate the current tree selection: open a file (and focus editor) or toggle a dir. */
