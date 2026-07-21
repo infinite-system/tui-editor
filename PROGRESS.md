@@ -26,10 +26,10 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 - [x] M1 — boot & frame (kernel seal, OpenTUI two-pane, status side-channel) — fork-built, audited.
 - [x] M2 core — workspace/file-tree, theme, read-only viewport, syntax highlight — fork-built, audited.
 - [x] M3 core — insert/delete/undo/redo/accel-arrows/palette — fork-built, audited.
-- [ ] **EDITOR REWORK (current, mine):** (a) reactive frame effect ← DOING NOW; (b) coordinate
-      model (kill surrogate corruption; char/UTF-16/display + Unicode test matrix); (c) real caret;
-      (d) selection + copy/cut/paste (Clipboard capability); (e) multi-workspace; (f) search;
-      (g) piece-table undo.
+- [ ] **EDITOR REWORK (current, mine):** (a) reactive frame effect — DONE (3b244b2, app.invariants.md);
+      (b) grapheme-safe coordinate model — DONE (2a06da1, editor.coordinates.ts + Unicode matrix);
+      (c) real caret at display column ← NEXT; (d) selection + copy/cut/paste (Clipboard capability);
+      (e) multi-workspace; (f) search; (g) piece-table undo.
 - [ ] M4 — git (codex) + diff.
 - [ ] M5 — TS LSP (codex) + diagnostics + integrate.
 - [ ] M6 — markdown preview (codex).
@@ -56,7 +56,11 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 - tsc green + tests pass at every commit; dispose resources; record benchmarks.
 
 ## Next action
-Wire the coarse reactive frame effect: one owned `app.$watchEffect(() => { view.update(); publish(); requestRender(); })`; remove imperative `void render()` from input handlers; move `viewport.setSize` to resize+boot only (break setSize feedback edge). Verify tsc+tests, tmux smoke via status.json, commit.
+Real caret at display column (RootView): replace the gutter `▏` bar with a caret at
+`displayColumn(line, cursor.col)` on the cursor's line (tab/wide aware), using
+`editor.coordinates`. Then selection (anchor on Cursor + shift/mouse) + copy/cut/paste via a
+`Clipboard` system capability (wl-copy/xclip/pbcopy + OSC 52). Then a tmux end-to-end smoke to
+promote the reactive-frame + coordinate invariants toward established.
 
 ## Last commit
-080ed91 — system: Static() capability layer + system.invariants.md.
+2a06da1 — editor rework 2/n: grapheme-safe coordinate model. (Prev: 3b244b2 reactive frame effect.)

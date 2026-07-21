@@ -1,5 +1,5 @@
 // Unicode coordinate matrix + grapheme-safe editing.
-// invariant: A cursor position resolves to three distinct coordinates (editor.invariants.md)
+// Covers the editor invariant "A cursor position resolves to three distinct coordinates".
 import { test, expect } from 'bun:test';
 import {
   graphemeCount,
