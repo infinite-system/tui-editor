@@ -1,3 +1,4 @@
+import { Static } from './Static';
 // Observability side channel (plan §5.2) — the deterministic artifact the tmux harness
 // asserts against instead of scraping the pane. The app pushes model/process state here;
 // this writes artifacts/status.json atomically after each settled frame.
@@ -91,5 +92,5 @@ class $StatusChannel {
 
 export namespace StatusChannel {
   export const $Class = $StatusChannel;
-  export let Class = $StatusChannel;
+  export let Class = Static($StatusChannel);
 }

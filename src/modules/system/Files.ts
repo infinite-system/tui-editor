@@ -1,3 +1,4 @@
+import { Static } from './Static';
 // Filesystem capability. Static, allocation-free. All path access is confined here so the
 // path-traversal boundary (L9) has one home.
 //
@@ -113,5 +114,5 @@ class $Files {
 
 export namespace Files {
   export const $Class = $Files;
-  export let Class = $Files;
+  export let Class = Static($Files);
 }

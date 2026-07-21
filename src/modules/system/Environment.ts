@@ -1,3 +1,4 @@
+import { Static } from './Static';
 // System environment capability — static, allocation-free (namespace pattern).
 // invariant: Imported dependencies are read late (project.invariants.md)
 
@@ -25,5 +26,5 @@ class $Environment {
 
 export namespace Environment {
   export const $Class = $Environment;
-  export let Class = $Environment;
+  export let Class = Static($Environment);
 }

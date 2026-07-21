@@ -1,3 +1,4 @@
+import { Static } from './Static';
 // File logger — the TUI owns the terminal, so logs must never touch stdout/stderr.
 // Writes to artifacts/tui.log. Static capability.
 import { appendFileSync, mkdirSync } from 'node:fs';
@@ -39,5 +40,5 @@ class $Logging {
 
 export namespace Logging {
   export const $Class = $Logging;
-  export let Class = $Logging;
+  export let Class = Static($Logging);
 }

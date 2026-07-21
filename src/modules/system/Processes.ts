@@ -1,3 +1,4 @@
+import { Static } from './Static';
 // Subprocess capability (Bun.spawn). All external-process access is confined here so the
 // argument-injection boundary (L9) has one home: callers pass an ARGV ARRAY, never a shell
 // string, so filenames/branches can never be interpreted as arguments or shell syntax.
@@ -41,5 +42,5 @@ class $Processes {
 
 export namespace Processes {
   export const $Class = $Processes;
-  export let Class = $Processes;
+  export let Class = Static($Processes);
 }
