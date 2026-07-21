@@ -56,6 +56,17 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       VERIFY: open 5 → 5 tabs; click switches active; dirty dot on edit; close disposes (RSS returns
       after closing all — measured); reopen focuses existing; tabs FrameProbe-rendered. Shares the
       buffer-set model with 10b.
+- [ ] 14. **SIDE-BY-SIDE DIFF (upgrades the read-only unified diff; user).** Sequence after 10a (or
+      interleave — self-contained in the diff module + a DiffView renderable). SPEC: two-pane split
+      (LEFT=previous, read-only cold projection; RIGHT=current — the SAME live editable Buffer for
+      working-tree diffs [edit recomputes diff live, revision-stamped, stale-discarded], read-only
+      cold for commit-drilldown); aligned diff (Myers/LCS → hunks) with BLANK filler rows so panes
+      stay row-aligned; per-side gutters (left=old nums, right=new nums, filler blank); added/deleted/
+      modified palette colors; jump next/prev change (buttons + Alt+Down/Up or ]c/[c) scrolling BOTH
+      panes + "N of M changes" counter; SYNCED vertical scroll (shared momentum engine + scrollbars);
+      ONE hunk model feeds render + jump-nav; flyweight (window over the hunk model, never
+      materialize the full aligned sequence); close disposes the cold-blob buffer. Record aligned-diff
+      + synced-scroll in the diff contract ("Diff mode decorates the live buffer" invariant ported).
 - [ ] 10b. Milestone road: M5 diagnostics/definition + editable side-by-side diff · M6 markdown
       split-preview · multi-workspace · file search · piece-table undo · M7 plugins (ScrollPhysics
       or theme plugin demo) · 5-pass gauntlet (fuller Claude panel) · isolated blackline-worktree
