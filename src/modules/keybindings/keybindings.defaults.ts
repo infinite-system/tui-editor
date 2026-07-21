@@ -24,6 +24,13 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 'down' }, action: 'palette.next', context: 'palette' },
   { chord: { key: 'backspace' }, action: 'palette.erase', context: 'palette' },
 
+  // --- context menu (modal while open: Bootstrap resolves ONLY in this context and consumes
+  //     everything unbound by closing the menu — see the modal block in Bootstrap.onKey) ---
+  { chord: { key: 'up' }, action: 'menu.previous', context: 'menu' },
+  { chord: { key: 'down' }, action: 'menu.next', context: 'menu' },
+  { chord: { key: 'return' }, action: 'menu.run', context: 'menu' },
+  { chord: { key: 'escape' }, action: 'menu.close', context: 'menu' },
+
   // --- files (tree) ---
   { chord: { key: 'up' }, action: 'tree.up', context: 'files' },
   { chord: { key: 'down' }, action: 'tree.down', context: 'files' },

@@ -25,7 +25,7 @@ export interface Keybinding {
   /** Multi-step chord, e.g. Ctrl+X then Ctrl+C. */
   steps?: ChordPattern[];
   /** Focus context this binding applies in; 'global' applies everywhere. */
-  context?: 'global' | 'editor' | 'files' | 'git' | 'palette';
+  context?: 'global' | 'editor' | 'files' | 'git' | 'palette' | 'menu';
   /** Named guard (host-registered predicate) that must be true for the binding to fire. */
   when?: string;
 }

@@ -12,6 +12,8 @@ import { Theme } from '../theme/Theme';
 import { CommandRegistry } from '../commands/CommandRegistry';
 import { CommandDefaults } from '../commands/CommandDefaults';
 import { buildRootView, type RootView } from '../ui/RootView';
+import { ContextMenu } from '../ui/ContextMenu';
+import { Tooltip } from '../ui/Tooltip';
 import { StatusChannel } from '../system/StatusChannel';
 import { FrameProbe } from '../system/FrameProbe';
 import { ScrollPhysics } from '../ui/ScrollPhysics';
@@ -64,7 +66,11 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
 
   const commands = new CommandRegistry.Class();
 
-  const view = buildRootView(renderer, workspace, theme, commands, app);
+  // App-level overlay view models (the view projects them; input routes through here).
+  const contextMenu = new ContextMenu.Class();
+  const tooltip = new Tooltip.Class();
+
+  const view = buildRootView(renderer, workspace, theme, commands, app, contextMenu, tooltip);
 
   // Last mouse event seen (for the observability side channel — proves the mouse path is live).
   let lastMouse: { type: string; x: number; y: number; button: number } | null = null;
@@ -100,6 +106,9 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       gitLogLoaded: workspace.commitLog.value?.loadedCount ?? 0,
       gitLogExpanded: workspace.commitExpansion.value?.entries.value.length ?? 0,
       gitRegion: workspace.gitPanel.region.value,
+      gitSelectedPaths: [...workspace.gitPanel.selectedPaths.value],
+      contextMenuOpen: contextMenu.open.value,
+      tooltipVisible: tooltip.visible.value,
     });
   };
 
@@ -160,6 +169,18 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     void gitPanel.logHovered.value;
     void gitPanel.confirmDiscard.value;
     void gitPanel.splitRatio.value;
+    void gitPanel.selectedPaths.value;
+    // Overlay models: the context menu and tooltip repaint on any of their display state.
+    void contextMenu.open.value;
+    void contextMenu.items.value;
+    void contextMenu.anchorX.value;
+    void contextMenu.anchorY.value;
+    void contextMenu.hoveredIndex.value;
+    void contextMenu.selectedIndex.value;
+    void tooltip.visible.value;
+    void tooltip.text.value;
+    void tooltip.anchorX.value;
+    void tooltip.anchorY.value;
     void commands.open.value;
     void commands.query.value;
     void commands.selectedIndex.value;
@@ -209,6 +230,10 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     // Drag-edge auto-scroll: while a selection drag holds at a pane edge, keep scrolling +
     // extending the selection.
     animating = view.tickDragAutoScroll(dt) || animating;
+    // Tooltip dwell: the frame tick advances the timer; it's just another animation source, so it
+    // folds into the SAME single-live-request model (holds a frame while counting, false at rest —
+    // idle quiescence preserved). NOT a per-frame requestRender (that was the pre-demand-driven form).
+    animating = tooltip.tick(dt) || animating;
     syncAnimationLiveness(animating);
     // Converge the viewport size with the LAID-OUT layout (gutter width changes when a file opens
     // or its line count crosses a digit boundary; boot/resize alone goes stale). Mutating outside
@@ -471,14 +496,34 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     'editor.undo': () => workspace.editor.performUndo(),
     'editor.redo': () => workspace.editor.performRedo(),
     'editor.toggleWordWrap': () => workspace.editor.toggleWordWrap(),
+    'menu.previous': () => contextMenu.moveSelection(-1),
+    'menu.next': () => contextMenu.moveSelection(1),
+    'menu.run': () => contextMenu.runSelected(),
+    'menu.close': () => contextMenu.close(),
   };
 
   const onKey = (key: KeyEvent): void => {
+    tooltip.clear(); // any keypress hides the tooltip (display-only affordance)
     // Destructive-confirm overlay is MODAL: y confirms, anything else cancels — the context's
     // residual, not a binding.
     if (workspace.gitPanel.confirmDiscard.value) {
       if (key.name === 'y') void workspace.confirmDiscard();
       else workspace.cancelDiscard();
+      return;
+    }
+
+    // Context menu is MODAL: keys resolve ONLY in the 'menu' context (bindings are registry
+    // data); anything that is not a menu action closes the menu and is CONSUMED — no keystroke
+    // both dismisses the menu and acts on what is beneath it.
+    // invariant: A context menu is modal and single-consumer (src/modules/ui/ui.invariants.md)
+    if (contextMenu.open.value) {
+      const menuResolution = keybindings.resolve(
+        { name: key.name, ctrl: key.ctrl, shift: key.shift, option: key.option || key.meta, super: key.super },
+        'menu',
+        Date.now(),
+      );
+      if (menuResolution.action?.startsWith('menu.')) actionHandlers[menuResolution.action]?.(key);
+      else contextMenu.close();
       return;
     }
 
@@ -509,6 +554,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   // attached on their own renderables and run before this via propagation.
   const onMouse = (event: { type: string; x: number; y: number; button: number }): void => {
     lastMouse = { type: event.type, x: event.x, y: event.y, button: event.button };
+    if (event.type === 'down') tooltip.clear(); // any click hides the tooltip, wherever it lands
     paint();
   };
   renderer.root.onMouse = onMouse;

@@ -15,6 +15,7 @@ import {
   ScrollBarRenderable,
   type TextChunk,
   type CliRenderer,
+  type OptimizedBuffer,
 } from '@opentui/core';
 import type { Workspace } from '../workspace/Workspace';
 import type { App } from '../app/App';
@@ -26,9 +27,11 @@ import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { displayColumn, lineWidth, graphemeAtDisplayColumn, graphemeToU16 } from '../editor/editor.coordinates';
 import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
 import { SelectableText } from './SelectableText';
-import { GitRows } from '../git/GitRows';
+import { GitRows, type ChangeRow, type FileRow } from '../git/GitRows';
 import { GitLogRows } from '../git/GitLogRows';
 import { ScrollbarGeometry } from './ScrollbarGeometry';
+import type { ContextMenu, ContextMenuItem } from './ContextMenu';
+import type { Tooltip } from './Tooltip';
 import { Logging } from '../system/Logging';
 
 function roleColor(role: Role, palette: Palette): string {
@@ -57,12 +60,32 @@ export interface RootView {
   dispose(): void;
 }
 
+// The tooltip's renderable: NEVER stamped into the hit grid, so the pointer can never resolve to
+// it — a click at the tooltip's cells hits whatever is beneath, exactly as if the tooltip did not
+// exist. (OpenTUI stamps every rendered renderable into the hit grid inside Renderable.render;
+// there is no opt-out option, so the stamp call is masked for the duration of this one render.)
+// invariant: A tooltip never intercepts input (src/modules/ui/ui.invariants.md)
+class HitTransparentText extends TextRenderable {
+  override render(buffer: OptimizedBuffer, deltaTime: number): void {
+    const context = this._ctx;
+    const originalAddToHitGrid = context.addToHitGrid;
+    context.addToHitGrid = () => {};
+    try {
+      super.render(buffer, deltaTime);
+    } finally {
+      context.addToHitGrid = originalAddToHitGrid;
+    }
+  }
+}
+
 export function buildRootView(
   renderer: CliRenderer,
   workspace: Workspace.Instance,
   theme: Theme.Instance,
   commands: CommandRegistry.Instance,
   app: App.Instance,
+  contextMenu: ContextMenu.Instance,
+  tooltip: Tooltip.Instance,
 ): RootView {
   const root = renderer.root;
   const readPalette = () => theme.palette;
@@ -182,6 +205,58 @@ export function buildRootView(
   const confirmText = new TextRenderable(renderer, { id: 'confirm-discard-text', content: '' });
   confirmBox.add(confirmText);
   root.add(confirmBox);
+
+  // Context-menu modal layer. The BACKDROP is an invisible (transparent, borderless) full-screen
+  // box just beneath the menu: OpenTUI stamps the hit grid in render order (zIndex ascending), so
+  // while the menu is open EVERY pointer cell resolves to either the menu box (above) or this
+  // backdrop — the panes beneath are unreachable by construction. The backdrop's only behavior is
+  // to close the menu; the click it consumed acts on nothing else.
+  // invariant: A context menu is modal and single-consumer (src/modules/ui/ui.invariants.md)
+  const contextMenuBackdrop = new BoxRenderable(renderer, {
+    id: 'context-menu-backdrop',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: '100%',
+    height: '100%',
+    visible: false,
+    zIndex: 125,
+  });
+  const contextMenuBox = new BoxRenderable(renderer, {
+    id: 'context-menu',
+    position: 'absolute',
+    border: true,
+    borderStyle: 'rounded',
+    visible: false,
+    zIndex: 130,
+  });
+  // selectable:false — a click on the menu must ONLY run the item: OpenTUI text is selectable by
+  // default, and a default-selectable menu list starts a native text selection on click, which
+  // then swallows the NEXT ctrl+click as a selection-extend (verified live).
+  const contextMenuList = new TextRenderable(renderer, { id: 'context-menu-list', content: '', selectable: false });
+  contextMenuBox.add(contextMenuList);
+  root.add(contextMenuBackdrop);
+  root.add(contextMenuBox);
+
+  contextMenuBackdrop.onMouseDown = () => contextMenu.close();
+  // Screen row -> item index (the +1 skips the top border); out-of-range rows resolve to no item.
+  const contextMenuItemAt = (screenY: number): number => screenY - (contextMenuBox.y + 1);
+  contextMenuBox.onMouseMove = (event) => contextMenu.hover(contextMenuItemAt(event.y));
+  contextMenuBox.onMouseOut = () => contextMenu.hover(-1);
+  contextMenuBox.onMouseDown = (event) => contextMenu.runAt(contextMenuItemAt(event.y));
+
+  // Tooltip overlay: display-only and hit-transparent (see HitTransparentText above) — it can
+  // never receive or consume a pointer event.
+  // invariant: A tooltip never intercepts input (src/modules/ui/ui.invariants.md)
+  const tooltipText = new HitTransparentText(renderer, {
+    id: 'tooltip',
+    content: '',
+    position: 'absolute',
+    visible: false,
+    zIndex: 140,
+    selectable: false, // display-only in every sense
+  });
+  root.add(tooltipText);
 
 
   // Scale map (reported->true position per bar) + intended thickness (cells; NEVER read back from
@@ -658,7 +733,10 @@ export function buildRootView(
       } else {
         const selected = active && gitPanel.region.value === 'changes' && rowIndex === gitPanel.changesIndex.value;
         const hovered = rowIndex === gitPanel.changesHovered.value;
-        const background = selected ? palette.selection : hovered ? palette.cursorLine : null;
+        // Multi-selected rows (Ctrl/Shift-click, right-click) share the hover token — a lower
+        // intensity than the focused row's `selection` bg — until the palette grows a third token.
+        const multiSelected = gitPanel.selectedPaths.value.has(row.path);
+        const background = selected ? palette.selection : multiSelected || hovered ? palette.cursorLine : null;
         // ` [x] M path…            o d ±` — checkbox = staging state (click toggles); buttons
         // (open / discard / stage-unstage) appear on hover/selection, right-aligned.
         const checkbox = row.bucket === 'staged' ? '[x]' : '[ ]';
@@ -809,6 +887,43 @@ export function buildRootView(
           ? ` Discard changes to ${pendingDiscard.paths[0]}?  [y/N]`
           : ` Discard changes to ${pendingDiscard.paths.length} files (${pendingDiscard.paths.join(', ').slice(0, 60)}…)?  [y/N]`;
       confirmText.fg = palette.fg;
+    }
+
+    // Context menu overlay (+ its modal backdrop) — projected purely from the ContextMenu model.
+    const menuOpen = contextMenu.open.value;
+    contextMenuBackdrop.visible = menuOpen;
+    contextMenuBox.visible = menuOpen;
+    if (menuOpen) {
+      contextMenuBox.left = contextMenu.anchorX.value;
+      contextMenuBox.top = contextMenu.anchorY.value;
+      contextMenuBox.width = contextMenu.width;
+      contextMenuBox.height = contextMenu.height;
+      contextMenuBox.backgroundColor = palette.panel;
+      contextMenuBox.borderColor = palette.borderActive;
+      const rowWidth = contextMenu.width - 2; // interior width between the borders
+      const menuChunks: TextChunk[] = [];
+      contextMenu.items.value.forEach((item, index) => {
+        const label = ` ${item.label}`.padEnd(rowWidth, ' ').slice(0, rowWidth);
+        const rowBackground =
+          index === contextMenu.selectedIndex.value
+            ? palette.selection
+            : index === contextMenu.hoveredIndex.value
+              ? palette.cursorLine
+              : null;
+        const styled = fg(item.enabled ? palette.fg : palette.dim)(label);
+        menuChunks.push(rowBackground ? bg(rowBackground)(styled) : styled);
+        if (index < contextMenu.items.value.length - 1) menuChunks.push(fg(palette.fg)('\n'));
+      });
+      contextMenuList.content = new StyledText(menuChunks);
+    }
+
+    // Tooltip overlay — display-only; clamped so it stays on screen.
+    tooltipText.visible = tooltip.visible.value;
+    if (tooltip.visible.value) {
+      const tooltipLabel = ` ${tooltip.text.value} `;
+      tooltipText.left = Math.max(0, Math.min(tooltip.anchorX.value, renderer.width - tooltipLabel.length));
+      tooltipText.top = Math.max(0, Math.min(tooltip.anchorY.value, renderer.height - 1));
+      tooltipText.content = new StyledText([bg(palette.selection)(fg(palette.fg)(tooltipLabel))]);
     }
 
     syncScrollbars();
@@ -1090,6 +1205,18 @@ export function buildRootView(
     const git = workspace.git.value;
     return git ? GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value) : [];
   };
+  // The git action-button hit zones (right-aligned ` o  d  ±` on a hovered/selected file row).
+  // ONE definition shared by the click dispatch and the tooltip arming, so the tooltip always
+  // names exactly what a click at that cell would do.
+  type GitActionButton = 'open' | 'discard' | 'stageToggle';
+  const gitActionButtonAt = (relativeX: number): GitActionButton | null => {
+    const innerWidth = SIDEBAR_WIDTH - 2;
+    if (relativeX >= innerWidth - 8 && relativeX <= innerWidth - 7) return 'open';
+    if (relativeX >= innerWidth - 5 && relativeX <= innerWidth - 4) return 'discard';
+    if (relativeX >= innerWidth - 2) return 'stageToggle';
+    return null;
+  };
+
   sidebar.onMouseMove = (event) => {
     if (workspace.sidebarView.value === 'git') {
       const hit = gitRowAt(event.y);
@@ -1097,8 +1224,27 @@ export function buildRootView(
       workspace.gitPanel.changesHovered.value =
         hit?.region === 'changes' && rows[hit.index]?.kind === 'file' ? hit.index : -1;
       workspace.gitPanel.logHovered.value = hit?.region === 'log' ? hit.index : -1;
+      // Tooltip: arm the dwell while the pointer rests on an action button of a file row
+      // (hovering the row is what makes the buttons visible); anything else disarms.
+      const hoveredRow = hit?.region === 'changes' ? rows[hit.index] : undefined;
+      const button =
+        hoveredRow?.kind === 'file' ? gitActionButtonAt(event.x - (sidebar.x + 1)) : null;
+      if (button && hoveredRow?.kind === 'file') {
+        const label =
+          button === 'open'
+            ? 'Open diff'
+            : button === 'discard'
+              ? 'Discard…'
+              : hoveredRow.bucket === 'staged'
+                ? 'Unstage'
+                : 'Stage';
+        tooltip.point(label, event.x + 1, event.y + 1); // below-right: never under the pointer
+      } else {
+        tooltip.clear();
+      }
       return;
     }
+    tooltip.clear();
     const rowIndex = treeWindowTop() + (event.y - (sidebar.y + 1));
     workspace.tree.hoveredIndex.value =
       rowIndex >= 0 && rowIndex < workspace.tree.rows.length ? rowIndex : -1;
@@ -1107,6 +1253,50 @@ export function buildRootView(
     workspace.tree.hoveredIndex.value = -1;
     workspace.gitPanel.changesHovered.value = -1;
     workspace.gitPanel.logHovered.value = -1;
+    tooltip.clear();
+  };
+
+  // Right-click on a changes FILE row: normalize the selection (an unselected row becomes THE
+  // selection; a selected row keeps the whole multi-selection) and open the context menu at the
+  // pointer with the COLLECTIVE actions the selection's buckets support.
+  const openChangesContextMenu = (rowIndex: number, row: FileRow, rows: ChangeRow[], pointerX: number, pointerY: number): void => {
+    const gitPanel = workspace.gitPanel;
+    if (!gitPanel.selectedPaths.value.has(row.path)) gitPanel.replaceSelected([row.path]);
+    gitPanel.changesIndex.value = rowIndex;
+    const selectedFileRows = rows.filter(
+      (candidate): candidate is FileRow =>
+        candidate.kind === 'file' && gitPanel.selectedPaths.value.has(candidate.path),
+    );
+    const stageableCount = selectedFileRows.filter((fileRow) => fileRow.bucket !== 'staged').length;
+    const unstageableCount = selectedFileRows.filter((fileRow) => fileRow.bucket === 'staged').length;
+    const items: ContextMenuItem[] = [
+      { id: 'git.stageSelected', label: `Stage (${stageableCount})`, enabled: stageableCount > 0 },
+      { id: 'git.unstageSelected', label: `Unstage (${unstageableCount})`, enabled: unstageableCount > 0 },
+      { id: 'git.discardSelected', label: `Discard… (${selectedFileRows.length})`, enabled: selectedFileRows.length > 0 },
+      { id: 'git.openDiff', label: 'Open diff', enabled: selectedFileRows.length > 0 },
+    ];
+    const firstSelectedIndex = rows.findIndex(
+      (candidate) => candidate.kind === 'file' && gitPanel.selectedPaths.value.has(candidate.path),
+    );
+    contextMenu.openAt(items, pointerX, pointerY, { width: renderer.width, height: renderer.height }, (itemId) => {
+      if (itemId === 'git.stageSelected') void workspace.stageSelected();
+      else if (itemId === 'git.unstageSelected') void workspace.unstageSelected();
+      else if (itemId === 'git.discardSelected') workspace.requestDiscardSelected(); // y/N confirm
+      else if (itemId === 'git.openDiff' && firstSelectedIndex >= 0) void workspace.openChangeAtRow(firstSelectedIndex);
+    });
+  };
+
+  // Shift+click: select the file rows in the range between the focused row and the clicked row
+  // (headers in between are skipped), REPLACING the previous selection.
+  const selectChangesRange = (anchorIndex: number, targetIndex: number, rows: ChangeRow[]): void => {
+    const start = Math.min(anchorIndex, targetIndex);
+    const end = Math.max(anchorIndex, targetIndex);
+    const paths: string[] = [];
+    for (let rowIndex = start; rowIndex <= end; rowIndex++) {
+      const row = rows[rowIndex];
+      if (row?.kind === 'file') paths.push(row.path);
+    }
+    workspace.gitPanel.replaceSelected(paths);
   };
 
   sidebar.onMouseDown = (event) => {
@@ -1119,18 +1309,31 @@ export function buildRootView(
         const row = rows[hit.index];
         if (row?.kind !== 'file') return;
         workspace.gitPanel.region.value = 'changes';
+        // Multi-select gestures come FIRST; plain left-click behavior below is unchanged.
+        if (event.button === 2) {
+          openChangesContextMenu(hit.index, row, rows, event.x, event.y); // right-click menu
+          return;
+        }
+        if (event.modifiers.ctrl) {
+          workspace.gitPanel.toggleSelected(row.path); // toggle in/out of the selection; no menu
+          return;
+        }
+        if (event.modifiers.shift) {
+          selectChangesRange(workspace.gitPanel.changesIndex.value, hit.index, rows); // range
+          return;
+        }
         const wasCurrent = workspace.gitPanel.changesIndex.value === hit.index;
         workspace.gitPanel.changesIndex.value = hit.index;
-        const innerWidth = SIDEBAR_WIDTH - 2;
         const relativeX = event.x - (sidebar.x + 1);
+        const actionButton = gitActionButtonAt(relativeX);
         const buttonsShowing = wasCurrent || workspace.gitPanel.changesHovered.value === hit.index;
         if (relativeX >= 1 && relativeX <= 3) {
           void workspace.toggleStageAtRow(hit.index); // the CHECKBOX is the staging control
-        } else if (buttonsShowing && relativeX >= innerWidth - 8 && relativeX <= innerWidth - 7) {
+        } else if (buttonsShowing && actionButton === 'open') {
           void workspace.openChangeAtRow(hit.index); // [o]pen
-        } else if (buttonsShowing && relativeX >= innerWidth - 5 && relativeX <= innerWidth - 4) {
+        } else if (buttonsShowing && actionButton === 'discard') {
           workspace.requestDiscardAtRow(hit.index); // [d]iscard — arms the y/N confirm
-        } else if (buttonsShowing && relativeX >= innerWidth - 2) {
+        } else if (buttonsShowing && actionButton === 'stageToggle') {
           void workspace.toggleStageAtRow(hit.index); // [+/-] stage/unstage
         } else {
           void workspace.openChangeAtRow(hit.index); // row body = select + OPEN (consistent with tree)

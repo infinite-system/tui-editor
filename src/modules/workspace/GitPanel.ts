@@ -58,6 +58,11 @@ class $GitPanel {
     this.selectedPaths.value = new Set([...this.selectedPaths.value, ...paths]);
   }
 
+  /** Replace the whole selection (right-click on an unselected row; Shift+click range). */
+  replaceSelected(paths: string[]): void {
+    this.selectedPaths.value = new Set(paths);
+  }
+
   clearSelectedPaths(): void {
     if (this.selectedPaths.value.size > 0) this.selectedPaths.value = new Set();
   }

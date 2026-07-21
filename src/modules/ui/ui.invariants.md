@@ -71,6 +71,77 @@ scroll-to's offset, not a blend.
 
 **Last refined:** 2026-07-21
 
+### A context menu is modal and single-consumer
+
+**Invariant:** If a context menu is open, then every pointer and keyboard event belongs to the menu
+alone: a click either hits a menu row (running that item) or dismisses the menu — it NEVER also
+reaches, activates, or edits anything beneath; a keystroke either drives the menu (Up/Down/Enter/
+Escape via the registry's `menu` context) or closes it and is consumed. Running an item closes the
+menu BEFORE the action executes.
+
+**Scope:** `ContextMenu` (the model), the backdrop + menu overlay in `RootView`, and the modal key
+block in `Bootstrap.onKey`.
+
+**Mechanism:** the view mounts an invisible FULL-SCREEN backdrop box (zIndex 125) beneath the menu
+box (zIndex 130). OpenTUI stamps every rendered renderable into its hit grid in render order
+(zIndex ascending, later stamps win), so while the menu is open every pointer cell resolves to the
+menu or the backdrop — the panes beneath are unreachable by construction, not by per-handler
+guards. The backdrop's only behavior is `close()`. Keys: `Bootstrap.onKey` short-circuits to the
+registry's `menu` context, dispatches only `menu.*` actions, and closes-and-consumes anything
+else. `ContextMenu.runAt` closes first, then invokes the opener-supplied handler.
+
+**Generates:** reusable menus that are safe over any pane; collective git actions without
+misclick hazards; keyboard parity for every menu.
+
+**Evidence:** unit tests (`ContextMenu.test.ts` state machine) + live tmux: right-click menu over
+the git panel; a click on the editor area closed the menu with buffer revision AND cursor
+unchanged; a menu-item click ran only the collective action.
+
+**Impossible if true:** a click that both closes the menu and acts on what is beneath it; a
+keystroke that types into the editor or moves a pane selection while a menu is open; an item
+action that executes while the menu is still open.
+
+**Verification:** `bun test` ContextMenu tests; tmux — open the menu, click elsewhere, assert the
+menu is gone AND `bufferRevision`/`cursor`/`treeSelected` unchanged in status.json.
+
+**Status:** established
+
+**Last refined:** 2026-07-21
+
+### A tooltip never intercepts input
+
+**Invariant:** If a tooltip is pending or visible, then it is display-only: it never receives,
+consumes, or reroutes any pointer or keyboard event, and any disqualifying input (pointer moved
+off the target, any click anywhere, any keypress) hides it immediately.
+
+**Scope:** `Tooltip` (the dwell state machine) and the tooltip overlay in `RootView`
+(`HitTransparentText`).
+
+**Mechanism:** the tooltip renderable overrides `render()` to mask OpenTUI's hit-grid stamp for
+itself (`HitTransparentText`), so the pointer can NEVER resolve to the tooltip — a click at its
+cells hits whatever is beneath, exactly as if the tooltip did not exist. The model only ever
+writes its own display refs (`visible/text/anchor`); the dwell advances on the frame tick
+(`tick(dtSeconds)` — the momentum/auto-scroll contract) and `Bootstrap` clears on every keypress
+and every mouse-down.
+
+**Generates:** hover affordance labels (git action buttons now; scrollbars/tree/diagnostics
+later) with zero input risk.
+
+**Evidence:** unit tests (`Tooltip.test.ts` dwell machine: no show before the dwell, cumulative
+dwell, jitter keeps the timer, clear disarms) + live tmux: tooltip visible in the pane capture
+after a dwell; a click at the same cells acted on the row beneath.
+
+**Impossible if true:** a tooltip that eats a click (a click that would have hit the control
+beneath but does not); a tooltip whose state machine writes cursor/selection/scroll state; a
+tooltip still visible after a keypress or click.
+
+**Verification:** `bun test` Tooltip tests; grep — `HitTransparentText` masks `addToHitGrid`;
+tmux — with the tooltip visible, click through it and assert the underlying action fired.
+
+**Status:** established
+
+**Last refined:** 2026-07-21
+
 ### Renderables hold no model state
 
 **Invariant:** If a renderable exists, then it holds only presentation state; it pulls all
@@ -222,6 +293,13 @@ and drives `SelectableText.setSelectionRange` → `TextBufferView.setLocalSelect
 (TextBufferRenderable syncs its view's viewport in `onResize`, so those coords resolve directly).
 Stands on *A cursor position resolves to three distinct coordinates* (editor) and *Selection is an
 anchor plus the cursor* (editor).
+Mouse addendum (2026-07-21): the MODEL is the only selection writer. Mouse events on
+the code renderable drive `cursor`+`anchor` (`documentPositionAtCell`: line = scrollTop + rowOffset,
+column = `graphemeAtDisplayColumn` — the display→grapheme inverse, unit-tested for wide glyphs and
+tabs); `applySelection()` then projects the model into the native highlight each paint. OpenTUI's
+OWN mouse-drag selection is DISABLED (`selectable:false`) — it was a second writer the model never
+saw, so the next paint wiped its highlight (the human-QA "selection appears then disappears" bug),
+and Ctrl+C (which copies the model selection) copied nothing.
 
 The MODEL is the only selection writer (mouse, 2026-07-21). Mouse events on the code renderable drive
 `cursor`+`anchor` (`documentPositionAtCell`: line = scrollTop + rowOffset, column =
