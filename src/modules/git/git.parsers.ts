@@ -1,6 +1,8 @@
 // Pure parsers for stable Git CLI formats. These produce compact plain records; callers may
 // retain or virtualize the arrays without creating a reactive object per status/commit row.
 
+import { Static } from '../system/Static';
+
 export const LOG_FIELD_SEPARATOR = '\x1f';
 export const LOG_RECORD_SEPARATOR = '\x1e';
 export const LOG_FORMAT = [
@@ -116,7 +118,7 @@ function addTrackedRecord(snapshot: GitStatusSnapshot, record: GitFileRecord): v
   if (record.y !== '.') snapshot.unstaged.push(record);
 }
 
-export function parseStatusPorcelainV2(output: string): GitStatusSnapshot {
+function parseStatusPorcelainV2Implementation(output: string): GitStatusSnapshot {
   const snapshot: GitStatusSnapshot = {
     branch: '',
     head: '',
@@ -172,7 +174,7 @@ export function parseStatusPorcelainV2(output: string): GitStatusSnapshot {
   return snapshot;
 }
 
-export function parseLog(output: string): CommitRecord[] {
+function parseLogImplementation(output: string): CommitRecord[] {
   const commits: CommitRecord[] = [];
 
   for (const rawRecord of output.split(LOG_RECORD_SEPARATOR)) {
@@ -195,4 +197,14 @@ export function parseLog(output: string): CommitRecord[] {
   }
 
   return commits;
+}
+
+class $GitParsers {
+  static parseStatusPorcelainV2 = parseStatusPorcelainV2Implementation;
+  static parseLog = parseLogImplementation;
+}
+
+export namespace GitParsers {
+  export const $Class = $GitParsers;
+  export const Class = Static($GitParsers);
 }

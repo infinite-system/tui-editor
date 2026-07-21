@@ -2,8 +2,7 @@ import { expect, test } from 'bun:test';
 import {
   LOG_FIELD_SEPARATOR,
   LOG_RECORD_SEPARATOR,
-  parseLog,
-  parseStatusPorcelainV2,
+  GitParsers,
 } from '../git.parsers';
 
 test('porcelain v2 parser separates staged unstaged and untracked XY records', () => {
@@ -17,7 +16,7 @@ test('porcelain v2 parser separates staged unstaged and untracked XY records', (
     '',
   ].join('\n');
 
-  const status = parseStatusPorcelainV2(output);
+  const status = GitParsers.Class.parseStatusPorcelainV2(output);
 
   expect(status.branch).toBe('feature/parser');
   expect(status.head).toBe('0123456789abcdef0123456789abcdef01234567');
@@ -42,7 +41,7 @@ test('porcelain v2 parser decodes rename paths and quoted UTF-8 bytes', () => {
     '? "caf\\303\\251.ts"',
   ].join('\n');
 
-  const status = parseStatusPorcelainV2(output);
+  const status = GitParsers.Class.parseStatusPorcelainV2(output);
 
   expect(status.head).toBe('');
   expect(status.staged[0]).toEqual({
@@ -73,7 +72,7 @@ test('log parser returns compact commit records', () => {
     '',
   ].join(LOG_FIELD_SEPARATOR);
 
-  const commits = parseLog(
+  const commits = GitParsers.Class.parseLog(
     `${first}${LOG_RECORD_SEPARATOR}\n${second}${LOG_RECORD_SEPARATOR}\n`,
   );
 

@@ -4,11 +4,11 @@
 // rest of the git module, "only the newest request mutates state" (stale supersession).
 //
 // The page fetch is injectable (constructor `fetch`) so the windowing/caching logic is unit-testable
-// with no git; the default fetch shells out via GitCommands + parseLog.
+// with no git; the default fetch shells out via GitCommands + GitParsers.
 import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
 import { GitCommands } from './GitCommands';
-import { parseLog, type CommitRecord } from './git.parsers';
+import { GitParsers, type CommitRecord } from './git.parsers';
 import { GitWindow } from './git.window';
 
 export type CommitPageFetch = (skip: number, limit: number) => Promise<CommitRecord[]>;
@@ -62,7 +62,7 @@ class $CommitLog {
     if (this.options.fetch) return this.options.fetch(skip, limit);
     const result = await this.GitCommands.log({ cwd: this.cwd, branch: this.options.branch, skip, limit });
     if (result.code !== 0) return [];
-    return parseLog(result.stdout);
+    return GitParsers.Class.parseLog(result.stdout);
   }
 
   // invariant: Only the newest Git request mutates state (src/modules/git/git.invariants.md)
