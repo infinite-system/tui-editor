@@ -189,21 +189,19 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   keybindings · destructive ops need confirmation · authoritative-channel verification · delegation
   = full-parity packet, worktree/disjoint isolation, IBR+invariants embedded.
 
-## LIVE QUEUE (user QA during audit work — newest coordinator requests, priority-ordered)
-1. **BUG (P2 follow-up, HIGH): wordWrap ON breaks scrolling.** Scroll extent + scrollbar thumb + cursor/
-   scroll-into-view are computed over LOGICAL line count, not VISUAL (wrapped) row count. When wrap is on,
-   N logical lines → M>N visual rows (EditorWrap segments); max-scroll/thumb/scroll-math must use the
-   visual-row count. Drive-verify: long-line file, wrap ON → content wraps AND scrollbar thumb reflects
-   the larger visual extent AND wheel/drag reaches true bottom without over/undershoot; cursor up/down +
-   scroll-into-view move by visual rows. Add to P3 wordWrap test. (editor/scroll-geometry/RootView.)
-2. **BUG (P2 follow-up): scrollbarThickness MOVES the bar, doesn't thicken it.** ROOT CAUSE FOUND:
-   OpenTUI's ScrollBarRenderable thickness comes from its CONSTRUCTION width (yoga flex); my per-frame
-   `bar.width = thickness` (ca4a578) is IGNORED by layout, so the bar renders at construction width (2)
-   while `bar.left -= (thickness-1)` still shifts it → "moves not thickens". ca4a578's verification was a
-   FALSE-GREEN (asserted the debug-log thickness value, not painted columns). FIX: render N actual
-   columns (construct bars at settings.scrollbarThickness + a working live-update path, OR the correct
-   yoga runtime setter) with bar x-position UNCHANGED. Drive-verify by FrameProbe COLUMN COUNT (not the
-   log). Add the column-count assertion to P3.
+## LIVE QUEUE (user QA during audit work — priority-ordered)
+- ✅ **DONE — Invariant-contract system + behavioral suite** (c7b7cff): scripts/behavioral-contracts.sh
+  (essence-based, ratcheted) + scripts/smoke-settings-applied.sh (all 13 settings driven) + meta-gate in
+  conventions-gate. Rules in requirements.md (assert-essence, ratchet, subsystem-touch).
+- ✅ **DONE — Perf regression: divider drag saved per-tick** (6ab4324): now persists ONCE on release.
+- ✅ **DONE — Bug 1 scrollbarThickness moves-not-thickens** (6a0c6a3): the Slider cross-axis wasn't
+  stretched; now paints N columns, x-position fixed. Verified by painted-column count.
+- ✅ **DONE — Bug 2 wordWrap scroll** (969b96a): wrap scrollTop = VISUAL rows — momentum glide (same
+  engine) + visual-row extent (reaches true last visual row, scrollTop 565 >> 200 lines). RATCHETED.
+- ✅ **DONE — Momentum "regression"**: driven-disproved (no non-wrap regression; cb85111 kept the impulse
+  feed). The felt gap was wrap-mode direct scroll = folded into bug 2. Gated by momentum-glide contract.
+
+### REMAINING
 3. **Grip handles on dividers (low-med):** visible GRIP glyph on the sidebar divider (vertical: nerd grip
    → ⋮/┃/║/▕ → ascii ':'/'|') + git divider (horizontal: ⋯/═/┅ → ascii '-'), theme icon ladder. 3 states
    idle→hover→pressed (brighten to accent on hover, pressed color on drag) — reuse the existing hit-strip
