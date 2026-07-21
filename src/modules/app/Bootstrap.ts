@@ -247,10 +247,40 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       return;
     }
 
+    // Ctrl+G toggles the git sidebar; entering it loads the first log window + refreshes status.
+    if (key.name === 'g' && key.ctrl) {
+      workspace.toggleGit();
+      if (workspace.focus.value === 'git') {
+        workspace.gitPanel.region.value = 'log';
+        void workspace.git.value?.refresh();
+        void workspace.commitLog.value?.ensureRange(0, 50);
+      }
+      return;
+    }
+
     const focus = workspace.focus.value;
 
     if (key.name === 'tab') {
       workspace.toggleFocus();
+    } else if (focus === 'git') {
+      const gp = workspace.gitPanel;
+      const moveLog = (delta: number): void => {
+        const end = workspace.commitLog.value?.knownEnd.value ?? Number.POSITIVE_INFINITY;
+        gp.logIndex.value = Math.max(0, Math.min(gp.logIndex.value + delta, Number.isFinite(end) ? end - 1 : gp.logIndex.value + delta));
+        const approxVisible = 12;
+        if (gp.logIndex.value < gp.logScrollTop.value) gp.logScrollTop.value = gp.logIndex.value;
+        else if (gp.logIndex.value >= gp.logScrollTop.value + approxVisible)
+          gp.logScrollTop.value = gp.logIndex.value - approxVisible + 1;
+        void workspace.commitLog.value?.ensureRange(gp.logScrollTop.value, 50);
+      };
+      switch (key.name) {
+        case 'up': moveLog(-1); break;
+        case 'down': moveLog(1); break;
+        case 'pageup': moveLog(-10); break;
+        case 'pagedown': moveLog(10); break;
+        case 'escape': workspace.focusFiles(); break;
+        default: break;
+      }
     } else if (focus === 'files') {
       switch (key.name) {
         case 'up':

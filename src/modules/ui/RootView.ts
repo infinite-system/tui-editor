@@ -236,6 +236,61 @@ export function buildRootView(
     codeBody.setSelectionRange(anchorX, anchorY, focusX, focusY);
   }
 
+  // The git sidebar: a changes region (staged/unstaged/untracked + branch header) over a
+  // VIRTUALIZED commit log (only the visible window is materialized, via CommitLog.rows). Split by
+  // gitPanel.splitRatio. Keyboard-driven for now; mouse + drill-down + drag layer on next.
+  // invariant: Cost tracks the actively observed set (project.invariants.md)
+  function renderGitPanel(): StyledText {
+    const pal = p();
+    const clip = (s: string) => (s.length > SIDEBAR_W - 2 ? s.slice(0, SIDEBAR_W - 2) : s);
+    const chunks: TextChunk[] = [];
+    const push = (text: string, color: string, nl = true) => {
+      chunks.push(fg(color)(clip(text)));
+      if (nl) chunks.push(fg(pal.fg)('\n'));
+    };
+    const git = ws.git.value;
+    const gp = ws.gitPanel;
+    const active = ws.focus.value === 'git';
+    if (!git) return new StyledText([fg(pal.dim)('  no repository')]);
+
+    const bodyH = Math.max(1, (sidebar.height as number) - 2);
+    push(` ${git.branch.value || '(no branch)'}  ${git.head.value.slice(0, 7)}`, pal.accent);
+    if (git.error.value) {
+      push(`  ${git.error.value}`, pal.number);
+      return new StyledText(chunks);
+    }
+
+    // Changes region (top). Rows: staged (green), unstaged (yellow), untracked (dim).
+    const rows: { label: string; color: string }[] = [];
+    for (const f of git.staged.value) rows.push({ label: `+ ${f.xy.trim() || 'M'} ${f.path}`, color: pal.string });
+    for (const f of git.unstaged.value) rows.push({ label: `  ${f.xy.trim() || 'M'} ${f.path}`, color: pal.number });
+    for (const f of git.untracked.value) rows.push({ label: `? ${f.path}`, color: pal.dim });
+    const topH = Math.max(2, Math.floor(bodyH * gp.splitRatio.value));
+    if (rows.length === 0) push('  (working tree clean)', pal.dim);
+    else
+      rows.slice(0, topH - 1).forEach((r, i) => {
+        const marker = active && gp.region.value === 'changes' && i === gp.changesIndex.value ? '›' : ' ';
+        push(`${marker}${r.label}`, r.color);
+      });
+
+    push('─'.repeat(SIDEBAR_W - 2), pal.border);
+
+    // Commit log region (bottom) — virtualized: only the visible window is read from the cache.
+    const logH = Math.max(1, bodyH - topH - 1);
+    const cl = ws.commitLog.value;
+    if (cl) {
+      const top = gp.logScrollTop.value;
+      const win = cl.rows(top, logH);
+      win.forEach((rec, i) => {
+        const idx = top + i;
+        const marker = active && gp.region.value === 'log' && idx === gp.logIndex.value ? '›' : ' ';
+        if (rec) push(`${marker}${rec.shortSha} ${rec.subject}`, pal.fg, i < win.length - 1);
+        else push(`${marker}…`, pal.dim, i < win.length - 1);
+      });
+    }
+    return new StyledText(chunks);
+  }
+
   function renderStatus(): string {
     const ed = ws.editor;
     const parts: string[] = [` ${ws.name.value || '—'}`];
@@ -252,16 +307,18 @@ export function buildRootView(
   function update(): void {
     const pal = p();
     column.backgroundColor = pal.bg;
+    const gitView = ws.focus.value === 'git';
     sidebar.backgroundColor = pal.panel;
-    sidebar.borderColor = ws.focus.value === 'files' ? pal.borderActive : pal.border;
-    sidebar.titleColor = ws.focus.value === 'files' ? pal.accent : pal.dim;
+    sidebar.borderColor = ws.focus.value === 'files' || gitView ? pal.borderActive : pal.border;
+    sidebar.titleColor = ws.focus.value === 'files' || gitView ? pal.accent : pal.dim;
+    sidebar.title = gitView ? 'Git' : 'Files';
     editorArea.backgroundColor = pal.bg;
     editorArea.borderColor = ws.focus.value === 'editor' ? pal.borderActive : pal.border;
     editorArea.title = ws.editor.hasDocument.value ? ws.editor.title : 'Editor';
     editorArea.titleColor = ws.focus.value === 'editor' ? pal.accent : pal.dim;
     statusBar.backgroundColor = pal.statusBg;
 
-    sidebarBody.content = renderTree();
+    sidebarBody.content = gitView ? renderGitPanel() : renderTree();
     sidebarBody.fg = pal.fg;
     const rendered = renderEditor();
     if (rendered) {
