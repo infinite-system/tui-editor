@@ -153,6 +153,41 @@ print('yes' if any('LINE-000' in r.get('text','') for r in rows) else 'no')
 if [ "$first_ok" = "yes" ] && [ "${top:-9}" = "0" ]; then pass "scrolling UP returns to + renders the TRUE first line (LINE-000, scrollTop 0)"; else bad "cannot return to the true first line (LINE-000 rendered=$first_ok, scrollTop=$top)"; fi
 "$H" kill "$S" >/dev/null 2>&1; rm -rf "$SDIR"
 
+# ---- CONTRACT: focus-in recovers the terminal session (RATCHET: the VS Code tab-defocus freeze) ----
+# A VS Code terminal tab reset the terminal session state (termios raw / mouse / focus / stale frame)
+# on tab-hide; the app must re-enter the FULL setup on focus-in and EMIT A FRESH FRAME. Since a focus
+# report (\e[I) is NOT a keypress (OpenTUI consumes it), the ONLY thing that can advance the idle,
+# demand-driven frame counter after \e[I is the focus handler forcing a repaint — so a frame advance
+# is the clean observable proof the recovery ran. The app must also stay RESPONSIVE afterward (wheel
+# still scrolls). The real termios/mouse mode-loss can't be faked over tmux (only a real terminal
+# resets it) — that half is gated by the terminal-session unit test + confirmed on the user's terminal.
+echo "== CONTRACT focus-recovery: focus-out→focus-in emits a fresh frame + keeps the app responsive =="
+S="bc-focus-$$"; SESSIONS="$SESSIONS $S"
+FDIR=$(mktemp -d /tmp/tui-bc-focus.XXXXXX)
+python3 -c "open('$FDIR/doc.txt','w').write(''.join('FLINE-%03d body\n'%i for i in range(200)))"
+"$H" launch "$S" 120x40 bun run src/main.ts "$FDIR" >/dev/null; "$H" ready "$S" 20 >/dev/null
+open_file "$S"
+"$H" send "$S" Escape >/dev/null; "$H" settle "$S" >/dev/null 2>&1; sleep 1
+f_before="$("$H" field "$S" frame)"
+"$H" focus "$S" out; "$H" focus "$S" in
+"$H" settle "$S" 10 >/dev/null 2>&1; sleep 0.3
+f_after="$("$H" field "$S" frame)"
+if [ "$(( ${f_after:-0} - ${f_before:-0} ))" -gt 0 ]; then
+  pass "focus-in emits a fresh frame (recovery ran: $f_before -> $f_after)"
+else
+  bad "focus-in did NOT repaint ($f_before -> $f_after) — stale-screen/freeze regression"
+fi
+# Responsive after the focus cycle: a wheel notch still moves the viewport (suspend/resume didn't wedge input).
+scroll_before="$("$H" field "$S" editorScrollTop)"
+for _ in 1 2 3 4 5 6; do tmux send-keys -t "$S" -l "$(printf '\033[<65;60;12M')"; sleep 0.1; done; sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
+scroll_after="$("$H" field "$S" editorScrollTop)"
+if [ "${scroll_after:-0}" -gt "${scroll_before:-0}" ] 2>/dev/null; then
+  pass "app stays responsive after focus recovery (wheel scrolled $scroll_before -> $scroll_after)"
+else
+  bad "app DEAD after focus recovery (scrollTop $scroll_before -> $scroll_after) — suspend/resume wedged input"
+fi
+"$H" kill "$S" >/dev/null 2>&1; rm -rf "$FDIR"
+
 echo ""
 if [ "$fail" = 0 ]; then echo "behavioral-contracts: ALL-PASS"; else echo "behavioral-contracts: FAILURES"; fi
 exit "$fail"

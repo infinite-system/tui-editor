@@ -83,6 +83,16 @@ case "$cmd" in
     tmux send-keys -t "$session" -l "$(printf '\033[<0;%d;%dm' "$((x2+1))" "$((y2+1))")"
     sleep 0.2
     ;;
+  focus)
+    # focus <session> in|out — inject a terminal focus report (\e[I focus-in, \e[O focus-out).
+    # Drives the tab-defocus→refocus recovery path. NOTE: injecting the sequence is NOT the same as
+    # the real terminal resetting its session state (termios/mouse/modes) — this drives the app's
+    # focus HANDLER (re-setup + repaint), not the actual mode-loss (only a real VS Code tab can).
+    session="$1"; mode="$2"
+    if [ "$mode" = out ]; then seq="$(printf '\033[O')"; else seq="$(printf '\033[I')"; fi
+    tmux send-keys -t "$session" -l "$seq"
+    sleep 0.2
+    ;;
   scroll)
     # scroll <session> <x> <y> up|down|left|right|shift-up|shift-down [amount] — SGR wheel at (x,y).
     # Buttons: 64=up 65=down 66=left 67=right; +4 = shift bit. Press-only; repeats `amount` times.

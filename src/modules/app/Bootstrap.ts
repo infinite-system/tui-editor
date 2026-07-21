@@ -30,6 +30,8 @@ import { canonicalBindings } from '../keybindings/keybindings.defaults';
 import { macOverlayBindings } from '../keybindings/keybindings.mac';
 import { Environment } from '../system/Environment';
 import { Logging } from '../system/Logging';
+import { HandlerGuard } from './HandlerGuard';
+import { TerminalSession } from './TerminalSession';
 import { dirname, join } from 'node:path';
 
 export interface BootOptions {
@@ -204,6 +206,10 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   // invariant: Rendering is one coarse frame effect (app.invariants.md)
   app.$watchEffect(() => {
     const editor = workspace.editor;
+    // The whole paint pass is exception-isolated: a throw while projecting model→renderables must
+    // degrade this one frame (logged to file) and request a repaint, never wedge the demand-driven
+    // loop. The signal reads stay first so reactive dependency tracking is unaffected by the guard.
+    // invariant: The immediate layer never blocks (project.invariants.md)
     // Explicit subscriptions to the load-bearing signals (document.revision in particular is only
     // read indirectly by update(), so touch it here to guarantee content changes repaint).
     void editor.document.revision.value;
@@ -261,7 +267,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     void theme.paletteName.value;
     void app.quitChordArmed.value;
     void app.copyNotice.value;
-    paint();
+    HandlerGuard.Class.run('paint', paint, () => renderer.requestRender());
   });
 
   // Frame-settle signal for the tmux harness (a frame actually rendered).
@@ -290,7 +296,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       lastFrameMilliseconds = 0; // paused-clock: the next animation's first frame gets a fresh dt
     }
   };
-  const onFrame = (): void => {
+  const frameTick = (): void => {
     frame += 1;
     // Drive every pane glide: step all momentum by real dt; the live request keeps frames coming
     // while anything moves (including frames that advance 0 whole rows).
@@ -324,6 +330,11 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     StatusChannel.Class.settle(frame);
     // Exact per-cell visual snapshot for tests (env-gated; no-op otherwise).
     FrameProbe.Class.dump(renderer, framePath);
+  };
+  // A throw in a frame tick (animation step, layout convergence) must not stop the pump: isolate it
+  // and keep the loop alive. invariant: The immediate layer never blocks (project.invariants.md)
+  const onFrame = (): void => {
+    HandlerGuard.Class.run('frame', frameTick, () => renderer.requestRender());
   };
   renderer.on('frame', onFrame);
   app.onDispose(() => renderer.off('frame', onFrame));
@@ -608,7 +619,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     'menu.close': () => contextMenu.close(),
   };
 
-  const onKey = (key: KeyEvent): void => {
+  const keyTick = (key: KeyEvent): void => {
     tooltip.clear(); // any keypress hides the tooltip (display-only affordance)
     // Destructive-confirm overlay is MODAL: y confirms, anything else cancels — the context's
     // residual, not a binding.
@@ -766,6 +777,11 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     else if (context === 'editor' && isTypedCharacter(key)) workspace.editor.insertText(key.sequence);
     // No explicit render here — any model mutation above triggers the frame effect.
   };
+  // A throw while handling a keystroke must not wedge the loop: isolate + repaint so the app stays
+  // responsive. invariant: The immediate layer never blocks (project.invariants.md)
+  const onKey = (key: KeyEvent): void => {
+    HandlerGuard.Class.run('keypress', () => keyTick(key), () => app.requestRender());
+  };
   renderer.keyInput.on('keypress', onKey);
   app.onDispose(() => renderer.keyInput.off('keypress', onKey));
 
@@ -773,17 +789,54 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   // status channel (verification) and repaints. Per-region handlers (tree, sidebar, dividers) are
   // attached on their own renderables and run before this via propagation.
   const onMouse = (event: { type: string; x: number; y: number; button: number }): void => {
-    lastMouse = { type: event.type, x: event.x, y: event.y, button: event.button };
-    if (event.type === 'down') tooltip.clear(); // any click hides the tooltip, wherever it lands
-    paint();
+    HandlerGuard.Class.run('mouse', () => {
+      lastMouse = { type: event.type, x: event.x, y: event.y, button: event.button };
+      if (event.type === 'down') tooltip.clear(); // any click hides the tooltip, wherever it lands
+      paint();
+    }, () => renderer.requestRender());
   };
   renderer.root.onMouse = onMouse;
   app.onDispose(() => {
     if (renderer.root.onMouse === onMouse) renderer.root.onMouse = undefined;
   });
 
+  // --- terminal session-state recovery ----------------------------------------------------------
+  // A VS Code terminal tab (and others) reset the terminal session state on tab-hide and neither
+  // restore it nor redraw on return — leaving termios raw mode reverted (Ctrl+Q eaten by XON flow
+  // control), mouse SGR + focus reporting dropped (dead wheel/click), and a stale frame (looks
+  // frozen). On focus-in we re-enter the FULL terminal setup + force a repaint, restoring all three.
+  // invariant: The immediate layer never blocks (project.invariants.md)
+  const writeSequence = (sequence: string): void => {
+    try {
+      process.stdout.write(sequence);
+    } catch {
+      /* stdout gone (shutdown) — nothing to assert against */
+    }
+  };
+  // Enable focus reporting at startup so the terminal emits \e[I / \e[O and the app RECEIVES the
+  // focus-in that triggers recovery (OpenTUI's native setup also enables it; this is idempotent
+  // insurance so a focus-in always arrives). Reset it on exit so the shell is left clean.
+  TerminalSession.Class.enableFocusReporting(writeSequence);
+  app.onDispose(() => TerminalSession.Class.disableFocusReporting(writeSequence));
+
+  const onFocus = (): void => {
+    HandlerGuard.Class.run('focus', () => {
+      TerminalSession.Class.reenterTerminalModes(renderer); // termios raw + mouse + focus + alt-screen
+      syncSize();
+      paint(); // push current model→renderables; resume() already armed the full repaint
+    }, () => renderer.requestRender());
+  };
+  renderer.on('focus', onFocus);
+  app.onDispose(() => renderer.off('focus', onFocus));
+
   const onResize = (): void => {
-    void render();
+    HandlerGuard.Class.run('resize', () => {
+      // Re-assert focus reporting (some terminals drop it on the geometry change that accompanies a
+      // tab-return) then re-lay-out + full-repaint. render() → processResize forces a full repaint on
+      // a genuine size change; a same-size return is handled by onFocus above.
+      TerminalSession.Class.enableFocusReporting(writeSequence);
+      void render();
+    }, () => renderer.requestRender());
   };
   renderer.on('resize', onResize);
   app.onDispose(() => renderer.off('resize', onResize));

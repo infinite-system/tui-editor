@@ -33,8 +33,24 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
         MODIFIED/DELETED/ADDED/UPDATED + the o/d/+ action buttons. Keep in the theme; degrade cleanly.
   - [ ] C. Scrollbars on EVERY overflowing pane, BOTH axes (git commits + files + all): vertical AND
         horizontal when that axis overflows; inertia; draggable thumb + click-to-page; via scrollbar-geometry.
-  - [ ] D. UNIFY scrollbar thickness: vertical & horizontal same; for now = average of the two current
-        thickness values, one hardcoded constant everywhere (later a setting).
+        **QA (2026-07-21, main-verified): INCOMPLETE — only the EDITOR has both axes.** RootView.ts: changesBar
+        (476), logBar (488), treeVerticalBar (503) are ALL vertical-only. ADD a horizontal ScrollBarRenderable +
+        scrollLeft offset to: (1) FILE TREE (long/deep filenames), (2) GIT CHANGES/STAGING (long paths), (3) GIT
+        COMMIT LOG (long subjects). Each: content renders clipped/scrolled by scrollLeft; Option/Meta+wheel (SGR
+        74/75) + shared momentum + bar drag/click-to-page drive scrollLeft; bar appears only when contentWidth >
+        paneWidth. Reuse ScrollbarGeometry + applyBarGeometry (already handles orientation:'horizontal'). Use D's
+        aspect-adjusted thickness so the new horizontals don't look fat. Contract: each pane shows a h-bar on
+        width-overflow + Option+wheel/drag scroll to the true rightmost column (FrameProbe long filename + subject).
+  - [ ] D. UNIFY scrollbar thickness → unify VISUAL thickness, NOT cell count. **QA (2026-07-21, main-verified):
+        the horizontal (bottom) bar looks FATTER than the vertical (sidebar).** ROOT CAUSE: scrollbarThicknessCells()
+        (RootView.ts:440) gives both bars the same CELL count — vertical = N cols wide, horizontal = N rows tall
+        (606-607) — but a terminal ROW is ~2× taller than a COL is wide (cell aspect ~2:1), so N rows LOOKS fatter.
+        "Unified thickness" unified the wrong expression (cell-count, not appearance = expression-vs-essence bug).
+        FIX: (1) DEFAULT settings.scrollbarThickness = 1 (thin equal lines, standard look) — fixes it immediately if
+        current default is 2. (2) For thickness>1: verticalColumns = thickness; horizontalRows = max(1,
+        round(thickness / ASPECT)) with ASPECT≈2 a tunable constant. (3) Update the scrollbarThickness applied-effect
+        test + item-D contract to assert VISUAL equivalence (horizontal rows = aspect-adjusted count), not "both N
+        cells". Drive-verify: FrameProbe both bars, horizontal not visibly fatter than vertical.
   - [ ] E. Higher vertical fling ceiling (again) — much faster hard fling; keep decel + gentle precision
         + One-Writer halt. (In flight: VERTICAL_MOMENTUM profile.)
   - [ ] F. Fast-scroll MODIFIER (velocity/step multiplier on top of E), modifier read from SETTINGS
@@ -189,29 +205,50 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   keybindings · destructive ops need confirmation · authoritative-channel verification · delegation
   = full-parity packet, worktree/disjoint isolation, IBR+invariants embedded.
 
-## 🔴 HIGH-PRIORITY ROBUSTNESS BUG — render-pump FREEZE (do EARLY; a freeze hard-violates the north star)
+## ✅ LANDED — POST-TAB-DEFOCUS FREEZE / terminal session-state recovery (user reversed: "let it fix it")
 
-**Symptom (user's COMPILED binary from 713623f, HAS today's fixes): the app FROZE.** Main diagnosed the
-process ALIVE, 0% CPU, sleeping in ep_poll — NOT crashed/spinning/deadlocked. → a DEMAND-DRIVEN
-RENDER-PUMP STALL: a frame or input handler threw an UNHANDLED exception (printed to the TTY, garbling the
-display) and the demand-driven loop did not recover → stopped requesting frames → never repaints → frozen.
+**STATUS: FIXED + wired + gated.** Commit: terminal-session recovery on focus-in. Files:
+`src/modules/app/TerminalSession.ts` (Static: reenterTerminalModes = suspend()+resume(); enable/disableFocusReporting),
+`src/modules/app/HandlerGuard.ts` (Static: exception isolation for every handler), Bootstrap wires onFocus +
+focus-reporting at startup + guards on paint/frame/keypress/mouse/resize/focus. Gated: `terminal-session.test.ts`
+(4 unit) + behavioral-contracts `focus-recovery` (focus-out→focus-in emits a fresh frame + app stays responsive).
+NEEDS REAL-TERMINAL CONFIRM: tmux can't fake the actual termios/mouse mode-loss (only a real VS Code tab resets
+it) — the frame-advance + suspend/resume-runs is drive-verified; the user must confirm the 3 symptoms are gone in
+their VS Code terminal. If a tab-return fires ONLY resize (no focus) on their terminal, add reenterTerminalModes
+to onResize (currently onResize only re-asserts focus reporting + full-repaints, not full suspend/resume).
 
-**FIX (resilience — ONE bad frame must NEVER freeze the app):**
-1. WRAP the frame/render callback (Bootstrap onFrame + the reactive paint effect) AND every input-event
-   handler (renderer.keyInput 'keypress' onKey; the renderable onMouse* handlers) in try/catch — a thrown
-   error degrades ONE frame (log + continue), it does NOT kill the pump. After a caught error, KEEP THE
-   LOOP ALIVE (requestRender / reschedule) so the app stays responsive.
-2. Errors go to a LOG FILE (reuse Logging.Class / StatusChannel), NEVER to the TTY/stderr while the TUI
-   owns the screen (stderr currently corrupts the display). Route/guard the process-level handlers too.
-3. GATED CONTRACT (ratchet, add to behavioral-contracts.sh): "a thrown exception in a frame or input
-   handler degrades that frame + is logged, but the render loop keeps running and the app stays
-   responsive — a single error never freezes the editor." Driven test: inject a handler that throws (an
-   env-gated test hook), send input, assert the frame counter ADVANCES on the next input (still repaints)
-   + the error is in the LOG not on screen.
-4. This makes the immediate-layer / one-writer resilience REAL: the immediate render layer must survive a
-   failing handler. Root-cause the SPECIFIC trigger too (coordinator asking the user what they did) — but
-   the resilience fix is correct regardless + turns a freeze into a logged blip.
-Priority: HIGH — do after adopting the ready queue but before the longer tail; a freeze is the worst UX.
+**Definitive diagnosis (unifies THREE symptoms):** after a VS Code terminal TAB DEFOCUS→refocus, the app is
+alive but (1) DISPLAY STALE (looks frozen), (2) MOUSE DEAD (no wheel-scroll, no click-to-focus), (3) Ctrl+Q
+STOPS QUITTING (XON eaten by flow control). Root cause = VS Code resets the terminal SESSION STATE on tab
+hide and does not restore it (nor redraw) on return: TERMIOS raw mode reverts (IXON/flow-control back), the
+SGR mouse-tracking + focus-reporting + alt-screen escape modes drop, and the last frame is stale. The app
+never re-asserts its terminal setup on return, so all three persist. (Fresh-launch works → NOT a code
+regression; it is lost terminal state. tmux injection can't fully reproduce real terminal mode-loss.)
+
+**THE FIX (one framework-native routine — verified in OpenTUI source `chunk-bun-tkm837n2.js`):** OpenTUI's
+`renderer.suspend()` + `renderer.resume()` IS the complete idempotent "re-enter terminal modes" routine:
+`resume()` calls `stdin.setRawMode(true)` (re-applies TERMIOS raw → fixes Ctrl+Q/XON), `lib.setupTerminal(...)`
+(re-asserts mouse SGR + focus reporting + alt-screen), `enableMouse()`, and sets `forceFullRepaintRequested=true`
+(FULL repaint → fixes stale screen). `suspend()` sets up `_suspendedMouseEnabled` + tears down so resume's
+setup branch runs. So the entire fix is:
+1. Ensure the app RECEIVES focus events: OpenTUI's native `setupTerminal` enables focus reporting (1004h) and
+   its stdin parser `focusHandler` emits the `'focus'` / `'blur'` events on `\x1b[I` / `\x1b[O`. If focus
+   events don't arrive on the real terminal, ALSO write `\x1b[?1004h` at startup (idempotent) so they do.
+2. `renderer.on('focus', () => { renderer.suspend(); renderer.resume(); })` — re-establishes the FULL setup +
+   forces a full repaint. Also call the same on `'resize'` (belt-and-suspenders; note processResize
+   early-returns on unchanged size, so focus is the real trigger for a same-size tab-return).
+3. Wrap onFrame + the reactive paint effect + onKey/onMouse/onResize/onFocus in a `HandlerGuard.run(label, fn,
+   recover)` (a Static capability: try/catch → `Logging.Class.error` to the FILE, never TTY → `recover()`
+   requests a repaint) so a throwing handler degrades one cycle instead of wedging the demand-driven loop.
+   (This is good hygiene regardless; the suspend/resume is the primary fix.) NOTE: an unwired HandlerGuard
+   FAILS conventions-gate check #7 — wire it in the SAME commit, don't land it dead.
+4. GATED CONTRACT: after focus-out(`\x1b[O`)→focus-in(`\x1b[I`) the app emits a FRESH frame (status `frame`
+   counter advances with no other input — only onFocus can wake the idle loop) + a unit test that the focus-in
+   handler calls suspend()+resume(). tmux can drive the sequences via `send-keys -l $'\033[I'` (add a `focus`
+   subcommand to tui-harness.sh); it can't fully fake the mode-loss, so the frame-advance is the observable gate.
+Confirmed OpenTUI internals: `forceFullRepaintRequested` is a plain runtime prop (settable); `setupTerminal()`
+and the `useMouse` setter both early-return when unchanged (so a bare re-call is a no-op — suspend/resume is
+why this works); `focusHandler` handles exactly `\x1B[I`/`\x1B[O`.
 
 ## FULL-POWER BLOCK (user greenlit everything, 2026-07-21) — priority order
 
