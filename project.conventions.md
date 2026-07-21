@@ -105,7 +105,8 @@ Change a convention → change it HERE (and note the why in decisions.md).
   unexpected removals.
 
 ## Self-handoff
-- On ANY resume: read THIS file first, then `project.progress.md` (USER PIPELINE + RESUME HERE), then
-  `project.handoff.md`, then the contracts of whatever is in flight.
+- On ANY resume: read `project.requirements.md` FIRST (the persistent cross-cutting brief), then THIS
+  file, then `project.progress.md` (USER PIPELINE + RESUME HERE), then `project.handoff.md`, then the
+  contracts of whatever is in flight.
 - Every turn-ending status carries: the COMPACTION line + `conventions @ <git hash of this file>`
   (drift made visible).

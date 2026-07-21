@@ -178,6 +178,8 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   = full-parity packet, worktree/disjoint isolation, IBR+invariants embedded.
 
 ## RESUME HERE (frontier as of commit c69ec4a)
+- **READ FIRST on resume/cold-start:** `project.requirements.md` (persistent cross-cutting brief) →
+  `project.conventions.md` → this file (USER PIPELINE below) → `project.invariants.md` → in-flight contracts.
 - **State:** 269 tests pass · tsc green · checker 0 · conventions-gate PASS (now hard-blocks tsc-fail) ·
   smoke-editor + smoke-tabs + smoke-tree-scroll ALL-PASS (incl. idle frame-delta==0). `conventions @ f41a241`.
 - **LANDED SINCE THE 4-WORKER MERGES (newest first):** tooltip centered-over-cursor (A, c69ec4a) ·

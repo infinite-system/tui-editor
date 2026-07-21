@@ -6,6 +6,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 task_spec="$1"; shift || true
+echo "==================== PROJECT REQUIREMENTS (persistent brief; READ FIRST; still-live decisions) ===================="
+cat project.requirements.md
+echo
 echo "==================== PROJECT CONVENTIONS (binding; violations fail review) ===================="
 cat project.conventions.md
 echo
