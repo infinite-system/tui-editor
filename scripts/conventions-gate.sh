@@ -6,6 +6,21 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 fail=0
 
+# 0) TYPECHECK — a tsc error HARD-BLOCKS the gate. This must run on EVERY gate invocation (merge +
+#    delegate review): "measured != enforced" — a build with a type error must never pass the gate.
+#    (This is the check that would have caught a mid-edit type error before it could reach a commit.)
+bunx="$(command -v bunx || echo "$HOME/.bun/bin/bunx")"
+if [ -x "$bunx" ] || command -v bunx >/dev/null 2>&1; then
+  if ! "$bunx" tsc --noEmit >/tmp/conventions-gate-tsc.$$.log 2>&1; then
+    echo "CONVENTIONS FAIL: tsc --noEmit reported type errors:"
+    head -20 /tmp/conventions-gate-tsc.$$.log
+    fail=1
+  fi
+  rm -f /tmp/conventions-gate-tsc.$$.log
+else
+  echo "CONVENTIONS WARN: bunx not found — skipping tsc (install bun so the gate can typecheck)"
+fi
+
 # 1) NEW-FILE RULE: no bare exported function bags in modules (stateless behavior = Static class).
 LEGACY_STATIC_ALLOWLIST="editor.coordinates.ts|scroll-momentum.ts|keybindings.defaults.ts|keybindings.mac.ts|RootView.ts"
 bare_bags=$(grep -rln "^export function" src/modules --include='*.ts' | grep -vE "\.test\.ts|__tests__|($LEGACY_STATIC_ALLOWLIST)$" || true)
