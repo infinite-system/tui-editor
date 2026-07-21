@@ -1,3 +1,5 @@
+BINDING CONVENTIONS: read project.conventions.md at your worktree root FIRST — every rule in it is a hard review gate (naming, NEW-FILE Static rule, one-writer, verification channels, contracts). The reviewer runs scripts/conventions-gate.sh on your output.
+
 You are implementing ONE module of the Fable TUI code workspace: a fast terminal code editor on Bun + ivue + OpenTUI + Tree-sitter + git. You are one of several codex workers building disjoint modules in parallel, each in its own git worktree. Work ONLY in your worktree (your cwd), on your module.
 
 == READ IN FULL BEFORE CODING (do not skim — this is the context you need to do it well) ==

@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { buildChangeRows, statusGlyph, nextFileRow } from './git.rows';
+import { GitRows } from './git.rows';
 import type { GitFileRecord } from './git.parsers';
 
 function file(path: string, xy: string): GitFileRecord {
@@ -7,7 +7,7 @@ function file(path: string, xy: string): GitFileRecord {
 }
 
 test('sections appear only when non-empty, with counts and glyphed files', () => {
-  const rows = buildChangeRows(
+  const rows = GitRows.Class.buildChangeRows(
     [file('a.ts', 'M.')],
     [file('b.ts', '.M'), file('c.ts', '.D')],
     [file('new.txt', '??')],
@@ -24,22 +24,22 @@ test('sections appear only when non-empty, with counts and glyphed files', () =>
 });
 
 test('clean tree yields the placeholder row', () => {
-  expect(buildChangeRows([], [], [])).toEqual([{ kind: 'placeholder', label: '(no changes)' }]);
+  expect(GitRows.Class.buildChangeRows([], [], [])).toEqual([{ kind: 'placeholder', label: '(no changes)' }]);
 });
 
 test('statusGlyph picks the bucket-relevant porcelain side', () => {
-  expect(statusGlyph('A.', 'staged')).toBe('A'); // staged side
-  expect(statusGlyph('.D', 'unstaged')).toBe('D'); // worktree side
-  expect(statusGlyph('R.', 'staged')).toBe('R');
-  expect(statusGlyph('??', 'untracked')).toBe('?');
-  expect(statusGlyph('..', 'unstaged')).toBe('M'); // unknown -> M, never a raw code
+  expect(GitRows.Class.statusGlyph('A.', 'staged')).toBe('A'); // staged side
+  expect(GitRows.Class.statusGlyph('.D', 'unstaged')).toBe('D'); // worktree side
+  expect(GitRows.Class.statusGlyph('R.', 'staged')).toBe('R');
+  expect(GitRows.Class.statusGlyph('??', 'untracked')).toBe('?');
+  expect(GitRows.Class.statusGlyph('..', 'unstaged')).toBe('M'); // unknown -> M, never a raw code
 });
 
 test('nextFileRow skips headers both directions and returns -1 at the ends', () => {
-  const rows = buildChangeRows([file('a.ts', 'M.')], [file('b.ts', '.M')], []);
+  const rows = GitRows.Class.buildChangeRows([file('a.ts', 'M.')], [file('b.ts', '.M')], []);
   // rows: 0 header, 1 file a, 2 header, 3 file b
-  expect(nextFileRow(rows, -1, 1)).toBe(1); // first file from the top
-  expect(nextFileRow(rows, 1, 1)).toBe(3); // skips the Changes header
-  expect(nextFileRow(rows, 3, -1)).toBe(1); // back up, skips the header
-  expect(nextFileRow(rows, 3, 1)).toBe(-1); // no file past the last
+  expect(GitRows.Class.nextFileRow(rows, -1, 1)).toBe(1); // first file from the top
+  expect(GitRows.Class.nextFileRow(rows, 1, 1)).toBe(3); // skips the Changes header
+  expect(GitRows.Class.nextFileRow(rows, 3, -1)).toBe(1); // back up, skips the header
+  expect(GitRows.Class.nextFileRow(rows, 3, 1)).toBe(-1); // no file past the last
 });

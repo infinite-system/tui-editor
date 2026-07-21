@@ -25,8 +25,8 @@ import { highlightLine, type Role } from '../syntax/Highlighter';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { displayColumn, lineWidth, graphemeAtDisplayColumn, graphemeToU16 } from '../editor/editor.coordinates';
 import { SelectableText } from './SelectableText';
-import { buildChangeRows, nextFileRow } from '../git/git.rows';
-import { scrollbarGeometry } from './scrollbar-geometry';
+import { GitRows } from '../git/git.rows';
+import { ScrollbarGeometry } from './scrollbar-geometry';
 import { Logging } from '../system/Logging';
 
 function roleColor(role: Role, palette: Palette): string {
@@ -270,7 +270,7 @@ export function buildRootView(
     region: { top: number; left: number; width: number; height: number },
     scroll: { scrollSize: number; viewportSize: number; scrollPosition: number },
   ): void {
-    const geometry = scrollbarGeometry(orientation, region, scroll);
+    const geometry = ScrollbarGeometry.Class.scrollbarGeometry(orientation, region, scroll);
     if (!geometry) {
       // The ONE visibility rule for every bar: no scrollable range -> the bar does not exist
       // (track AND thumb render nothing). Explicit, never left to widget heuristics.
@@ -525,7 +525,7 @@ export function buildRootView(
     }
 
     // Changes region (top): headers + glyphed file rows from the SHARED row model, windowed.
-    const changeRows = buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
+    const changeRows = GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
     const topHeight = Math.max(2, Math.floor(bodyHeight * gitPanel.splitRatio.value));
     const changesVisible = topHeight - 1;
     const changesTop = Math.min(
@@ -884,7 +884,7 @@ export function buildRootView(
   };
   const gitChangeRowsNow = () => {
     const git = workspace.git.value;
-    return git ? buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value) : [];
+    return git ? GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value) : [];
   };
   sidebar.onMouseMove = (event) => {
     if (workspace.sidebarView.value === 'git') {

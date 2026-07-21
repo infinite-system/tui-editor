@@ -4,7 +4,9 @@ Full authority to build the whole thing to completion (brief Definition of Done 
 Files on disk survive context compaction; this file + PROGRESS.md are the durable memory.
 
 ## MUST RE-READ ON RESUME (in order — highest signal first)
-1. `PROGRESS.md` — the live checklist + the EXACT next action (file/function/change).
+0. `project.conventions.md` — THE operative convention set (deterministic self-handoff: load this
+   BEFORE anything; every turn status carries `conventions @ <git hash of the file>`).
+1. `PROGRESS.md` — the live checklist (USER PIPELINE) + the EXACT next action (file/function/change).
 2. This file (`HANDOFF.md`) — role, API facts, protocols, settled decisions.
 3. The contract(s) for whatever you're mid-work on. Editor rework frontier →
    `src/modules/editor/editor.invariants.md`, `src/modules/app/app.invariants.md`,

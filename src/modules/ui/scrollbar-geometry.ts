@@ -8,6 +8,8 @@
 //
 // invariant: A scrollbar track is derived per frame from its region rect (ui.invariants.md)
 
+import { Static } from '../system/Static';
+
 export interface RegionRect {
   /** Content-box cells of the region the bar scrolls (relative to whatever frame the caller uses —
    *  consistency is the caller's job; this function never mixes frames). */
@@ -42,7 +44,7 @@ export const MINIMUM_THUMB_CELLS = 2;
  * Geometry for one bar. Returns null when the content fits (bar hidden). The track runs the
  * region's trailing edge minus one corner cell (shared with a perpendicular bar).
  */
-export function scrollbarGeometry(
+function scrollbarGeometryImplementation(
   orientation: 'vertical' | 'horizontal',
   region: RegionRect,
   scroll: ScrollState,
@@ -65,4 +67,15 @@ export function scrollbarGeometry(
     trueRange > 0 ? Math.round((clampedPosition / trueRange) * reportedRange) : 0;
 
   return { trackTop, trackLeft, trackLength, reportedViewportSize, reportedPosition, reportedToTrueScale };
+}
+
+class $ScrollbarGeometry {
+  /** Geometry for one bar; null when the content fits (bar hidden). */
+  static scrollbarGeometry = scrollbarGeometryImplementation;
+  static readonly MINIMUM_THUMB_CELLS = MINIMUM_THUMB_CELLS;
+}
+
+export namespace ScrollbarGeometry {
+  export const $Class = $ScrollbarGeometry;
+  export const Class = Static($ScrollbarGeometry);
 }

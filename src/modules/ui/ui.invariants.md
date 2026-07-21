@@ -195,7 +195,7 @@ independently by a scoped codex worker (cross-check).
 **Impossible if true:** a shaded range that disagrees with `selectionRange()`; a multi-line selection
 that shades the gutter; a highlight offset from the cursor's content row.
 
-**Mechanism addendum (mouse, 2026-07-21):** the MODEL is the only selection writer. Mouse events on
+*Mechanism addendum (mouse, 2026-07-21):* the MODEL is the only selection writer. Mouse events on
 the code renderable drive `cursor`+`anchor` (`documentPositionAtCell`: line = scrollTop + rowOffset,
 column = `graphemeAtDisplayColumn` — the display→grapheme inverse, unit-tested for wide glyphs and
 tabs); `applySelection()` then projects the model into the native highlight each paint. OpenTUI's
@@ -208,6 +208,39 @@ cursor's content row at the selected display columns — noise-free, proven by a
 Selection MODEL: `scripts/smoke-editor.sh` (Shift+Right → `hasSelection`, Escape clears; mouse
 drag-select → persists across ~1s of frames → Ctrl+C reports copied chars via `lastCopyChars`) +
 editor unit tests. Persistence proven: highlight cells identical 1s after the drag.
+
+**Status:** established
+
+**Last refined:** 2026-07-21
+
+### A scrollbar track is derived per frame from its region rect
+
+**Invariant:** If a scrollbar renders, then its track occupies exactly the trailing inner edge of
+its region's CONTENT rect (right column vertical, bottom row horizontal, corner cell free), derived
+each frame from the region's ACTUAL rendered layout through the ONE geometry source — and a bar
+with no scrollable range does not exist at all.
+
+**Scope:** every scrollbar (editor vertical + horizontal, git changes, git commit log, and any
+future pane).
+
+**Mechanism:** `ScrollbarGeometry.Class.scrollbarGeometry(orientation, region, scroll)` is the only
+authority: placement, track length, min-thumb inflation with an exact-extremes scale, and the
+hidden-when-fits predicate; `applyBarGeometry` applies it with explicit `visible` and an intended-
+thickness map (layout read-back returns 0 pre-layout). Regions are rebuilt per frame from the live
+layout (codeBody rect; gitPanelGeometry).
+
+**Generates:** aligned tracks across split positions; reachable extremes; grabbable thumbs; no
+phantom bars.
+
+**Evidence:** 17 property tests over region shapes (`scrollbar-geometry.test.ts`, incl the
+degenerate tiny-track case); FrameProbe sweeps — files view has ZERO bar cells, git view's log
+thumb starts exactly at the first log row within content columns.
+
+**Impossible if true:** a track cell outside its region's content rect; a bar visible with nothing
+to scroll; two bars deriving placement from different math; a thumb below the minimum size.
+
+**Verification:** `bun test src/modules/ui/scrollbar-geometry.test.ts` + the FrameProbe block-glyph
+sweep at two layouts.
 
 **Status:** established
 

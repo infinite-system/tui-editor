@@ -12,7 +12,7 @@ import { GitRepository } from '../git/GitRepository';
 import { CommitLog } from '../git/CommitLog';
 import { GitPanel } from './GitPanel';
 import { addImpulse, stepMomentum, isMoving, AT_REST } from '../ui/scroll-momentum';
-import { buildChangeRows } from '../git/git.rows';
+import { GitRows } from '../git/git.rows';
 import { GitCommands } from '../git/GitCommands';
 
 export type Focus = 'files' | 'editor' | 'git';
@@ -117,7 +117,7 @@ class $Workspace {
   async toggleStageAtRow(rowIndex: number): Promise<void> {
     const git = this.git.value;
     if (!git) return;
-    const rows = buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
+    const rows = GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
     const row = rows[rowIndex];
     if (row?.kind !== 'file') return;
     if (row.bucket === 'staged') await git.unstage([row.path]);
@@ -144,7 +144,7 @@ class $Workspace {
   async openChangeAtRow(rowIndex: number): Promise<void> {
     const git = this.git.value;
     if (!git) return;
-    const rows = buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
+    const rows = GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
     const row = rows[rowIndex];
     if (row?.kind !== 'file') return;
     const result = await GitCommands.Class.diffFile(this.root, row.path, row.bucket);
@@ -158,7 +158,7 @@ class $Workspace {
   requestDiscardAtRow(rowIndex: number): void {
     const git = this.git.value;
     if (!git) return;
-    const rows = buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
+    const rows = GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
     const row = rows[rowIndex];
     if (row?.kind !== 'file') return;
     this.gitPanel.confirmDiscard.value = { paths: [row.path], buckets: new Map([[row.path, row.bucket]]) };
@@ -169,7 +169,7 @@ class $Workspace {
     const git = this.git.value;
     if (!git) return [];
     const selected = this.gitPanel.selectedPaths.value;
-    const rows = buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
+    const rows = GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
     const out: Array<{ path: string; bucket: 'staged' | 'unstaged' | 'untracked' }> = [];
     for (const row of rows) if (row.kind === 'file' && selected.has(row.path)) out.push(row);
     return out;

@@ -1,7 +1,7 @@
 // Property tests over the ONE scrollbar-geometry source: track within the region, corner free,
 // exact extremes, min-thumb — across region shapes (split positions, tiny panes, huge content).
 import { test, expect, describe } from 'bun:test';
-import { scrollbarGeometry, MINIMUM_THUMB_CELLS, type RegionRect } from './scrollbar-geometry';
+import { ScrollbarGeometry, MINIMUM_THUMB_CELLS, type RegionRect } from './scrollbar-geometry';
 
 const shapes: Array<{ name: string; region: RegionRect }> = [
   { name: 'editor pane', region: { top: 0, left: 6, width: 80, height: 37 } },
@@ -14,7 +14,7 @@ const shapes: Array<{ name: string; region: RegionRect }> = [
 describe('track placement', () => {
   for (const { name, region } of shapes) {
     test(`vertical track hugs the right edge within the region (${name})`, () => {
-      const geometry = scrollbarGeometry('vertical', region, { scrollSize: 1000, viewportSize: region.height, scrollPosition: 0 });
+      const geometry = ScrollbarGeometry.Class.scrollbarGeometry('vertical', region, { scrollSize: 1000, viewportSize: region.height, scrollPosition: 0 });
       expect(geometry).not.toBeNull();
       expect(geometry!.trackLeft).toBe(region.left + region.width - 1);
       expect(geometry!.trackTop).toBe(region.top);
@@ -22,7 +22,7 @@ describe('track placement', () => {
       expect(geometry!.trackLength).toBeGreaterThanOrEqual(1);
     });
     test(`horizontal track hugs the bottom edge within the region (${name})`, () => {
-      const geometry = scrollbarGeometry('horizontal', region, { scrollSize: 500, viewportSize: region.width, scrollPosition: 0 });
+      const geometry = ScrollbarGeometry.Class.scrollbarGeometry('horizontal', region, { scrollSize: 500, viewportSize: region.width, scrollPosition: 0 });
       expect(geometry).not.toBeNull();
       expect(geometry!.trackTop).toBe(region.top + region.height - 1);
       expect(geometry!.trackLeft).toBe(region.left);
@@ -33,8 +33,8 @@ describe('track placement', () => {
 
 describe('hidden when content fits', () => {
   test('returns null when scrollSize <= viewportSize', () => {
-    expect(scrollbarGeometry('vertical', shapes[0]!.region, { scrollSize: 10, viewportSize: 37, scrollPosition: 0 })).toBeNull();
-    expect(scrollbarGeometry('vertical', shapes[0]!.region, { scrollSize: 0, viewportSize: 37, scrollPosition: 0 })).toBeNull();
+    expect(ScrollbarGeometry.Class.scrollbarGeometry('vertical', shapes[0]!.region, { scrollSize: 10, viewportSize: 37, scrollPosition: 0 })).toBeNull();
+    expect(ScrollbarGeometry.Class.scrollbarGeometry('vertical', shapes[0]!.region, { scrollSize: 0, viewportSize: 37, scrollPosition: 0 })).toBeNull();
   });
 });
 
@@ -44,8 +44,8 @@ describe('exact extremes round-trip through the reported scale', () => {
       const scrollSize = 5000;
       const viewportSize = region.height;
       const trueMax = scrollSize - viewportSize;
-      const atStart = scrollbarGeometry('vertical', region, { scrollSize, viewportSize, scrollPosition: 0 })!;
-      const atEnd = scrollbarGeometry('vertical', region, { scrollSize, viewportSize, scrollPosition: trueMax })!;
+      const atStart = ScrollbarGeometry.Class.scrollbarGeometry('vertical', region, { scrollSize, viewportSize, scrollPosition: 0 })!;
+      const atEnd = ScrollbarGeometry.Class.scrollbarGeometry('vertical', region, { scrollSize, viewportSize, scrollPosition: trueMax })!;
       expect(atStart.reportedPosition).toBe(0);
       expect(atEnd.reportedPosition).toBe(scrollSize - atEnd.reportedViewportSize); // reported max
       const reportedRange = scrollSize - atEnd.reportedViewportSize;
@@ -64,7 +64,7 @@ describe('exact extremes round-trip through the reported scale', () => {
 describe('minimum thumb', () => {
   test('the reported ratio never yields a thumb below the minimum, even on huge content', () => {
     const region = shapes[1]!.region; // 17-cell log region
-    const geometry = scrollbarGeometry('vertical', region, { scrollSize: 100000, viewportSize: 17, scrollPosition: 0 })!;
+    const geometry = ScrollbarGeometry.Class.scrollbarGeometry('vertical', region, { scrollSize: 100000, viewportSize: 17, scrollPosition: 0 })!;
     const thumbCells = Math.max(1, Math.round((geometry.reportedViewportSize / 100000) * geometry.trackLength));
     expect(thumbCells).toBeGreaterThanOrEqual(MINIMUM_THUMB_CELLS);
   });

@@ -16,7 +16,7 @@ import { StatusChannel } from '../system/StatusChannel';
 import { FrameProbe } from '../system/FrameProbe';
 import { ScrollPhysics } from '../ui/ScrollPhysics';
 import { Clipboard } from '../system/Clipboard';
-import { buildChangeRows, nextFileRow } from '../git/git.rows';
+import { GitRows } from '../git/git.rows';
 import { KeybindingRegistry } from '../keybindings/KeybindingRegistry';
 import { canonicalBindings } from '../keybindings/keybindings.defaults';
 import { macOverlayBindings } from '../keybindings/keybindings.mac';
@@ -284,12 +284,12 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   // Git-panel helpers shared by the git action handlers (region-aware continuous flow).
   const currentChangeRows = () => {
     const git = workspace.git.value;
-    return git ? buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value) : [];
+    return git ? GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value) : [];
   };
   const normalizeChangesIndex = (): void => {
     const rows = currentChangeRows();
     if (rows[workspace.gitPanel.changesIndex.value]?.kind !== 'file') {
-      const firstFile = nextFileRow(rows, -1, 1);
+      const firstFile = GitRows.Class.nextFileRow(rows, -1, 1);
       if (firstFile >= 0) workspace.gitPanel.changesIndex.value = firstFile;
     }
   };
@@ -310,7 +310,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   const moveChanges = (direction: 1 | -1): void => {
     const gitPanel = workspace.gitPanel;
     const rows = currentChangeRows();
-    const next = nextFileRow(rows, gitPanel.changesIndex.value, direction);
+    const next = GitRows.Class.nextFileRow(rows, gitPanel.changesIndex.value, direction);
     if (next >= 0) gitPanel.changesIndex.value = next;
     else if (direction === 1) gitPanel.region.value = 'log'; // flow into the log
   };
@@ -340,7 +340,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       else if (workspace.gitPanel.logIndex.value === 0) {
         workspace.gitPanel.region.value = 'changes'; // flow back up into the changes
         const rows = currentChangeRows();
-        const last = nextFileRow(rows, rows.length, -1);
+        const last = GitRows.Class.nextFileRow(rows, rows.length, -1);
         if (last >= 0) workspace.gitPanel.changesIndex.value = last;
       } else moveLog(-1);
     },

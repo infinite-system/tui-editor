@@ -2,6 +2,7 @@
 // placeholder) built from the repository's status buckets. Pure and shared: the renderer draws
 // exactly this list and the mouse hit-tester indexes into the SAME list, so clicks always land on
 // the row the user sees (the lesson from the tree: renderer and hit-test must share layout math).
+import { Static } from '../system/Static';
 import type { GitFileRecord } from './git.parsers';
 
 export type ChangeBucket = 'staged' | 'unstaged' | 'untracked';
@@ -25,7 +26,7 @@ export interface PlaceholderRow {
 export type ChangeRow = HeaderRow | FileRow | PlaceholderRow;
 
 /** Porcelain xy → one human letter for the bucket's relevant side. */
-export function statusGlyph(xy: string, bucket: ChangeBucket): string {
+function statusGlyphImplementation(xy: string, bucket: ChangeBucket): string {
   if (bucket === 'untracked') return '?';
   const staged = xy.charAt(0);
   const worktree = xy.charAt(1);
@@ -36,7 +37,7 @@ export function statusGlyph(xy: string, bucket: ChangeBucket): string {
 }
 
 /** Build the flat row list: headers with counts, glyphed file rows, or a single placeholder. */
-export function buildChangeRows(
+function buildChangeRowsImplementation(
   staged: readonly GitFileRecord[],
   unstaged: readonly GitFileRecord[],
   untracked: readonly GitFileRecord[],
@@ -55,7 +56,7 @@ export function buildChangeRows(
         kind: 'file',
         bucket: section.bucket,
         path: file.path,
-        glyph: statusGlyph(file.xy, section.bucket),
+        glyph: statusGlyphImplementation(file.xy, section.bucket),
       });
     }
   }
@@ -64,9 +65,23 @@ export function buildChangeRows(
 }
 
 /** Index of the next/previous FILE row from `fromIndex` (headers are skipped); -1 if none. */
-export function nextFileRow(rows: readonly ChangeRow[], fromIndex: number, direction: 1 | -1): number {
+function nextFileRowImplementation(rows: readonly ChangeRow[], fromIndex: number, direction: 1 | -1): number {
   for (let index = fromIndex + direction; index >= 0 && index < rows.length; index += direction) {
     if (rows[index]?.kind === 'file') return index;
   }
   return -1;
+}
+
+class $GitRows {
+  /** Porcelain xy → one human letter for the bucket's relevant side. */
+  static statusGlyph = statusGlyphImplementation;
+  /** Build the flat row list: headers with counts, glyphed file rows, or a single placeholder. */
+  static buildChangeRows = buildChangeRowsImplementation;
+  /** Index of the next/previous FILE row (headers skipped); -1 if none. */
+  static nextFileRow = nextFileRowImplementation;
+}
+
+export namespace GitRows {
+  export const $Class = $GitRows;
+  export const Class = Static($GitRows);
 }
