@@ -104,6 +104,12 @@ merge gate — `scripts/behavioral-contracts.sh`. Rules:
   Ctrl+E binding covers Cmd+Right (raw ^E) + Ctrl+E → line-end (Ctrl+E was unbound = no conflict).
   RESULT, driven-verified against the real bytes: Cmd+Left→col 0, Cmd+Right→line-end, Ctrl+A→Select All,
   all live. Home/End keys are the always-working canonical line-start/end fallback.
+- Cmd+Up / Cmd+Down (document start/end) — UNBINDABLE on the user's terminal (cat -v capture, RESOLVED
+  2026-07-21, do NOT add a binding): Cmd+Up arrives as `\e[<65;61;16M` = an SGR MOUSE WHEEL event
+  (button 65 = wheel-down) — the terminal translates Cmd+Up into a scroll gesture, INDISTINGUISHABLE from
+  a real wheel, so binding it would fire on every scroll and break scrolling. Cmd+Down produces NOTHING
+  (swallowed). Document start/end stays on the canonical **Ctrl+Home / Ctrl+End** (which reach the app
+  reliably). Making Cmd+Up/Down send distinct sequences would require a user-side iTerm2 remap. Thread closed.
 
 ## Behavioural requirements
 - RESPECT `.gitignore` in BOTH the git panel display AND the GitWatcher recursion — never
