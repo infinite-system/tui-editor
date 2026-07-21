@@ -283,6 +283,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     // Drag-edge auto-scroll: while a selection drag holds at a pane edge, keep scrolling +
     // extending the selection.
     animating = view.tickDragAutoScroll(deltaTimeSeconds) || animating;
+    animating = view.tickDiffMomentum(deltaTimeSeconds) || animating; // the open diff's fling glide
     // Tooltip dwell: the frame tick advances the timer; it's just another animation source, so it
     // folds into the SAME single-live-request model (holds a frame while counting, false at rest).
     animating = tooltip.tick(deltaTimeSeconds) || animating;
@@ -620,6 +621,27 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     if (context === 'editor' && renderer.useKittyKeyboard && key.ctrl && key.name === 'a' && key.sequence === '\u0001') {
       workspace.editor.moveToLineStart(key.shift);
       return;
+    }
+
+    // A diff is open OVER the tabs: editor-context keys drive the DiffView (synced aligned-row panes),
+    // not the hidden buffer. n/p jump changes, Enter promotes to a real editable tab, Esc closes.
+    if (context === 'editor' && workspace.showingDiff.value) {
+      const diff = view.activeDiffView();
+      if (diff) {
+        switch (key.name) {
+          case 'up': diff.moveByKeyboardAlignedRows(-1); return;
+          case 'down': diff.moveByKeyboardAlignedRows(1); return;
+          case 'pageup': diff.pageByKeyboard(-1); return;
+          case 'pagedown': diff.pageByKeyboard(1); return;
+          case 'left': diff.moveByKeyboardColumns(-1); return;
+          case 'right': diff.moveByKeyboardColumns(1); return;
+          case 'n': diff.jumpToNextChange(); return;
+          case 'p': diff.jumpToPreviousChange(); return;
+          case 'return': diff.openFull(); return;
+          case 'escape': workspace.showingDiff.value = false; workspace.diffRequest.value = null; return;
+          default: break;
+        }
+      }
     }
 
     const resolution = keybindings.resolve(

@@ -27,6 +27,7 @@ import { Files } from '../system/Files';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { displayColumn, lineWidth, graphemeAtDisplayColumn, graphemeToU16 } from '../editor/editor.coordinates';
 import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
+import { DiffView } from '../diff/DiffView';
 import { SelectableText } from './SelectableText';
 import { GitRows, type ChangeRow, type FileRow } from '../git/GitRows';
 import { GitLogRows } from '../git/GitLogRows';
@@ -60,6 +61,10 @@ export interface RootView {
   editorViewportWidth(): number;
   /** Frame-tick hook: advance drag-edge auto-scroll; true while active (keep frames coming). */
   tickDragAutoScroll(dtSeconds: number): boolean;
+  /** Frame-tick hook: advance the open diff's scroll-momentum glide; true while moving. */
+  tickDiffMomentum(dtSeconds: number): boolean;
+  /** The live DiffView instance when a diff is open, else null (for keyboard routing). */
+  activeDiffView(): DiffView.Instance | null;
   dispose(): void;
 }
 
@@ -199,6 +204,15 @@ export function buildRootView(
   editorArea.add(codeBody);
   editorColumn.add(tabBar);
   editorColumn.add(editorArea);
+  // A definite-size host for the rich DiffView, swapped IN PLACE of editorArea (add/remove, not runtime
+  // flex toggling — OpenTUI doesn't re-lay-out on a runtime flexGrow/height change). flexGrow:1 mirrors
+  // editorArea, so the DiffView (height:100%) inside gets a real box. Not added until a diff opens.
+  const diffContainer = new BoxRenderable(renderer, {
+    id: 'diff-container',
+    flexGrow: 1,
+    width: '100%',
+    flexDirection: 'column',
+  });
 
   // Draggable sidebar↔editor divider (1-cell bar). onMouseDrag fires globally while the button is
   // held (even off the bar), so a drag resizes smoothly; the model clamps to [min,max] + persists.
@@ -1304,8 +1318,59 @@ export function buildRootView(
     return parts.join('  ·  ');
   }
 
+  // The rich side-by-side DiffView overlays the editor area when a git diff is open (mirrors the old
+  // showingDiff overlay, but the DiffView renderable replaces the unified-text diffEditor). DiffView has
+  // no re-open, so it is reconstructed whenever the diff request's token changes; disposed when cleared.
+  let activeDiffView: DiffView.Instance | null = null;
+  let shownDiffToken: number | null = null;
+  let diffContainerMounted = false;
+  let lastDiffLaidHeight = -1;
+  function syncDiffView(): void {
+    const request = workspace.diffRequest.value;
+    const token = request?.token ?? null;
+    if (token !== shownDiffToken) {
+      shownDiffToken = token;
+      lastDiffLaidHeight = -1; // the frame loop re-renders once the new instance has a laid-out height
+      if (activeDiffView) {
+        activeDiffView.dispose();
+        activeDiffView = null;
+      }
+      if (request) {
+        activeDiffView = new DiffView.Class(renderer, theme, {
+          previousVersionText: request.previousVersionText,
+          currentVersionText: request.currentVersionText,
+          previousVersionPath: request.previousVersionPath,
+          currentVersionPath: request.currentVersionPath,
+          parentRenderable: diffContainer, // definite-size host (added below in place of editorArea)
+          onOpenFull: () => workspace.openFileInTab(request.currentVersionPath), // promote to a real tab
+          onNextChange: () => renderer.requestRender(),
+          onPrevChange: () => renderer.requestRender(),
+        });
+        activeDiffView.attachSettings(settings); // live scroll physics, same as the editor
+      }
+    }
+    const diffActive = activeDiffView !== null && workspace.showingDiff.value;
+    // SWAP editorArea <-> diffContainer by add/remove (not runtime flex toggling — OpenTUI doesn't
+    // re-lay-out on a runtime flexGrow/height change). editorColumn = [tabBar, <one of them>]; the second
+    // slot swaps, so whichever is mounted gets flexGrow:1 and the full area below the tab bar.
+    if (diffActive && !diffContainerMounted) {
+      editorColumn.remove(editorArea);
+      editorColumn.add(diffContainer);
+      diffContainerMounted = true;
+    } else if (!diffActive && diffContainerMounted) {
+      editorColumn.remove(diffContainer);
+      editorColumn.add(editorArea);
+      diffContainerMounted = false;
+    }
+    // NOTE: the DiffView's first paint at its real laid-out height is driven from the FRAME LOOP
+    // (tickDiffMomentum), NOT here — syncDiffView runs in the reactive paint (fires only on signal
+    // changes), which happens BEFORE OpenTUI lays out the freshly-swapped container, so root height is
+    // still 0 here. The frame loop re-checks the laid-out height each frame and repaints when it changes.
+  }
+
   function update(): void {
     const palette = readPalette();
+    syncDiffView();
     column.backgroundColor = palette.bg;
     const gitView = workspace.sidebarView.value === 'git';
     sidebar.width = sidebarWidth(); // live width from the draggable splitter (persisted to settings)
@@ -1915,8 +1980,25 @@ export function buildRootView(
     editorViewportHeight,
     editorViewportWidth,
     tickDragAutoScroll,
+    // Frame-loop hook (runs every frame with FRESH layout, unlike the reactive paint): advance the diff's
+    // momentum glide AND repaint the diff once its container has laid out to full height (root height goes
+    // 0 -> real a frame or two after the container swap). Repaint-on-height-change keeps frames live until
+    // the layout settles, then stops (returns momentum-moving) so idle-quiescence holds.
+    tickDiffMomentum(dtSeconds: number): boolean {
+      if (!activeDiffView) return false;
+      let live = activeDiffView.tickScrollMomentum(dtSeconds);
+      const laidHeight = Number(activeDiffView.rootRenderable.height) || 0;
+      if (laidHeight !== lastDiffLaidHeight) {
+        lastDiffLaidHeight = laidHeight;
+        activeDiffView.update(); // now at the real height -> renders the full window
+        live = true; // keep frames coming until the height stabilizes
+      }
+      return live;
+    },
+    activeDiffView: () => activeDiffView,
     dispose() {
       try {
+        activeDiffView?.dispose();
         root.remove(column);
         column.destroyRecursively();
       } catch {

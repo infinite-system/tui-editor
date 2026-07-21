@@ -16,9 +16,9 @@ cd "$ROOT"
 
 # Allowlisted capabilities, each unwired for a NAMED reason. This list only ever SHRINKS.
 #  - LSP (M5) / Markdown (M6): forward-milestone modules, built ahead, wired when their milestone lands.
-#  - DiffView: P1 IN FLIGHT (2026-07-21) — being wired into Workspace.openChangeAtRow/openCommitFileDiff
-#    THIS session (momentum fix first). REMOVE the instant it is mounted; do not let it linger here.
-ALLOWLIST_NAMES="JsonRpc LanguageClient LspProcess LspTransport TypeScriptProvider MarkdownDocument MarkdownParser MarkdownPreview MarkdownRenderable DiffView"
+#  (DiffView removed 2026-07-21 — now mounted via Workspace.diffRequest -> RootView syncDiffView; the
+#   gate now enforces it stays wired.)
+ALLOWLIST_NAMES="JsonRpc LanguageClient LspProcess LspTransport TypeScriptProvider MarkdownDocument MarkdownParser MarkdownPreview MarkdownRenderable"
 
 is_allowlisted() {
   local name="$1"
