@@ -374,6 +374,23 @@ export function buildRootView(
     }
   }
 
+  // Mouse wheel, POSITION-ROUTED: OpenTUI hit-tests the pointer to the pane under it and calls its
+  // onMouseScroll (events bubble to the box). Each scrollable pane mutates only its own window
+  // (scrollTop / selection), never materializing the whole list — the frame effect observes those
+  // signals and repaints. invariant: Cost tracks the actively observed set (project.invariants.md)
+  const WHEEL_STEP = 3;
+  const wheelDelta = (e: { scroll?: { direction?: string } }): number =>
+    (e.scroll?.direction === 'up' ? -1 : 1) * WHEEL_STEP;
+  sidebar.onMouseScroll = (e) => {
+    const delta = wheelDelta(e);
+    if (ws.focus.value === 'git') ws.scrollGitLog(delta);
+    else ws.tree.moveSelection(delta);
+  };
+  editorArea.onMouseScroll = (e) => {
+    const ed = ws.editor;
+    if (ed.hasDocument.value) ed.viewport.scrollBy(wheelDelta(e), ed.document.lineCount);
+  };
+
   update();
 
   return {

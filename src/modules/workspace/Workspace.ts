@@ -73,6 +73,22 @@ class $Workspace {
     this.focus.value = this.focus.value === 'git' ? 'files' : 'git';
   }
 
+  // invariant: Cost tracks the actively observed set (project.invariants.md)
+  /**
+   * Scroll the commit-log WINDOW by `delta` rows (mouse wheel / paging). Moves `logScrollTop` only
+   * (not the selection), clamps to `[0, knownEnd)`, and asks the CommitLog to ensure the new window
+   * is loaded — the sparse cache fetches the entered pages and evicts the exited ones, so scrolling
+   * a huge log never materializes more than the observed window.
+   */
+  scrollGitLog(delta: number): void {
+    const gp = this.gitPanel;
+    const cl = this.commitLog.value;
+    const end = cl?.knownEnd.value ?? Number.POSITIVE_INFINITY;
+    const cap = Number.isFinite(end) ? Math.max(0, (end as number) - 1) : gp.logScrollTop.value + Math.max(0, delta);
+    gp.logScrollTop.value = Math.max(0, Math.min(gp.logScrollTop.value + delta, cap));
+    void cl?.ensureRange(gp.logScrollTop.value, 50);
+  }
+
   /** Activate the current tree selection: open a file (and focus editor) or toggle a dir. */
   activate(): { opened?: string } {
     const res = this.tree.activateSelected();

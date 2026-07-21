@@ -77,6 +77,10 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       focus: workspace.focus.value,
       treeRows: workspace.tree.rows.length,
       treeSelected: workspace.tree.selectedIndex.value,
+      editorScrollTop: ed.viewport.scrollTop.value,
+      gitLogScrollTop: workspace.gitPanel.logScrollTop.value,
+      gitLogIndex: workspace.gitPanel.logIndex.value,
+      gitLogLoaded: workspace.commitLog.value?.loadedCount ?? 0,
     });
   };
 
