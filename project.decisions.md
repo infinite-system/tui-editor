@@ -237,3 +237,27 @@ but `launch`/`wait` marker detection needs a live tuning pass against codex's re
 before agent-tmux can reliably auto-drive codex (until then, drive codex directly or tune the markers).
 
 **Status:** adopted (markers pending verification) · **Logged:** 2026-07-21
+
+---
+
+## D — Full descriptive names, no abbreviations (global code convention)
+
+**Rule (ALL code, always):** every identifier — variables, parameters, loop counters, locals,
+fields — is a full spelled-out descriptive name. **No abbreviations, ever.** `increment` not `inc`,
+`index` not `i`, `whiteCenter` not `wc`, `editor` not `ed`, `gitPanel` not `gp`, `commitLog` not
+`cl`, `palette` not `pal`, `selection` not `sel`, `current` not `cur`, `options` not `opts`,
+`direction` not `dir`, `workspace` not `ws`. Nested loops use distinct real names
+(`rowIndex`/`columnIndex`), never `i`/`j`. This is about NAMING (not destructuring).
+
+**Related (same spirit — explicitness):** don't create a local that is merely a short alias of a
+property path; reference the full path (`workspace.editor`, not `const editor = workspace.editor`
+used once). A reused COMPUTED result (method/function call) may be stored, named for what it is.
+
+**Do NOT rename:** external/library API names, or the ivue namespace tokens (`Class`, `$Class`,
+`Model`, `Instance`). A rename must be behavior-preserving — keep tsc + all tests green.
+
+**Enforcement:** de-abbreviate before every commit; hard gate on delegated (codex/subagent) output.
+Embedded in `scripts/codex/_preamble.txt`. IBR *explicitness over abstraction* applied to naming.
+User directive: "code is getting sloppy… use full names… a global understanding for ALL code always."
+
+**Status:** adopted · **Logged:** 2026-07-21

@@ -103,3 +103,4 @@ Tests — `import { test, expect } from 'bun:test';` files in __tests__/*.test.t
 - Do NOT snapshot `X.Class` in a module-scope const, top-level `new`, or default export — read deps late in getters/methods.
 - Do NOT use `computed()` for cheap derived state — named plain getter. Reserve computed() for expensive/memoized derivations only.
 - Do NOT modify or assume a different shape for the existing interfaces above — match them exactly.
+- Use FULL DESCRIPTIVE NAMES for every identifier — NO abbreviations, ever (`increment` not `inc`, `index` not `i`, `editor` not `ed`, `gitPanel` not `gp`, `commitLog` not `cl`, `palette` not `pal`, `workspace` not `ws`; nested loops get distinct real names). Also prefer the full property path over a short alias local (`workspace.editor`, not `const ed = workspace.editor`). Do NOT rename ivue namespace tokens (Class/$Class/Model/Instance) or library APIs.
