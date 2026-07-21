@@ -53,3 +53,59 @@ Severity: **minor** (nice-to-have) · **moderate** (real gap, work around for no
 - **The `.filetype.md` doc convention** (`project.invariants.md`, `project.lattice.md`,
   `project.decisions.md`, `project.architecture.md`; `<module>.<role>.md`) emerged during this
   run and should be reflected wherever the skills recommend file names.
+
+## Lessons from the M1–M3 build + audit (2026-07-21)
+
+Captured while governing the fork's autonomous M1–M3 against the contracts. These are the
+strongest signals so far; feed back to the skills.
+
+### invariants skill
+
+- **Verdict distinction: upheld-by-outcome vs mechanism-bypassed.** *(moderate)* `Data flows
+  one way` is honored in RESULT (render pulls state, never mutates it) but its prescribed
+  MECHANISM (reactive invalidation → requestRender) is bypassed — rendering is imperative from
+  input handlers, so async producers can't repaint. A review that only checks the outcome
+  passes it; only checking the *mechanism* catches the real gap (which blocks M4/M5). **Proposed:**
+  the analyze step should test an invariant's Mechanism clause separately from its outcome; add a
+  verdict nuance (e.g. `upheld-outcome / mechanism-drift`).
+- **Greenfield state: "substrate present, consumer pending."** *(moderate)* `Async results are
+  revision-stamped` — the stamping substrate exists (`TextDocument.revision` bumped on every
+  mutation) but NOTHING observes it yet ("decorative reactivity"). The provisional/established
+  binary doesn't capture "mechanism built, not yet exercised because its consumer lands in a
+  later milestone." **Proposed:** a Verification convention / status note for deferred-until-Mx.
+- **Verification exit-code masking.** *(minor but bit two reviewers + me)* `bunx tsc --noEmit | tail`
+  reports the PIPE's exit (0), masking tsc's real exit (2). Two independent audits split on
+  "does it typecheck" because of this. **Proposed:** Verification-field guidance must warn that
+  piping through tail/tee masks exit codes — capture the real status (`; echo exit=$?` without a
+  pipe on the checked command). Same note belongs in the verify skill.
+- **Cross-review earns its keep — and even a strong reviewer can be wrong on a fact.** *(evidence)*
+  Fable and Opus disagreed on an empirical claim (tsc pass/fail); the disagreement surfaced a real
+  bug AND the masking trap. Validates the §5.4 independent-panel design and the rule that the
+  executor must verify contested empirical facts firsthand.
+
+### ivue skill
+
+- **Antipattern: decorative reactivity.** *(moderate)* The fork bumped `revision`/`version` refs
+  on every mutation but no effect ever reads them — reactive infrastructure with no consumer, so
+  it looks reactive and isn't. **Proposed:** the skill should name this explicitly — a ref you
+  bump must be observed by some effect, or it's dead weight; wire the coarse frame `watchEffect`
+  or don't pretend. (Positive: the fork, guided by the ivue skill, got namespace/late-read/
+  plain-getter/no-computed discipline RIGHT with near-zero drift — the skill's core guidance works.)
+
+### ibr skill
+
+- **Impossibility-prediction is the highest-value part of a contract — demonstrated.** *(evidence)*
+  The reality invariant `A text position has several encodings` predicted, before any code was
+  read, exactly the bug found: UTF-16 math mislabeled "logical", surrogate-splitting backspace,
+  no display-column mapping. The Impossibility/Generative principle paid off concretely — worth
+  citing as the canonical example of "a good invariant predicts the bug you haven't found yet."
+
+### Cross-skill / delegation
+
+- **Ungoverned autonomous builder = fast but untrusted.** The rogue fork produced disciplined,
+  working code quickly, but with no contracts and no review it was un-trustable until governed.
+  The governance layer (contracts + independent review + firsthand verification) is what converts
+  fast output into trusted output — the delegation model needs the review gate, always.
+- **Concurrent-checkout hazard is real.** The fork racing the main loop's commits nearly clobbered
+  work. Worktree-per-delegate isolation (now used for codex) is the mitigation — one branch per
+  worker, merge after review.
