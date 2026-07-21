@@ -2,7 +2,7 @@
 // top-level reactive UI state. Built only after the kernel is sealed.
 //
 // invariant: The app is built only after the kernel is sealed (project.invariants.md)
-// invariant: ivue owns state, OpenTUI owns projection (project.invariants.md)
+// invariant: ivue owns state and OpenTUI owns projection (project.invariants.md)
 // invariant: Data flows one way (project.invariants.md)
 import { Reactive } from 'ivue';
 import { ref } from 'vue';

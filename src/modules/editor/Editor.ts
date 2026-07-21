@@ -12,10 +12,16 @@ import { Files } from '../system/Files';
 import { Clock } from '../system/Clock';
 
 class $Editor {
-  document = new TextDocument.Class();
-  viewport = new Viewport.Class();
-  cursor = new Cursor.Class();
-  private undo = new UndoStore.Class();
+  // invariant: Construction goes through overridable seams (project.invariants.md)
+  document = this.createDocument();
+  viewport = this.createViewport();
+  cursor = this.createCursor();
+  private undo = this.createUndo();
+
+  protected createDocument() { return new TextDocument.Class(); }
+  protected createViewport() { return new Viewport.Class(); }
+  protected createCursor() { return new Cursor.Class(); }
+  protected createUndo() { return new UndoStore.Class(); }
 
   get hasDocument() {
     return ref(false);

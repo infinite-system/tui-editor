@@ -109,3 +109,43 @@ strongest signals so far; feed back to the skills.
 - **Concurrent-checkout hazard is real.** The fork racing the main loop's commits nearly clobbered
   work. Worktree-per-delegate isolation (now used for codex) is the mitigation — one branch per
   worker, merge after review.
+
+## Governance pass — round 2 (2026-07-21)
+
+### invariants skill
+
+- **"Overridable seams" and "late reads" are DIFFERENT rules — a review must check both.**
+  *(moderate)* Field-init `x = new Y.Class()` PASSES *Imported dependencies are read late* (it's a
+  construction-time read, not module-scope) but VIOLATES *Construction goes through overridable
+  seams* (hard-coded concrete class, no override point; fix = `createX()` factory methods). BOTH
+  the Fable and Opus audits missed it — they checked the late-read/circular rule and treated
+  field-init construction as clean; the human caught it. **Proposed:** the analyze step must test
+  seam-ness separately from late-ness, and flag field-initializer `new X.Class()` explicitly.
+  Strong evidence that a human-in-loop catches what parallel AI audits converge on and miss.
+- **Annotation path must match where the record actually lives, and rename-ripple must sweep code
+  annotations.** *(minor)* A module-level invariant (workspace nav) was annotated
+  `(project.invariants.md)` but belongs in `workspace.invariants.md` → orphan until repointed;
+  and invariants I renamed (comma removed for the charset rule) orphaned the fork's old-name
+  annotations. `--refs` caught all of it — validates the drift check; note the rename-ripple rule
+  must include code annotations, not just contracts + lattice links.
+
+### ivue skill
+
+- **Non-reactive splits into TWO kinds; only one uses `Static()`.** *(moderate)* Stateless
+  capability classes — "function bags" (file/process/git-command/clock/ids/env/logging) → wrap in
+  `Static()` (vendored, experimental) for callback-safe passable methods + native static `super` +
+  deterministic plugin composition. Stateful non-reactive classes with identity + lifetime
+  (PieceTable, LspProcess/Transport, UndoStore, GitWatcher, DiffEngine, Tree-sitter handles) →
+  plain instance classes, `let Class = $Class`, **never** `Static()` ("a static capability
+  transform is not an instance container"). The fork built the capability layer (`system/*`) as
+  plain static-method classes with no `Static()` — a gap vs the intended pattern. **Proposed:**
+  the skill should state the discriminator (stateless-behavior-bag vs has-instances-and-lifetime)
+  and that `Static()` must be vendored.
+- **`Static()` `#private` caveat.** *(minor)* Native static `#private` rejects the selected-subclass
+  receiver (a `Static()` class is a subclass of `$Class`); use TS `private`/`protected` or
+  module-scope state for capability-class private data, not `this.#member`.
+
+### Process
+
+- **WebFetch upgrades HTTP→HTTPS and won't reach a local dev server** *(minor)* — the ivue docs at
+  `10.211.55.7:5174` are served from `../ivue/docs_v2/`; read the local source file instead.

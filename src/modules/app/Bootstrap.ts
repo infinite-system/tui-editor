@@ -114,7 +114,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   // --- input ---------------------------------------------------------------
   // Accelerated arrows: terminals report key REPEAT (not down/up), so we ramp the step size
   // when the same arrow keeps arriving quickly, and reset when the direction changes or the
-  // stream pauses. invariant: Terminals report key repeat, not key up (project.invariants.md)
+  // stream pauses. invariant: Terminals report key repeat not key up (project.invariants.md)
   let accelDir = '';
   let accelRun = 0;
   let accelLast = 0;

@@ -2,7 +2,7 @@
 // [ main row: files sidebar | editor ] over a status bar. `update()` re-syncs content from
 // state after each input (one-way flow: state → view, never the reverse).
 //
-// invariant: ivue owns state, OpenTUI owns projection (project.invariants.md)
+// invariant: ivue owns state and OpenTUI owns projection (project.invariants.md)
 // invariant: The terminal shows a bounded viewport (project.invariants.md)
 // invariant: Cost tracks the actively observed set (project.invariants.md)
 import {

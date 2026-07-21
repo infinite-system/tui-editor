@@ -2,7 +2,7 @@
 // (Multi-workspace tabs + per-workspace snapshot restoration are layered on in M2 via
 // WorkspaceManager; this is the single-workspace core.)
 //
-// invariant: Workspace and file navigation are separate layers (project.invariants.md)
+// invariant: Workspace and file navigation are separate layers (workspace.invariants.md)
 import { Reactive } from 'ivue';
 import { ref } from 'vue';
 import { FileTree } from './FileTree';
@@ -13,8 +13,12 @@ export type Focus = 'files' | 'editor';
 
 class $Workspace {
   root = '';
-  tree = new FileTree.Class();
-  editor = new Editor.Class();
+  // invariant: Construction goes through overridable seams (project.invariants.md)
+  tree = this.createTree();
+  editor = this.createEditor();
+
+  protected createTree() { return new FileTree.Class(); }
+  protected createEditor() { return new Editor.Class(); }
 
   get focus() {
     return ref<Focus>('files');

@@ -1,9 +1,8 @@
 # Architecture
 
 The system shape is *generated* by the invariants, not chosen alongside them. Read
-[`project.invariants.md`](./project.invariants.md) and [`project.lattice.md`](./project.lattice.md)
-first; this file is the narrative of what those generators produce. ivue mechanics and page
-references are in [`project.decisions.md`](./project.decisions.md).
+`project.invariants.md` and `project.lattice.md` first; this file is the narrative of what those
+generators produce. ivue mechanics and page references are in `project.decisions.md`.
 
 **Product thesis (not a falsifiable invariant, per the brief):** developer ergonomics and
 runtime performance reinforce each other — coherent ownership → fewer accidental reactive graphs
