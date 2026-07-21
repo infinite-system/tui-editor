@@ -12,6 +12,7 @@ import {
   fg,
   bg,
   bold,
+  ScrollBarRenderable,
   type TextChunk,
   type CliRenderer,
 } from '@opentui/core';
@@ -153,6 +154,106 @@ export function buildRootView(
   commandPalette.add(commandPaletteInput);
   commandPalette.add(commandPaletteList);
   root.add(commandPalette);
+
+  // Thin draggable scrollbars (OpenTUI ScrollBar: built-in draggable thumb + onChange). Each bar
+  // is a 1-cell strip INSIDE its pane's border; onChange writes the SAME model offset the wheel
+  // and keyboard write (One-Writer: the newest input wins; momentum halts on thumb drags).
+  const editorVerticalBar = new ScrollBarRenderable(renderer, {
+    id: 'editor-scrollbar-v',
+    orientation: 'vertical',
+    position: 'absolute',
+    right: 0,
+    top: 1,
+    width: 1,
+    showArrows: false,
+    onChange: (position) => {
+      workspace.editor.viewport.scrollTop.value = Math.max(0, Math.round(position));
+    },
+  });
+  const editorHorizontalBar = new ScrollBarRenderable(renderer, {
+    id: 'editor-scrollbar-h',
+    orientation: 'horizontal',
+    position: 'absolute',
+    left: 1,
+    bottom: 0,
+    height: 1,
+    showArrows: false,
+    onChange: (position) => {
+      workspace.editor.viewport.scrollLeft.value = Math.max(0, Math.round(position));
+    },
+  });
+  editorArea.add(editorVerticalBar);
+  editorArea.add(editorHorizontalBar);
+  const changesBar = new ScrollBarRenderable(renderer, {
+    id: 'git-changes-scrollbar',
+    orientation: 'vertical',
+    position: 'absolute',
+    right: 0,
+    width: 1,
+    showArrows: false,
+    onChange: (position) => {
+      workspace.gitPanel.changesScrollTop.value = Math.max(0, Math.round(position));
+    },
+  });
+  const logBar = new ScrollBarRenderable(renderer, {
+    id: 'git-log-scrollbar',
+    orientation: 'vertical',
+    position: 'absolute',
+    right: 0,
+    width: 1,
+    showArrows: false,
+    onChange: (position) => {
+      workspace.haltGitLogScroll(); // thumb drag adopts authority (One-Writer)
+      workspace.gitPanel.logScrollTop.value = Math.max(0, Math.round(position));
+      void workspace.commitLog.value?.ensureRange(workspace.gitPanel.logScrollTop.value, 50);
+    },
+  });
+  sidebar.add(changesBar);
+  sidebar.add(logBar);
+
+  // Sync bar geometry + positions from the models each paint (bars auto-hide when content fits).
+  function syncScrollbars(): void {
+    const editor = workspace.editor;
+    const editorVisible = editor.hasDocument.value;
+    const viewportHeight = editorViewportHeight();
+    editorVerticalBar.height = viewportHeight;
+    editorVerticalBar.scrollSize = editorVisible ? editor.document.lineCount : 0;
+    editorVerticalBar.viewportSize = viewportHeight;
+    editorVerticalBar.scrollPosition = editor.viewport.scrollTop.value;
+    const viewportWidth = editorViewportWidth();
+    let widestVisible = 0;
+    if (editorVisible) {
+      const top = editor.viewport.scrollTop.value;
+      for (const line of editor.document.slice(top, viewportHeight)) {
+        widestVisible = Math.max(widestVisible, lineWidth(line));
+      }
+    }
+    editorHorizontalBar.width = Math.max(1, (editorArea.width as number) - 2);
+    editorHorizontalBar.scrollSize = widestVisible;
+    editorHorizontalBar.viewportSize = viewportWidth;
+    editorHorizontalBar.scrollPosition = editor.viewport.scrollLeft.value;
+
+    const gitVisible = workspace.focus.value === 'git' && workspace.git.value !== null;
+    const changeRowCount = gitVisible ? gitChangeRowsNow().length : 0;
+    changesBar.top = 2;
+    changesBar.height = Math.max(1, gitPanelGeometry.changesRows);
+    changesBar.scrollSize = gitVisible ? changeRowCount : 0;
+    changesBar.viewportSize = gitPanelGeometry.changesRows;
+    changesBar.scrollPosition = workspace.gitPanel.changesScrollTop.value;
+    const knownEnd = workspace.commitLog.value?.knownEnd.value ?? Number.POSITIVE_INFINITY;
+    logBar.top = gitPanelGeometry.dividerRow + 1;
+    logBar.height = Math.max(1, gitPanelGeometry.logRows);
+    // Unknown history length: a rolling virtual size keeps the thumb draggable; it refines once
+    // the end is discovered (a short page sets knownEnd).
+    logBar.scrollSize = gitVisible
+      ? Number.isFinite(knownEnd)
+        ? (knownEnd as number)
+        : workspace.gitPanel.logScrollTop.value + gitPanelGeometry.logRows * 4
+      : 0;
+    logBar.viewportSize = gitPanelGeometry.logRows;
+    logBar.scrollPosition = workspace.gitPanel.logScrollTop.value;
+  }
+
 
   // Interior height of a bordered box = box height - 2 (top+bottom border).
   const editorViewportHeight = () => Math.max(1, (editorArea.height as number) - 2);
@@ -456,6 +557,8 @@ export function buildRootView(
       commandPaletteList.fg = palette.dim;
     }
 
+    syncScrollbars();
+
     // Native terminal caret at the cursor's DISPLAY column (tab/wide aware). Shown only when the
     // editor is focused, has a document, no palette overlay, and the cursor line is on screen.
     // invariant: The caret renders at the cursor display column (ui.invariants.md)
@@ -492,8 +595,21 @@ export function buildRootView(
   const wheelDelta = (event: { scroll?: { direction?: string } }): number =>
     (event.scroll?.direction === 'up' ? -1 : 1) * WHEEL_STEP;
   sidebar.onMouseScroll = (event) => {
-    if (workspace.focus.value === 'git') workspace.impulseGitLog(event.scroll?.direction === 'up' ? -1 : 1); // momentum glide
-    else workspace.tree.moveSelection(wheelDelta(event));
+    if (workspace.focus.value === 'git') {
+      // Route by pointer position: wheel over the changes region scrolls it; over the log, the
+      // momentum glide (same gesture, per-region window).
+      const row = event.y - sidebar.y;
+      if (row < gitPanelGeometry.dividerRow) {
+        const total = gitChangeRowsNow().length;
+        const maxTop = Math.max(0, total - gitPanelGeometry.changesRows);
+        workspace.gitPanel.changesScrollTop.value = Math.max(
+          0,
+          Math.min(workspace.gitPanel.changesScrollTop.value + wheelDelta(event), maxTop),
+        );
+      } else {
+        workspace.impulseGitLog(event.scroll?.direction === 'up' ? -1 : 1);
+      }
+    } else workspace.tree.moveSelection(wheelDelta(event));
   };
   editorArea.onMouseScroll = (event) => {
     if (!workspace.editor.hasDocument.value) return;
