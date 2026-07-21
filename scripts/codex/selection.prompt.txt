@@ -1,0 +1,103 @@
+You are a scoped worker fixing ONE bug in the Fable TUI code editor (Bun + ivue + OpenTUI +
+Tree-sitter). Work ONLY in your current directory (a git worktree). Do exactly the one task below,
+verify it empirically, and STOP. Do NOT commit (the reviewer commits). Do NOT delete files you did
+not create. Do NOT touch other modules, package.json, or main.ts. Install nothing.
+
+== THE ONE TASK ==
+Make OpenTUI's native text selection shade the CORRECT cells so the editor's selection highlight
+works. Success is binary and empirical: a selection on document line N must shade the on-screen row
+that renders line N, exactly over the selected display columns — verified by a FrameProbe frame-diff.
+
+== READ FIRST (in your worktree) ==
+- `.claude/skills/ivue/SKILL.md` + `project.ivue-reference.md` — ivue patterns (you likely won't add
+  ivue classes, but follow them if you do).
+- `.claude/skills/invariants/SKILL.md` + `.claude/skills/ibr/SKILL.md` — the method. Reason by
+  reduction to the load-bearing cause; verify by generation (the frame-diff). Do not guess-and-hope.
+- `src/modules/ui/RootView.ts` — the editor is split into a GUTTER renderable (line numbers +
+  current-line marker) and a CODE renderable (`SelectableText`, syntax only). `applySelection()` maps
+  the model selection into code-local coords and calls `codeBody.setSelectionRange(...)`. The visual
+  is currently gated behind `process.env.TUI_SEL_RENDER === '1'`.
+- `src/modules/ui/SelectableText.ts` — a `TextRenderable` subclass that drives native selection via
+  the protected `textBufferView.setLocalSelection(...)` / `refreshLocalSelection()` and
+  `lastLocalSelection`.
+- `src/modules/editor/editor.coordinates.ts` — grapheme↔UTF-16↔display-column helpers
+  (`displayColumn`, `lineWidth`, `graphemeToU16`, etc). The three coords are distinct (tabs, CJK,
+  emoji). Do not conflate them.
+- `src/modules/system/FrameProbe.ts` — dumps OpenTUI's render buffer (per-cell char/fg/bg/attrs) to
+  `artifacts/frame.json` when `TUI_FRAME_DUMP=1`. This is your ORACLE (see repro below).
+- `src/modules/ui/ui.invariants.md` — the record "The selected range renders with a background" (its
+  Mechanism/BLOCKED/Verification). Your fix MUST satisfy that invariant; update the record's status
+  to reflect the fix (remove the BLOCKED note; set Status: provisional) and keep the schema valid
+  (run the checker, below).
+- OpenTUI source of truth for the coordinate contract — READ these:
+  `node_modules/@opentui/core/text-buffer-view.d.ts` (`setLocalSelection`, `setSelection`,
+  `setViewport`, `setViewportSize`, `setFirstLineOffset`, `resetLocalSelection`),
+  `node_modules/@opentui/core/renderables/TextBufferRenderable.d.ts` (`selectionBg`, `scrollY`,
+  `updateViewportOffset`, `refreshLocalSelection`, `_scrollY`), and the compiled impls in
+  `node_modules/@opentui/core/chunk-bun-*.js` (grep `setLocalSelection`, `updateLocalSelection`,
+  `convertGlobalToLocalSelection`, `refreshLocalSelection`, `setViewport`). Find what coordinate
+  space `setLocalSelection` actually expects (cells? a scrolled-window offset? logical vs visual
+  lines? does it need `setViewport`/`setViewportSize` called first?).
+
+== THE BUG (precise repro, already characterized) ==
+`setLocalSelection(anchorX, anchorY, focusX, focusY, bg, fg)` does NOT shade the local cell grid we
+expect. A FIXED probe of `setSelectionRange(0,0,5,0)` (select the first 5 columns of the first
+visible line) shades `y=5, x=28..46` in period-4 groups (3 shaded cells + 1 gap, repeating) — i.e. a
+~4× scale + offset in BOTH axes. A real selection on document line N lands roughly `5 + 4*N` rows too
+low. So `y = 5 + 4*localY` (0→5, 3→17 both observed) and x is similarly scaled. The TEXT itself
+renders correctly (greeter.ts content at rows y=1..8), so the render buffer is right — only the
+selection mapping is wrong.
+
+Hypotheses to test (reduce, don't assume): (1) `setLocalSelection` coords are relative to the
+renderable's own viewport and require `textBufferView.setViewport(x,y,w,h)` / `setViewportSize(w,h)`
+to be set to the code renderable's laid-out size first — which may not have happened when
+`applySelection` runs (yoga layout may lag the content set). (2) coords may be logical-line based
+while we render only the visible window (so anchorY should be absolute doc-line, with the view
+scrolled, not window-relative). (3) the ~4 factor may be a supersample/scroll artifact — inspect
+`_scrollY`/`updateViewportOffset`. Confirm the true contract from the source, then fix `applySelection`
+(and/or `SelectableText`) to pass coords in whatever space OpenTUI actually wants. If native selection
+genuinely cannot be driven programmatically to the right cells, document why with evidence and
+propose the minimal alternative — but exhaust the native path first.
+
+== ORACLE — FrameProbe frame-diff (this is how you KNOW it works; a no-action control proves it is
+noise-free) ==
+Run these from your worktree (bun is at ~/.bun/bin; export PATH="$HOME/.bun/bin:$PATH"). The harness
+is `scripts/tui-harness.sh` (verbs: launch/ready/settle/send/field/kill). Enable the render with
+`TUI_SEL_RENDER=1` and the probe with `TUI_FRAME_DUMP=1`:
+
+  H=scripts/tui-harness.sh; S=sel-$$; BUN="$HOME/.bun/bin/bun"
+  "$H" launch "$S" 120x40 env TUI_FRAME_DUMP=1 TUI_SEL_RENDER=1 bun run src/main.ts "$PWD/fixtures" >/dev/null
+  "$H" ready "$S" 20 >/dev/null
+  # open a file: walk the tree
+  for _ in 1 2 3 4 5 6 7 8; do b="$("$H" field activeBuffer)"; [ -n "$b" ] && [ "$b" != "null" ] && break; "$H" send "$S" Enter >/dev/null; "$H" send "$S" Down >/dev/null; done
+  "$H" send "$S" Right >/dev/null; "$H" send "$S" Down >/dev/null; "$H" send "$S" Down >/dev/null   # focus editor, move to a content line
+  "$H" settle "$S" >/dev/null 2>&1; sleep 0.4; cp artifacts/frame.json /tmp/A.json
+  for _ in 1 2 3; do "$H" send "$S" S-Right >/dev/null; done                                        # select 3 graphemes on the SAME line
+  "$H" settle "$S" >/dev/null 2>&1; sleep 0.4; cp artifacts/frame.json /tmp/B.json
+  # cursor line & selection are in artifacts/status.json (fields: cursor{line,col}, selection{start,end})
+  # DIFF /tmp/A.json vs /tmp/B.json: the bg-changed cells are the highlight. PASS iff they land on the
+  # buffer row that renders the cursor's doc line, contiguously over the selected display columns.
+  "$H" kill "$S" >/dev/null 2>&1
+
+frame.json shape: { width, height, rows:[{ y, text, bg:[...], fg:[...], attrs:[...] }] }. Cell (x,y)
+bg = rows[y].bg[x]. The selection bg differs from the surrounding bg only on selected cells. Map the
+cursor's doc line to its buffer row: editor content starts at buffer y=1 (editor top border), so doc
+line L at scrollTop T renders at y = 1 + (L - T). The gutter occupies the left columns of the editor
+area; the CODE renderable starts after it — account for that when checking the x columns.
+
+== VERIFY BEFORE YOU STOP (all required) ==
+1. `bunx tsc --noEmit; echo TSC=$?` → TSC=0.
+2. `bun test` → all pass (add/keep a test if you can make the coord mapping unit-testable).
+3. `node .claude/skills/invariants/scripts/check_invariants.mjs --all --refs` → 0 problems.
+4. The frame-diff above: a selection on doc line N shades the row for line N (NOT ~5+4N). Do a
+   single-grapheme case AND a multi-line case (Shift+Down then Shift+Right) and confirm neither
+   shades the gutter. Paste the actual bg-changed cell coordinates in your final report as proof.
+5. Once it works, remove the `TUI_SEL_RENDER` gate in `RootView.applySelection` so the highlight is
+   ON by default (or leave a one-line comment if you keep it as a safety flag — but default ON).
+
+== DELIVER (final message) ==
+Root cause (the actual coordinate contract you found, cited from the OpenTUI source), the exact
+change, the frame-diff proof (before/after bg-changed cells for a line-N selection), and the files
+you changed. Files you MAY change: `src/modules/ui/RootView.ts` (applySelection + gate),
+`src/modules/ui/SelectableText.ts`, `src/modules/ui/ui.invariants.md`, and a colocated test if you
+add one. Nothing else. Do NOT git commit.
