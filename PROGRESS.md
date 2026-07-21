@@ -4,10 +4,31 @@ Live status ledger for the autonomous build. Updated every turn so state survive
 compaction. **If you are resuming: read this, then `HANDOFF.md`, then continue at the first
 unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
-## RESUME HERE (frontier as of commit 6f31553)
-- **State:** 11 module contracts · 128 tests pass · tsc green · checker 0 problems · end-to-end tmux
-  smoke ALL-PASS. codex modules git/markdown/lsp INTEGRATED. Editor rework: reactive frame
-  (established), grapheme coordinate model, native-cursor caret, selection + clipboard (model works),
+## RESUME HERE (frontier as of commit c0b50b4)
+- **State:** 11 module contracts · 136 tests pass · tsc green · checker 0 problems · smoke ALL-PASS
+  (20 assertions incl. caret-cell, no-wrap gutter, drag-select persistence, copy, tree-click, hover).
+- **HUMAN-QA BATCH COMPLETE (all committed):** caret off-by-one (1-based ANSI + layout-anchored,
+  bc06ee8) · wrap-off root cause + right-arrow-opens (80e4c2c) · selection persistence + Ctrl+C
+  (one-writer mouse->model, d23dca7) · tree clicks + click-to-focus (966fc8d) · goal-column
+  DISPLAY-preservation (e83d89d) · hover highlighting (c0b50b4). De-abbreviation pass landed
+  (7254c3c+0a0ea67); naming convention binding (full names, no abbreviations, ALL code).
+- **NEXT (in order):**
+  1. **Universal scroll rollout (self-do core):** shared momentum on ALL panes — editor vertical +
+     HORIZONTAL (Shift+wheel; scrollLeft applied display-col-aware in renderEditor; caret/selection
+     x-shift; clamp to widest VISIBLE line), tree, git changes list; generalize the Bootstrap frame
+     tick to all animating panes (one dt clock, paused-clock clamp, One-Writer halt on jumps).
+     + thin DRAGGABLE SCROLLBARS both axes on editor + commit log (OpenTUI ScrollBarRenderable:
+     orientation/slider/onChange, or manual thumb renderable + onMouseDrag; thumb-drag and wheel both
+     write scrollTop, newest adopts; O(window) while dragging a 10k log).
+     + git changes-list treatment: Staged/Changes/Untracked headers + status glyphs + counts,
+     scrollable, click-select / click-again stage-unstage, then commit->files->diff drill-down.
+  2. **Static-capability convention pass (delegate AFTER scroll lands — import-line edits overlap
+     the scroll files, NOT disjoint):** every stateless exported-function bag -> Static class +
+     namespace (editor.coordinates, git.parsers, git.window, scroll-momentum physics, highlightLine
+     bag if stateless); single whole-repo owner like the rename pass; green-gated.
+  3. M5 diagnostics/definition + editable diff -> M6 markdown split-preview -> multi-workspace ->
+     search -> piece-table undo -> M7 plugins -> 5-pass gauntlet (fuller Claude reviewer panel;
+     codex cautious/cross-model-only) -> isolated blackline acceptance test -> §5.1 gate.
   editor split into gutter + `SelectableText` code renderable. **FrameProbe visual-observation
   channel built + tested** (`TUI_FRAME_DUMP=1` → `artifacts/frame.json`, per-cell char/fg/bg/attrs).
 - **OBSERVATION TOOLING (answered):** `tmux capture-pane -e` is LOSSY for truecolor bg (verified —
