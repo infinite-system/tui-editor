@@ -4,8 +4,8 @@ Live status ledger for the autonomous build. Updated every turn so state survive
 compaction. **If you are resuming: read this, then `HANDOFF.md`, then continue at the first
 unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
-## RESUME HERE (frontier as of commit 8dd095e)
-- **State:** 11 module contracts · 114 tests pass · tsc green · checker 0 problems · end-to-end tmux
+## RESUME HERE (frontier as of commit f3671b7)
+- **State:** 11 module contracts · 121 tests pass · tsc green · checker 0 problems · end-to-end tmux
   smoke ALL-PASS. codex modules git/markdown/lsp INTEGRATED. Editor rework: reactive frame
   (established), grapheme coordinate model, native-cursor caret, selection + clipboard (model works),
   editor split into gutter + `SelectableText` code renderable. **FrameProbe visual-observation
@@ -94,7 +94,24 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       harness `click <x> <y>` verb + smoke assertion). OpenTUI mouse = handler-based: attach
       `onMouseDown`/`onMouseDrag`/`onMouseUp` on renderables (called with `this`=renderable, hit-tested
       by x,y, has `isDragging`), events bubble to root.
-      **NEXT (M4 git sidebar UI — LARGE, multi-file):** git is NOT yet wired into the running app.
+      **M4 git sidebar — LIVE so far:** git wired into the app (GitRepository+CommitLog+GitPanel off
+      Workspace, `Ctrl+G` toggle, frame-effect observes git → status flush); sidebar renders real
+      changes + VIRTUALIZED commit log (live-verified on this repo); keyboard log scroll; POSITION-
+      ROUTED mouse-wheel scroll on editor/tree/git-log (verified headless + tmux); scroll invariants
+      recorded (Container-Is-Input reality, One-Writer chosen).
+      **NEXT (M4 remaining):** (a) SMOOTH animated scroll — animate scrollTop over frames via the
+      reactive frame effect + inertia (OpenTUI `LinearScrollAccel` in lib/scroll-acceleration);
+      regular line-crossing cadence (reparameterized crossing-regularity: device-px→cell-row; sub-cell
+      is impossible, don't chase); the animation loop MUST reset its dt clock on resume (paused-clock
+      invariant) and adopt-stop on programmatic jumps (One-Writer); still O(window) (fetch+evict while
+      animating). Verify: headless `createMockMouse(renderer).scroll` drives the loop (assert cadence/
+      final offset) + tmux `scroll` verb (assert scrollTop progression) + FrameProbe frame-diff
+      (window advances by whole rows at a regular cadence). Record crossing-regularity + paused-clock
+      in the scroll/editor contract. (b) mouse click-to-select + stage/unstage on change rows; (c)
+      commit→files→diff drill-down (click/Enter a commit → `git show --name-status` → file → diff;
+      breadcrumb back); (d) changes-list scroll + region switching; (e) draggable sidebar width +
+      top/bottom separator (divider `onMouseDrag` → reactive split-ratio → yoga relayout).
+      Below is the earlier detailed wiring plan (git was NOT yet wired — now DONE):
       1. Instantiate `GitRepository` + `CommitLog` for the workspace root (own them off `Workspace`
          via createX seams; `GitRepository.refresh()` on open; `CommitLog` for the log window).
       2. Panel state (add to `Workspace` or a new `GitPanel` model): view mode
