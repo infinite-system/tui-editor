@@ -25,6 +25,16 @@ export const DEFAULT_MOMENTUM: MomentumOptions = {
   stopVelocity: 3,
 };
 
+// Vertical axis wants a HIGHER fast-scroll ceiling than horizontal: a hard fling should cover a long
+// file/tree quickly. Same decay curve + stop threshold (so a gentle wheel is still precise and the
+// One-Writer halt behaviour is unchanged) — only the top speed and per-notch gain are raised.
+export const VERTICAL_MOMENTUM: MomentumOptions = {
+  impulse: 34,
+  max: 220,
+  decayPerSec: 0.015,
+  stopVelocity: 3,
+};
+
 export const AT_REST: ScrollMomentum = { velocity: 0, residual: 0 };
 
 /** Add a wheel/flick impulse in the direction of `deltaRows`; same-direction impulses accumulate. */
