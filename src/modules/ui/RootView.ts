@@ -554,6 +554,15 @@ export function buildRootView(
       bar.width = geometry.trackLength;
       bar.height = thickness;
     }
+    // The ScrollBar CONTAINER resizes with bar.width/height, but its inner SliderRenderable (the painted
+    // track+thumb) does NOT stretch to fill it — it keeps its own cross-axis size, so a thicker container
+    // just shifts the same-width slider inward (reads as "the bar MOVED"). Drive the slider's cross-axis
+    // explicitly so the painted bar is actually `thickness` cells wide.
+    const slider = (bar as unknown as { slider?: { width?: number; height?: number } }).slider;
+    if (slider) {
+      if (orientation === 'vertical') slider.width = thickness;
+      else slider.height = thickness;
+    }
     applyingBarGeometry = true;
     try {
       bar.scrollSize = scroll.scrollSize;
@@ -565,7 +574,7 @@ export function buildRootView(
     barScales.set(bar, geometry.reportedToTrueScale);
     if (process.env.TUI_DEBUG_BARS === '1')
       Logging.Class.info(
-        `bar ${bar.id}: thickness=${thickness} trackLeft=${geometry.trackLeft} -> left=${bar.left} top=${bar.top} laidX=${bar.x} laidY=${bar.y}`,
+        `bar ${bar.id}: thickness=${thickness} trackLeft=${geometry.trackLeft} -> left=${bar.left} top=${bar.top} laidX=${bar.x} laidY=${bar.y} laidW=${bar.width} laidH=${bar.height}`,
       );
   }
 
