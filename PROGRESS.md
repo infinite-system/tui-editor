@@ -37,7 +37,26 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       log .claude/worktrees/codex-static.log). Tail (editor.coordinates, scroll-momentum, RootView
       shape) converts after the click/scroll/wrap churn lands. NEW-FILE RULE enforced from birth
       (conventions-gate); git.rows + scrollbar-geometry already converted (9ea13f8).
-- [ ] 10. Milestone road: M5 diagnostics/definition + editable side-by-side diff · M6 markdown
+- [ ] 10a. **EDITOR BUFFER TABS (USER PRIORITY — opening a file currently REPLACES the buffer;
+      user opened 10 files, no tabs).** Sequence AFTER the in-flight fleet merges to a clean
+      checkpoint (touches Workspace+RootView+Editor — conflicts with every running worker; self-do).
+      SPEC: (1) open-buffer SET on Workspace — openFile adds/activates (never replaces); a tab bar
+      above the editor (name + dirty dot + close ✕, active highlighted); click tab=activate,
+      ✕/Ctrl+W=close (dirty→confirm, reuse the confirm-overlay pattern), Ctrl+Tab / Ctrl+PageUp/Down
+      cycle, reopening a file focuses its existing tab. (2) LAYERING: buffer tabs (editor region) are
+      a DIFFERENT layer from workspace/project tabs (10b) — do NOT conflate; record in
+      workspace.invariants ("Workspace and file navigation are separate layers" already exists —
+      extend: buffer tabs are the editor layer, workspace tabs the project layer). (3) FLYWEIGHT
+      (the real memory concern — tabs RETAIN buffers now): only the ACTIVE buffer holds a live
+      reactive document + syntax/undo; background tabs hold a light handle (path + cursor/scroll +
+      dirty), rehydrated on activation; closing a tab FULLY disposes its document/undo/syntax
+      (coordinate with lifecycle audit item D). IMPOSSIBILITY: "N open tabs do not cost N live
+      documents' worth of reactive state." (4) tab bar reuses shared row/hover/click discipline;
+      overflow scrolls horizontally (shared momentum engine); keyboard parity throughout.
+      VERIFY: open 5 → 5 tabs; click switches active; dirty dot on edit; close disposes (RSS returns
+      after closing all — measured); reopen focuses existing; tabs FrameProbe-rendered. Shares the
+      buffer-set model with 10b.
+- [ ] 10b. Milestone road: M5 diagnostics/definition + editable side-by-side diff · M6 markdown
       split-preview · multi-workspace · file search · piece-table undo · M7 plugins (ScrollPhysics
       or theme plugin demo) · 5-pass gauntlet (fuller Claude panel) · isolated blackline-worktree
       acceptance test · §5.1 gate all-six-green.
