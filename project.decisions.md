@@ -78,30 +78,31 @@ documenting these; each cites the ivue page that informed it. ivue docs live at
 
 ## Pending simplifications (post-gate — do NOT act until the §5.1 gate is green)
 
-### D-S1 — Collapse `.Class` per-class where nothing composes it
+### D-S1 — Drop the redundant `Class` suffix from member NAMES (keep `.Class` in bodies)
 
-**Concern:** `X.Class` reads noisy everywhere (`GitCommands.Class.run()`, `new Editor.Class()`).
+**Correction (2026-07-21):** an earlier framing (collapse the namespace triad / drop `.Class` from
+call sites) was a MISREAD and is withdrawn. **`.Class` stays everywhere** — it is the mutable
+composition seam the kernel composes and tests swap (load-bearing for *Construction goes through
+overridable seams* and *The app is built only after the kernel is sealed*, and the M7 plugin demo);
+`new Namespace()` can't work and ESM forbids reassigning a bare export, so the impl must live on
+`.Class`. Dropping it is off the table.
 
-**Analysis (why NOT a wholesale drop):** `.Class` is the MUTABLE COMPOSITION SEAM — the kernel
-composes it and tests swap it — so it is load-bearing for *Construction goes through overridable
-seams* and *The app is built only after the kernel is sealed*, and it is exactly what the M7
-plugin-composition demo exercises. Dropping it wholesale is off the table: it deletes the seam M7
-demonstrates, `new Namespace()` cannot work (a namespace is not a constructor), and ESM forbids
-reassigning a bare exported binding (the reason the impl lives on a `.Class` property).
+**The actual, purely-cosmetic change:** rename getter/factory MEMBER names that carry a redundant
+`Class` suffix, keeping the `.Class` in the body:
+`get GitCommandsClass() { return GitCommands.Class; }` → `get gitCommands() { return GitCommands.Class; }`.
+No `.Class` reference removed, no seam change, no call-site removal, no invariant impact — a rename
+of local member names only. Update the members' callers.
 
-**The legitimate simplification (per-class):** the ivue namespace doc allows "an ordinary class
-export is sufficient when nothing needs to replace or compose the class." So for any class that is
-NEVER composed (kernel hook / plugin contribution) or swapped (test replacement), collapse the
-namespace triad to a plain `export class Files {}` and call `Files.read()` (no `.Class`). Keep the
-namespace + `.Class` seam only for classes the kernel/plugins compose or tests swap.
+**Watch for name collisions:** renaming a member to exactly its imported namespace name
+(`get GitCommands() { return GitCommands.Class }`) shadows the import and reads ambiguously — in
+those cases keep a distinct, clear name (lowercase `gitCommands`, or a role name), don't collide.
 
-**Discriminator for the pass:** grep each class's `.Class` slot for reassignment/composition
-(`X.Class =`, kernel `registerClass`, plugin contributions, test swaps). None → collapse. Any →
-keep. Weigh each `Static()` capability individually (they were given seams deliberately; collapse
-only if M7/plugins never compose it and no test swaps it).
+**Scope:** the `<Thing>Class` late-dependency getters (e.g. GitRepository's `GitCommandsClass` /
+`ClockClass` / `StatusChannelClass`). The `createX()` seam methods already carry no `Class` suffix —
+untouched.
 
-**Timing / method:** a discrete whole-tree rename pass AFTER the gate, re-running `bunx tsc
---noEmit` + full `bun test` + the invariants checker (`--all --refs`) so no call site or annotation
-breaks. Logged now; do not act during M5/selection work.
+**Timing / method:** a discrete rename pass AFTER the gate (or trivially inline where small +
+local), re-running `bunx tsc --noEmit` + full `bun test` + the checker (`--all --refs`) so no caller
+breaks. Do not act mid-build.
 
-**Status:** pending · **Logged:** 2026-07-21
+**Status:** pending · **Logged:** 2026-07-21 (rescoped 2026-07-21)
