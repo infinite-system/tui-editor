@@ -183,3 +183,57 @@ drift. The canonical source remains the npm package.
 **Applied:** codex preamble + HANDOFF + PROGRESS now point at the project-local checker/skill paths.
 
 **Status:** adopted · **Logged:** 2026-07-21
+
+---
+
+## D — The verification invariant (the "how do we test" formula)
+
+**tmux is NOT the testing invariant — it is only the DRIVER.** The reduced formula:
+
+> A test is only as true as the channel it reads is authoritative for the property under test.
+> Drive through the real input path; assert at the layer where the property is authoritative;
+> never reconstruct a property from a channel downstream of where it is defined.
+
+This forces a per-property choice of oracle. For this TUI there are exactly three properties, each
+with ONE authoritative channel:
+
+1. **Pure logic** (coordinate math, grapheme span-splitting, parsers, `selectionRange()`, porcelain
+   parsing) → **unit tests on pure functions**; oracle = the return value. Deterministic, no tmux.
+   This is where correctness should live whenever logic can be extracted from I/O.
+2. **Semantic state** (what the app BELIEVES: cursor, selection, buffer revision, dirty, focus, tree,
+   git status) → the **`status.json` side-channel** the app itself writes (`StatusChannel`); oracle =
+   the app's own state export. tmux sends real keys (the honest input path); assertions read
+   status.json — NEVER pane-scrape. Settle on the frame counter, never a fixed sleep.
+3. **Visual output** (what is actually DRAWN per cell: char/fg/bg/attrs) → the **`FrameProbe`**
+   framebuffer dump (`TUI_FRAME_DUMP=1` → `artifacts/frame.json`); oracle = OpenTUI's render buffer,
+   read BEFORE the pty. NOT `tmux capture-pane -e` (lossy for truecolor bg — proven). The
+   gold-standard visual assertion is a **frame-diff**: snapshot before/after an action; the changed
+   cells ARE the effect (no offset or color-decode math). This is what caught the selection
+   mis-position bug.
+
+**Role of tmux:** the driver only — a real pty + real keystrokes + process lifecycle + resize. It is
+the input path, not the oracle. Reaching for a "Playwright for terminal" (headless xterm) only makes
+sense to verify the SGR *encoder* end-to-end; for asserting our app's behavior the framebuffer is
+strictly better (source of truth, no round-trip loss).
+
+**Impossible if the formula holds:** a green test that asserts a color by grepping pane escapes; a
+state assertion that pane-scrapes rendered text instead of reading status.json; a "settled" wait
+that's a fixed sleep rather than a frame-count signal; correctness that lives only in an integration
+test when it could be a pure unit test.
+
+**Status:** adopted · **Logged:** 2026-07-21
+
+## D — agent-tmux is the codex/subagent driver; humans attach with `tmux attach -t at_<name>`
+
+**Decision:** delegated interactive agents (codex, claude workers) run under `scripts/agent-tmux.sh`
+(brought into tui-editor from the maintained blackline copy). Sessions are namespaced `at_<name>`;
+a human watches/steers any worker live with `tmux attach -t at_<name>` (detach `Ctrl-b d`), or
+non-intrusively with `scripts/agent-tmux.sh peek <name> [lines]`. Launch:
+`scripts/agent-tmux.sh launch <name> --cwd <worktree> --profile codex -- codex --yolo`. A live tmux
+session is SINGLE-OWNER — attach to watch freely, but don't drive it from two places at once.
+**Caveat:** the `codex` profile's ready/busy regexes are still `[UNVERIFIED]` placeholders — codex's
+interactive UI renders fine under tmux (confirmed: YOLO banner + `›` prompt + `model · dir` footer),
+but `launch`/`wait` marker detection needs a live tuning pass against codex's real idle/busy footer
+before agent-tmux can reliably auto-drive codex (until then, drive codex directly or tune the markers).
+
+**Status:** adopted (markers pending verification) · **Logged:** 2026-07-21
