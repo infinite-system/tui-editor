@@ -4,7 +4,7 @@ Live status ledger for the autonomous build. Updated every turn so state survive
 compaction. **If you are resuming: read this, then `HANDOFF.md`, then continue at the first
 unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
-## RESUME HERE (frontier as of commit c0b50b4)
+## RESUME HERE (frontier as of commit db0d9a1)
 - **State:** 11 module contracts · 136 tests pass · tsc green · checker 0 problems · smoke ALL-PASS
   (20 assertions incl. caret-cell, no-wrap gutter, drag-select persistence, copy, tree-click, hover).
 - **HUMAN-QA BATCH COMPLETE (all committed):** caret off-by-one (1-based ANSI + layout-anchored,
@@ -12,73 +12,27 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   (one-writer mouse->model, d23dca7) · tree clicks + click-to-focus (966fc8d) · goal-column
   DISPLAY-preservation (e83d89d) · hover highlighting (c0b50b4). De-abbreviation pass landed
   (7254c3c+0a0ea67); naming convention binding (full names, no abbreviations, ALL code).
-- **NEXT (in order):**
-  1. **Universal scroll rollout (self-do core):** shared momentum on ALL panes — editor vertical +
-     HORIZONTAL (Shift+wheel; scrollLeft applied display-col-aware in renderEditor; caret/selection
-     x-shift; clamp to widest VISIBLE line), tree, git changes list; generalize the Bootstrap frame
-     tick to all animating panes (one dt clock, paused-clock clamp, One-Writer halt on jumps).
-     + thin DRAGGABLE SCROLLBARS both axes on editor + commit log (OpenTUI ScrollBarRenderable:
-     orientation/slider/onChange, or manual thumb renderable + onMouseDrag; thumb-drag and wheel both
-     write scrollTop, newest adopts; O(window) while dragging a 10k log).
-     + git changes-list treatment: Staged/Changes/Untracked headers + status glyphs + counts,
-     scrollable, click-select / click-again stage-unstage, then commit->files->diff drill-down.
-  2. **Static-capability convention pass (delegate AFTER scroll lands — import-line edits overlap
-     the scroll files, NOT disjoint):** every stateless exported-function bag -> Static class +
-     namespace (editor.coordinates, git.parsers, git.window, scroll-momentum physics, highlightLine
-     bag if stateless); single whole-repo owner like the rename pass; green-gated.
-  3. M5 diagnostics/definition + editable diff -> M6 markdown split-preview -> multi-workspace ->
-     search -> piece-table undo -> M7 plugins -> 5-pass gauntlet (fuller Claude reviewer panel;
-     codex cautious/cross-model-only) -> isolated blackline acceptance test -> §5.1 gate.
-  editor split into gutter + `SelectableText` code renderable. **FrameProbe visual-observation
-  channel built + tested** (`TUI_FRAME_DUMP=1` → `artifacts/frame.json`, per-cell char/fg/bg/attrs).
-- **OBSERVATION TOOLING (answered):** `tmux capture-pane -e` is LOSSY for truecolor bg (verified —
-  even Box backgroundColors don't round-trip). Correct model: drive with tmux, assert STATE from
-  status.json (authoritative), assert VISUAL from the app's own render buffer via `FrameProbe`
-  (built). Only reach for a headless xterm emulator (xterm-headless / MS `tui-test`) to verify the
-  SGR *encoder* end-to-end — low priority. Frame-diff (before/after) isolates a change's cells with
-  no offset/color math — that's the gold-standard visual assertion.
-- **Selection highlight — DONE, ungated, invariant established.** Editor splits into a gutter
-  renderable + a `SelectableText` code renderable; `applySelection` drives native
-  `TextBufferView.setLocalSelection` with viewport-local cells. The earlier "~4× coord bug" was a
-  **FrameProbe defect**, not a render bug: OpenTUI stores fg/bg as FOUR Uint16 RGBA lanes per cell,
-  and FrameProbe read stride-1 (aliasing one cell's change across four). FrameProbe now decodes 4
-  lanes (regression-tested). Verified by frame-diff: selection on line N shades line N's row at the
-  selected code columns, multi-line = anchor→EOL then BOL→cursor, no gutter. Delegated the root-cause
-  probe to a codex worktree; it independently confirmed + I applied the minimal fix in main tree.
-  **LESSON:** a visual-oracle is only as good as its decode of the buffer layout — verify the tool
-  before trusting its verdict (the frame-diff was noise-free, but the per-cell decode was wrong).
+- **NEXT (user-QA priority order):**
+  1. **GIT-PANEL TREATMENT (user actively QA-ing; changes render as raw porcelain + clip):**
+     (a) Legibility: 'Staged Changes (n)' / 'Changes (n)' / 'Untracked (n)' section headers; human
+     status glyphs (M/A/D/R/U, theme-colored) instead of raw xy codes; '(no changes)' placeholder.
+     (b) Scroll parity with the log: wheel+momentum on the changes list, VERTICAL and HORIZONTAL
+     (long paths — h-scroll or middle-truncate + full path on h-scroll); THIN DRAGGABLE SCROLLBARS
+     both axes on BOTH git regions (changes + log). Reuse scroll-momentum + the frame tick.
+     (c) Interactions: single-click selects + acts (stage/unstage toggle via git.stage/unstage),
+     hover-bg rows (same StyledText treatment as the tree), then commit->files->diff drill-down.
+  2. **Word-wrap MODE (toggleable; user wants it):** view.toggleWordWrap (palette + Alt+Z). ON:
+     soft-wrap at viewport width on display-column boundaries; gutter numbers LOGICAL lines
+     (continuation rows blank gutter); caret Y via a logical<->visual row mapping layer (build on
+     display-column machinery + grapheme memoization); vertical movement by VISUAL row; selection
+     spans wrapped rows; horizontal scroll disabled while wrapped. OFF: current clip+h-scroll.
+     Record in editor.invariants (caret invariant holds in BOTH modes); FrameProbe-verify both.
+  3. Rest of scroll rollout: editor/tree wheel momentum (reuse pattern) + editor scrollbars.
+  4. Static-capability pass (single owner, AFTER scroll files settle).
+  5. M5 diagnostics/definition + editable diff -> M6 markdown split-preview -> multi-workspace ->
+     search -> piece-table undo -> M7 plugins -> 5-pass gauntlet (fuller Claude panel; codex
+     cautious/cross-model-only) -> isolated blackline acceptance test -> §5.1 gate.
 
-- **NEW REQUIREMENT — M4 git sidebar (VSCode-style, when git pane active):**
-  - **Top region:** changes list — staged / unstaged / created / deleted (git module already parses
-    porcelain-v2), each row stage/unstage-able (mouse click + key); a commit-message input box
-    (clickable) that commits the staged set.
-  - **Bottom region:** the commit log as a **virtualized** list (render only the visible window; do
-    NOT materialize 10k commits) — backed by a compact paged git-log source, one lightweight record
-    per row, evicted outside the window. Realizes *Cost tracks the actively observed set*.
-    DONE: `git.window.ts` (`missingRanges` + `evictable`, pure, 9 tests) + `GitCommands.log` offset
-    paging (`--skip=N`) + **reactive `CommitLog` window model** (`CommitLog.ts`: sparse cache,
-    `ensureRange` batched fetch, stale-supersede via loadId, eviction, `knownEnd`; fetch injectable;
-    6 tests). TODO: the list UI consuming `CommitLog.rows(start,count)`.
-  - **Commit drill-down (VSCode-style):** click/open a commit in the log → show that commit's
-    CHANGED FILES (`git show --name-status <sha>` / `diff-tree`) → open a file → show its DIFF in the
-    editor area (reuse the planned `diff` module: DiffEngine/DiffModel/DiffView, or `git show <sha>
-    -- <path>`). A back/breadcrumb path: log → commit files → file diff.
-  - **Draggable:** the sidebar width AND the top/bottom separator — a thin divider renderable that
-    captures mouse-drag → updates a reactive split-ratio (ivue state) → yoga re-layout via the frame
-    effect.
-  - **Feasibility: YES** — OpenTUI gives flex/yoga layout, mouse (click + drag) events, ScrollBox +
-    manual windowing, and input primitives; ivue gives the reactive split state + the flyweight
-    virtualization. New wiring needed: a mouse-event input path (current input is keyboard-only) and
-    a paged commit-log source in the git module. Verify mouse/drag + virtualization with FrameProbe.
-- **Then, in order:** M4 git sidebar (above) + split editable diff → multi-workspace (WorkspaceManager
-  + tabs + per-workspace snapshot restore) → file search → piece-table undo → M5 lsp editor wiring →
-  M6 markdown split-preview → M7 plugins → 5-pass gauntlet → isolated blackline test → §5.1 gate.
-- **Verify the app end-to-end:** `bash scripts/smoke-editor.sh` (drives the real TUI via
-  `scripts/tui-harness.sh`; asserts from `artifacts/status.json`). Harness verbs: launch/ready/
-  settle/send/capture/status/field/kill (internal `sleep` works inside the invoked script).
-  status.json fields: ready, frame (settle counter), renderQuiescent, activeWorkspace, activeBuffer,
-  bufferRevision, dirty, cursor{line,col}, focus, treeRows, treeSelected, overlay, paletteQuery,
-  paletteMatches, width, height, git*. Assert STATE from here; pane-capture for visual only.
 ## Environment (established)
 - Bun `~/.bun/bin/bun` (v1.3.14). Prefix: `export PATH="$HOME/.bun/bin:$PATH"`. Node also on PATH.
 - Deps: `ivue@2.0.0`, `vue@3.5.40`, `@opentui/core@0.4.5`, `web-tree-sitter@0.26.11`.
