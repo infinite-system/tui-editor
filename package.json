@@ -14,5 +14,8 @@
     "ivue": "^2.0.0",
     "vue": "^3.5.40",
     "web-tree-sitter": "^0.26.11"
+  },
+  "scripts": {
+    "build:prod": "bun build --compile --minify --external web-tree-sitter src/main.ts --outfile dist/fable"
   }
 }

@@ -11,3 +11,4 @@ artifacts/process-snapshots/
 artifacts/status-*.json
 artifacts/frame-*.json
 artifacts/*.tmp
+dist/
