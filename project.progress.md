@@ -195,13 +195,28 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 1. **ACTIVITY BAR** (conductor-activitybar → ActivityBar.ts): VS Code icon strip (Explorer/Search/
    SourceControl + Settings gear), ONE sidebar view at a time; Ctrl+Shift+E/F/G (DRIVE-verify arrival) +
    click; active highlight; last-view persisted to a new setting (+ applied-effect test). Home of Search view.
-2. ✅ **QUICK-OPEN (Ctrl+P)** — conductor-quickopen adopted (QuickOpen.ts: rg --files + CommandScoring
-   fuzzy, revision-stamped async, 5 tests). WIRING IN PROGRESS: Ctrl+P modal → activate() → openFileInTab.
-3. **SEARCH VIEW** (conductor-ripgrep → RipgrepSearch.ts): find-in-files inside the activity bar (query,
-   results grouped by file, click hit → open at line, glob/case/word/regex) + smoke.
-4. **SHORTCUTS PAGE** (conductor-shortcuts → ShortcutsView.ts: consumes KeybindingRegistry.effectiveBindings()
-   [DEAD, no consumer]) + open key (F1 or Ctrl+/) + Esc + STATUS-BAR "?" button. Status bar gets clickable
-   "?" (shortcuts) + gear (settings) buttons, hover/press + tooltips (discoverability "for noobies").
+2. ✅ **QUICK-OPEN (Ctrl+P) — DONE (b84e700).** Go-to-file modal (fuzzy over rg --files + git ls-files
+   fallback), Enter opens (root-relative → absolute), Esc close; command palette moved to Ctrl+Shift+P;
+   smoke-quickopen.sh in merge-gate. (North-star gap: still needs a CLICK affordance — activity-bar
+   Search view / status-bar entry — add when those land.)
+3. **SEARCH VIEW** (conductor-ripgrep → RipgrepSearch.ts, READY to adopt): find-in-files inside the
+   activity bar (query, results grouped by file, click hit → open at line, glob/case/word/regex) + smoke.
+4. **SHORTCUTS PAGE** (conductor-shortcuts → ShortcutsView.ts [5 tests, READY]: consumes
+   KeybindingRegistry.effectiveBindings() [DEAD, no consumer — this wires it]) + open key (F1 or Ctrl+/) +
+   Esc + STATUS-BAR "?" button.
+5. **STATUS-BAR CLICKABLE BUTTONS** (north-star discoverability "for noobies"): "?" (opens shortcuts page)
+   + ⚙ (opens settings, Ctrl+,) — each a real hit-target (single geometry source like the tab arrows),
+   theme glyph ladder, idle/hover/press states, hover tooltip (name + shortcut).
+6. **FIND/REPLACE CLICKABLE BUTTONS** (user QA on the shipped find bar 713623f): every keyboard action
+   also a visible clickable control — prev(‹/↑), next(›/↓), the N-of-M counter (display), TOGGLE buttons
+   with active/inactive visual state [Case Aa, Whole-word ab|, Regex .*] (click toggles + re-runs), close
+   (×); in replace mode: replace-current + replace-all. Keep the keys (buttons are IN ADDITION). Each =
+   real hit-rect matching the drawn glyph; theme ladder; extend smoke-find.sh (tmux-click each, assert
+   action fires + toggle shows active). RootView/find-bar = mine.
+7. **LSP GO-TO-DEFINITION via Ctrl+click** (NEW scoped, user may greenlit): LanguageClient +
+   LanguageClient.definition() already EXIST — needs lifecycle + doc-sync wiring, the Ctrl+click gesture
+   (Ctrl+click likely reaches the terminal; Cmd+click may be swallowed — drive-verify), install
+   typescript-language-server or vtsls (tsserver ≠ LSP), reuse editor.coordinates graphemeToU16/u16ToGrapheme.
 
 **WORKSPACE/PROJECT TABS (10b) — sequence AFTER the priority block (isolated parts parallelizable):**
 - Multiple PROJECTS open, switchable via a WORKSPACE-level tab strip (distinct from buffer tabs which live

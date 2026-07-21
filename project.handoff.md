@@ -3,6 +3,41 @@
 Full authority to build the whole thing to completion (brief Definition of Done + the §5.1 gate).
 Files on disk survive context compaction; this file + `project.progress.md` are the durable memory.
 
+## RESUME ANCHOR — 2026-07-21 (compaction checkpoint) — FULL-POWER build in flight
+
+- **HEAD 3451999** · tree clean · tsc + conventions-gate PASS · **0 workers in flight** (the conductor-*
+  worktrees are the COORDINATOR's, not mine — see adoption queue).
+- **THE GOVERNING PRINCIPLE:** the PRODUCT NORTH STAR in `project.requirements.md` (learnable in ~15 min,
+  zero prior knowledge, kid-to-grandpa) — the acceptance lens on EVERY UI feature + its 3 proxy gates
+  (click/tooltip/palette-shortcuts completeness). Read it FIRST for any UI work.
+- **THE PLAN:** `project.progress.md` → "FULL-POWER BLOCK" (priority-ordered) + "PANE SUBSTRATE" (the
+  deferred editor→pane refactor) are the live queues.
+- **RECENTLY LANDED (this session):** unwired-capability gate + Definition of Done · all 8 dead settings ·
+  DiffView P1 mount (2cced35) · TIER-0 merge-gate (behavioral-contracts + smokes + settings-applied all
+  hard-blocking; `bash scripts/merge-gate.sh` / `bun run gate`) · focus-on-open scroll fix (9f66bbd, root
+  cause = over-tracking $watchEffect) + open-then-scroll contract · Ctrl+F/H find/replace (713623f) ·
+  Ctrl+P quick-open (b84e700) · scroll-momentum→Momentum Static (6a67412) · map-coherence gate (c9aff34) ·
+  builddoc/naming/npm-scripts (e871b7b) · NORTH STAR encoded (3451999).
+- **ADOPTION QUEUE (coordinator holds these worktrees; each = merge→wire→driving-smoke in ONE commit under
+  the merge-gate; all sanity-passed by the coordinator, NEW isolated files, zero conflict):**
+  - `conductor-ripgrep` → src/modules/search/RipgrepSearch.ts — the Search view (find-in-files).
+  - `conductor-activitybar` → src/modules/ui/ActivityBar.ts (+test, 5 pass) — icon strip; onSelectView
+    callback + activeView input. I copied it once + removed it (unwired would fail the gate) — RE-ADOPT +
+    WIRE (mount far-left, switch sidebar view, Ctrl+Shift+E/F/G + click, active highlight, persist last
+    view to a new setting + applied-effect test). sidebarView is currently 'files'|'git' (Workspace.ts:171)
+    — extend to map explorer→files / sourceControl→git / search→Search view / settings→toggle Ctrl+,.
+  - `conductor-shortcuts` → src/modules/ui/ShortcutsView.ts (+test, 5 pass) — consumes the DEAD
+    KeybindingRegistry.effectiveBindings(); wire F1/Ctrl+/ open + Esc + a status-bar "?" button.
+  - `conductor-quickopen` / `conductor-findbuffer` / `conductor-mapgate` / `conductor-builddoc` — ALREADY
+    ADOPTED (committed); coordinator can remove those worktrees.
+- **INTEGRATION PATTERNS proven this session (reuse):** overlay modal = command-palette pattern (absolute
+  BoxRenderable zIndex 100, root.add, visible-toggle, content projected in update(), a dedicated onKey
+  context + isTypedCharacter). See FindBar (find bar) + QuickOpen (Ctrl+P) in RootView/Bootstrap. The
+  clickable-buttons pattern = the tab-arrow "single geometry source for render + hit-test".
+- **SANDBOX GOTCHAS (env, not code):** `rg` is a shell-function shim here (no real ripgrep) → QuickOpen has
+  a git ls-files fallback; fs.watch throws EMFILE (inotify exhausted) → GitWatcher tests skipIf. Both work
+  on the user's real machine. Kill stray tmux sessions if EMFILE bites (`tmux kill-server`).
+
 ## MUST RE-READ ON RESUME (in order — highest signal first)
 0. `project.conventions.md` — THE operative convention set (deterministic self-handoff: load this
    BEFORE anything; every turn status carries `conventions @ <git hash of the file>`).

@@ -63,3 +63,19 @@ commits, so a merge would clobber. RULE: while the main loop owns + actively edi
 delegate settings/wiring work that lives near it; delegate only genuinely DISJOINT leaf modules, and
 prefer Fable subagents (which honor scope better) over codex for anything requiring judgment about what
 NOT to touch. This reinforces the pre-existing "SERIALIZE RootView, PARALLELIZE disjoint" rule.
+
+## Full-power checkpoint @ HEAD 3451999 (2026-07-21)
+
+- **0 workers of mine in flight.** This session I did NOT spawn codex/Fable workers — the capabilities
+  came from the COORDINATOR's conductor-* worktrees (built cold-start, sanity-passed, handed to me to
+  adopt). Nothing of mine to reconcile/orphan.
+- **Coordinator's conductor-* branches** (adopt = merge→wire→driving-smoke in ONE commit under merge-gate):
+  ADOPTED (committed, worktree removable): conductor-quickopen (b84e700), conductor-findbuffer (713623f),
+  conductor-mapgate (c9aff34), conductor-builddoc (e871b7b). READY, NOT yet adopted: conductor-ripgrep
+  (Search view), conductor-activitybar (ActivityBar, 5 tests), conductor-shortcuts (ShortcutsView, 5 tests).
+- **On resume:** adopt the ready branches per project.handoff.md ADOPTION QUEUE; delegation rules unchanged
+  (delegates never commit; main reviews+merges; codex never trusted with deletions; a worker's task whose
+  natural solution touches actively-edited RootView must NOT be delegated — SERIALIZE RootView, mine).
+- **When to fan out (per the coordinator's full-power directive):** the DISJOINT judgment-heavy work — the
+  5 invariants.md bootstraps (kernel/storage/syntax/theme/commands, Fable workers, gate via
+  check_invariants.mjs) — is the prime fan-out candidate; RootView wiring stays serial/mine.
