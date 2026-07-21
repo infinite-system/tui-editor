@@ -189,7 +189,7 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   keybindings · destructive ops need confirmation · authoritative-channel verification · delegation
   = full-parity packet, worktree/disjoint isolation, IBR+invariants embedded.
 
-## RESUME HERE (frontier as of commit 23616f9)
+## RESUME HERE (frontier as of commit 1afc574)
 - **READ FIRST on resume/cold-start:** `project.requirements.md` (persistent cross-cutting brief) →
   `project.conventions.md` → this file (USER PIPELINE below) → `project.invariants.md` → in-flight contracts.
 - **State:** ~300 tests pass · tsc green · checker 0 · conventions-gate PASS (hard-blocks tsc) · smokes
@@ -199,19 +199,21 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   draggable-divider model — NOT yet given a bar renderable / hit-test / Settings persistence),
   `src/modules/settings/` (Settings store + SettingsPanel — panel edits+persists but scroll-physics
   values are NOT yet read live by the momentum engine).
+- **DONE since last anchor:** Cmd+Left/Right disambiguation (raw ^A/^E vs Kitty Ctrl+A — corrected the
+  2da0384 false-green, 9694579) · Settings LIVE-APPLY for scroll physics (momentum reads the store,
+  1afc574 — E's ceiling is now the settings default) · single-glyph checkbox (23616f9).
 - **NEXT (coordinator priority, RootView integration = mine; delegate isolated builds to codex/Fable):**
-  1. Scrollbars on EVERY overflowing pane BOTH axes + unify thickness (avg constant) + tree scrollbar —
-     reuse ScrollbarGeometry, feed each pane's scrollTop/scrollLeft+viewport.
-  2. Splitter RootView integration — mount a draggable bar for the sidebar width + git changes/log
-     divider using SplitterModel; make SIDEBAR_WIDTH / gitSplitRatio dynamic; persist via onSizeChange
-     → Settings (settings.sidebarWidth / settings.gitSplitRatio).
-  3. Diff-view integration — mount DiffView as a diff TAB (replacing the transient diffEditor); wire
-     open-full-editor + jump-next/prev + the N-of-M counter from the DiffView callbacks.
-  4. Settings LIVE-APPLY — momentum reads settings.verticalFlingCeiling/scrollAccelGain/scrollFriction
-     (migrate E's VERTICAL_MOMENTUM constant to the settings default the panel overrides live); word-wrap
-     / theme / scrollbar-thickness / glyph-mode read the store.
-  5. Low-pri: symlink node_modules ignore-robustness (watcher-skip + panel-hide name-match .git/node_modules
-     whether dir or symlink). Fast-scroll modifier [F] mechanism (awaiting user's confirmed key).
+  1. Splitter RootView integration — mount a draggable bar for the sidebar width + git changes/log
+     divider using SplitterModel (merged, src/modules/layout/); make SIDEBAR_WIDTH / gitSplitRatio
+     dynamic; persist via onSizeChange → Settings (settings.sidebarWidth / settings.gitSplitRatio,
+     which are ALREADY in the store + panel).
+  2. Diff-view integration — mount DiffView (merged, src/modules/diff/) as a diff TAB (replacing the
+     transient diffEditor); wire open-full-editor + jump-next/prev + the N-of-M counter callbacks.
+  3. Scrollbars on EVERY overflowing pane BOTH axes + unify thickness (avg constant, = settings
+     scrollbarThickness) + tree scrollbar — reuse ScrollbarGeometry.
+  4. Settings live-apply TAIL — word-wrap / theme / scrollbar-thickness / glyph-mode read the store
+     (scroll physics already live; these renderers still read their own state).
+  5. Low-pri: symlink node_modules ignore-robustness; fast-scroll modifier [F] (awaiting user's key).
   6. FOLLOW-UP: keyboard nav inside the tab-count dropdown (click works; Down/Enter doesn't activate).
 - **State:** 269 tests pass · tsc green · checker 0 · conventions-gate PASS (now hard-blocks tsc-fail) ·
   smoke-editor + smoke-tabs + smoke-tree-scroll ALL-PASS (incl. idle frame-delta==0). `conventions @ f41a241`.
