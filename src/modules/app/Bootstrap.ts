@@ -145,6 +145,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     void gitPanel.changesScrollTop.value;
     void gitPanel.changesHovered.value;
     void gitPanel.logHovered.value;
+    void gitPanel.confirmDiscard.value;
     void gitPanel.splitRatio.value;
     void commands.open.value;
     void commands.query.value;
@@ -309,6 +310,13 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       return;
     }
 
+    // Destructive-confirm overlay is MODAL: y confirms, anything else cancels.
+    if (workspace.gitPanel.confirmDiscard.value) {
+      if (key.name === 'y') void workspace.confirmDiscard();
+      else workspace.cancelDiscard();
+      return;
+    }
+
     // Ctrl+P opens the palette from anywhere.
     if (key.name === 'p' && key.ctrl) {
       commands.openPalette();
@@ -348,6 +356,12 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
         const git = workspace.git.value;
         return git ? buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value) : [];
       })();
+      // Normalize: the selected changes row must be a FILE row (the index starts on a header on
+      // entry, and rows shift as staging moves files between sections).
+      if (changeRows[gitPanel.changesIndex.value]?.kind !== 'file') {
+        const firstFile = nextFileRow(changeRows, -1, 1);
+        if (firstFile >= 0) gitPanel.changesIndex.value = firstFile;
+      }
       const moveChanges = (direction: 1 | -1): void => {
         const next = nextFileRow(changeRows, gitPanel.changesIndex.value, direction);
         if (next >= 0) {
@@ -364,6 +378,8 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
           case 'space':
             void workspace.toggleStageAtRow(gitPanel.changesIndex.value);
             break;
+          case 'o': workspace.openChangeAtRow(gitPanel.changesIndex.value); break;
+          case 'd': workspace.requestDiscardAtRow(gitPanel.changesIndex.value); break;
           case 'escape': workspace.focusFiles(); break;
           default: break;
         }

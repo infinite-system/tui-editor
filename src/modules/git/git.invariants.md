@@ -157,3 +157,33 @@ storm accumulating one timer per event.
 **Status:** provisional
 
 **Last refined:** 2026-07-21
+
+### Destructive working-tree operations require confirmation
+
+**Invariant:** If an operation destroys uncommitted work (discard a file's changes, clean an
+untracked file), then it executes only after an EXPLICIT user confirmation distinct from the
+triggering gesture — never on a single click or keypress.
+
+**Scope:** every working-tree-destructive git action the UI offers (discard; future: branch
+force-ops). Staging/unstaging are NOT destructive (fully reversible) and stay one-gesture.
+
+**Mechanism:** the trigger (button/key) only ARMS `gitPanel.confirmDiscard`; a modal y/N overlay
+renders; only 'y' runs `GitCommands.discard` (untracked → clean -f; staged → restore
+--staged --worktree --source=HEAD; unstaged → restore); any other key cancels. Kin of the
+delegation rule that deletions never ride in an automated pass.
+
+**Generates:** safe exploration of the git panel; a reusable confirm pattern for later destructive
+actions.
+
+**Evidence:** `Workspace.requestDiscardAtRow` (arms) vs `Workspace.confirmDiscard` (executes);
+Bootstrap's modal intercept; live-verified n-cancels / y-discards on a scratch repository.
+
+**Impossible if true:** a single gesture that irreversibly destroys uncommitted work; a discard
+path that bypasses the overlay.
+
+**Verification:** tmux — 'd' → overlay visible, 'n' → file unchanged; 'y' → file restored (scratch
+repo only).
+
+**Status:** provisional
+
+**Last refined:** 2026-07-21

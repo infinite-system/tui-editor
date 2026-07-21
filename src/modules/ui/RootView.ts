@@ -157,6 +157,25 @@ export function buildRootView(
   commandPalette.add(commandPaletteList);
   root.add(commandPalette);
 
+  // Destructive-action confirmation (discard) — a small modal strip; y confirms, anything else
+  // cancels. invariant: Destructive working-tree operations require confirmation (src/modules/git/git.invariants.md)
+  const confirmBox = new BoxRenderable(renderer, {
+    id: 'confirm-discard',
+    position: 'absolute',
+    left: '20%',
+    top: 4,
+    width: '60%',
+    border: true,
+    borderStyle: 'rounded',
+    title: 'Confirm',
+    visible: false,
+    zIndex: 120,
+  });
+  const confirmText = new TextRenderable(renderer, { id: 'confirm-discard-text', content: '' });
+  confirmBox.add(confirmText);
+  root.add(confirmBox);
+
+
   // Thin draggable scrollbars (OpenTUI ScrollBar: built-in draggable thumb + onChange). Each bar
   // is a 1-cell strip INSIDE its pane's border; onChange writes the SAME model offset the wheel
   // and keyboard write (One-Writer: the newest input wins; momentum halts on thumb drags).
@@ -518,7 +537,17 @@ export function buildRootView(
         const selected = active && gitPanel.region.value === 'changes' && rowIndex === gitPanel.changesIndex.value;
         const hovered = rowIndex === gitPanel.changesHovered.value;
         const background = selected ? palette.selection : hovered ? palette.cursorLine : null;
-        pushRow(`  ${row.glyph} ${row.path}`, glyphColor(row.glyph), { background });
+        // ` [x] M path…            o d ±` — checkbox = staging state (click toggles); buttons
+        // (open / discard / stage-unstage) appear on hover/selection, right-aligned.
+        const checkbox = row.bucket === 'staged' ? '[x]' : '[ ]';
+        let label = ` ${checkbox} ${row.glyph} ${row.path}`;
+        if (selected || hovered) {
+          const buttons = ` o  d  ${row.bucket === 'staged' ? '-' : '+'}`;
+          const pathWidth = innerWidth - buttons.length - 1;
+          label = label.length > pathWidth ? label.slice(0, pathWidth) : label.padEnd(pathWidth, ' ');
+          label += buttons;
+        }
+        pushRow(label, glyphColor(row.glyph), { background });
       }
     });
     const changesRendered = Math.min(changeRows.length - changesTop, changesVisible);
@@ -563,6 +592,8 @@ export function buildRootView(
       parts.push(`${editor.document.lineCount} lines`);
     }
     parts.push(workspace.focus.value === 'files' ? '[Files]' : '[Editor]');
+    if (workspace.focus.value === 'git')
+      parts.push('checkbox/Space stage · row/o open · d discard');
     if (app.copyNotice.value) parts.push(app.copyNotice.value);
     parts.push(
       app.quitChordArmed.value ? 'Ctrl+X armed — Ctrl+C quits' : 'Ctrl+Q/F10 quit',
@@ -619,6 +650,16 @@ export function buildRootView(
             .join('\n')
         : '  (no matching commands)';
       commandPaletteList.fg = palette.dim;
+    }
+
+    const pendingDiscard = workspace.gitPanel.confirmDiscard.value;
+    confirmBox.visible = pendingDiscard !== null;
+    if (pendingDiscard) {
+      confirmBox.borderColor = palette.deleted;
+      confirmBox.titleColor = palette.deleted;
+      confirmBox.backgroundColor = palette.panel;
+      confirmText.content = ` Discard changes to ${pendingDiscard.path}?  [y/N]`;
+      confirmText.fg = palette.fg;
     }
 
     syncScrollbars();
@@ -861,10 +902,25 @@ export function buildRootView(
       if (!hit) return;
       if (hit.region === 'changes') {
         const rows = gitChangeRowsNow();
-        if (rows[hit.index]?.kind !== 'file') return;
+        const row = rows[hit.index];
+        if (row?.kind !== 'file') return;
         workspace.gitPanel.region.value = 'changes';
+        const wasCurrent = workspace.gitPanel.changesIndex.value === hit.index;
         workspace.gitPanel.changesIndex.value = hit.index;
-        void workspace.toggleStageAtRow(hit.index); // single click selects AND stages/unstages
+        const innerWidth = SIDEBAR_WIDTH - 2;
+        const relativeX = event.x - (sidebar.x + 1);
+        const buttonsShowing = wasCurrent || workspace.gitPanel.changesHovered.value === hit.index;
+        if (relativeX >= 1 && relativeX <= 3) {
+          void workspace.toggleStageAtRow(hit.index); // the CHECKBOX is the staging control
+        } else if (buttonsShowing && relativeX >= innerWidth - 8 && relativeX <= innerWidth - 7) {
+          workspace.openChangeAtRow(hit.index); // [o]pen
+        } else if (buttonsShowing && relativeX >= innerWidth - 5 && relativeX <= innerWidth - 4) {
+          workspace.requestDiscardAtRow(hit.index); // [d]iscard — arms the y/N confirm
+        } else if (buttonsShowing && relativeX >= innerWidth - 2) {
+          void workspace.toggleStageAtRow(hit.index); // [+/-] stage/unstage
+        } else {
+          workspace.openChangeAtRow(hit.index); // row body = select + OPEN (consistent with tree)
+        }
       } else {
         workspace.gitPanel.region.value = 'log';
         workspace.gitPanel.logIndex.value = hit.index;
