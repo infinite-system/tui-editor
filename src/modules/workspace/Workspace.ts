@@ -7,6 +7,7 @@ import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
 import { FileTree } from './FileTree';
 import { Editor } from '../editor/Editor';
+import { OpenBufferSet } from './OpenBufferSet';
 import { Files } from '../system/Files';
 import { GitRepository } from '../git/GitRepository';
 import { CommitLog } from '../git/CommitLog';
@@ -25,12 +26,45 @@ class $Workspace {
   root = '';
   // invariant: Construction goes through overridable seams (project.invariants.md)
   tree = this.createTree();
-  editor = this.createEditor();
+  // The set of open editor buffers behind the tab bar (item 10a): opening a file ADDS or FOCUSES a
+  // tab, never replaces. Flyweight — only the active buffer (and any dirty background buffer) holds a
+  // live document; clean background tabs dehydrate to a light handle and rehydrate on activation.
+  buffers = this.createBufferSet();
   gitPanel = this.createGitPanel();
+  // A persistent, REUSED editor for read-only git diffs (drill-down). A diff is transient and does
+  // NOT become a file tab (editable side-by-side diff is item 14), so it never clobbers a tab.
+  protected diffEditor = this.createEditor();
+  // The empty-state editor shown when no tab is open (hasDocument stays false).
+  protected emptyEditor = this.createEditor();
 
   protected createTree() { return new FileTree.Class(); }
   protected createEditor() { return new Editor.Class(); }
   protected createGitPanel() { return new GitPanel.Class(); }
+  protected createBufferSet() {
+    return new OpenBufferSet.Class({
+      // The set only ever holds Editors (this seam is the sole creator), so `editor` below can treat
+      // activeBuffer as an Editor.
+      createBuffer: (path) => {
+        const editor = this.createEditor();
+        editor.openFile(path);
+        return editor;
+      },
+      disposeBuffer: (buffer) => (buffer as Editor.Instance).dispose(),
+    });
+  }
+
+  /** True while a read-only git diff is displayed in the editor pane (over the tabs). */
+  get showingDiff() {
+    return ref(false);
+  }
+
+  /** The editor currently VISIBLE in the pane — a git diff while drilling, else the active tab's
+   *  buffer, else the empty-state editor. All movement/render/edit target this one. */
+  get editor(): Editor.Instance {
+    if (this.showingDiff.value) return this.diffEditor;
+    // Safe cast: createBufferSet's seam is the only buffer creator and always makes an Editor.
+    return (this.buffers.activeBuffer as Editor.Instance | null) ?? this.emptyEditor;
+  }
   // Git repository + commit log need the root, so they are created in open() (not field-init).
   protected createGit(root: string) { return new GitRepository.Class(root); }
   protected createCommitLog(root: string) { return new CommitLog.Class(root); }
@@ -181,7 +215,8 @@ class $Workspace {
     let result = await GitCommands.Class.diffCommitFile(this.root, sha, filePath);
     if (result.code !== 0) result = await GitCommands.Class.showCommitFile(this.root, sha, filePath);
     const diffText = result.stdout.trimEnd() || '(no differences)';
-    this.editor.openDiff(`${filePath} @ ${sha.slice(0, 7)}`, diffText);
+    this.diffEditor.openDiff(`${filePath} @ ${sha.slice(0, 7)}`, diffText);
+    this.showingDiff.value = true; // the pane shows the diff OVER the tabs (transient view)
     this.focus.value = 'editor'; // keyboard to the diff; sidebarView stays 'git'
   }
 
@@ -301,7 +336,8 @@ class $Workspace {
     if (row?.kind !== 'file') return;
     const result = await GitCommands.Class.diffFile(this.root, row.path, row.bucket);
     const diffText = result.stdout.trimEnd() || '(no differences)';
-    this.editor.openDiff(row.path, diffText);
+    this.diffEditor.openDiff(row.path, diffText);
+    this.showingDiff.value = true; // the pane shows the diff OVER the tabs (transient view)
     this.focus.value = 'editor'; // keyboard to the diff; sidebarView stays 'git'
   }
 
@@ -371,16 +407,61 @@ class $Workspace {
     this.gitPanel.confirmDiscard.value = null;
   }
 
-  /** Activate the current tree selection: open a file (and focus editor) or toggle a dir. */
+  /** Activate the current tree selection: open a file (adds/focuses a tab) or toggle a dir. */
   activate(): { opened?: string } {
     this.haltTreeScroll();
     const result = this.tree.activateSelected();
     if (result && 'openFile' in result) {
-      this.editor.openFile(result.openFile);
+      this.openFileInTab(result.openFile);
       this.focus.value = 'editor';
       return { opened: result.openFile };
     }
     return {};
+  }
+
+  // --- editor buffer tabs (item 10a) ---------------------------------------
+  // Opening a file ADDS or FOCUSES a tab (never replaces). The buffer set owns the flyweight/dispose
+  // discipline; Workspace just leaves diff view and keeps the active buffer's dirty flag fresh.
+
+  /** Open `path` as a tab: focus its tab if already open, else add a new active one. */
+  openFileInTab(path: string): void {
+    this.showingDiff.value = false; // a real file replaces the transient diff view
+    this.buffers.open(path);
+  }
+
+  /** Activate an already-open tab by index (tab click / cycle). */
+  activateTab(index: number): void {
+    this.showingDiff.value = false;
+    this.buffers.activate(index);
+    this.focus.value = 'editor';
+  }
+
+  /** Cycle tabs by `delta`, wrapping (Ctrl+Tab / Ctrl+PageUp-Down). */
+  cycleTab(delta: number): void {
+    if (this.buffers.count === 0) return;
+    this.showingDiff.value = false;
+    this.buffers.cycle(delta);
+    this.focus.value = 'editor';
+  }
+
+  /** Whether closing tab `index` needs a dirty-discard confirmation first. */
+  tabNeedsCloseConfirm(index: number): boolean {
+    return this.buffers.tabs()[index]?.dirty ?? false;
+  }
+
+  /** Close tab `index`, fully disposing its buffer (document/undo/syntax). Caller confirms if dirty. */
+  closeTab(index: number): void {
+    this.buffers.close(index);
+    if (this.buffers.count === 0) this.focus.value = 'files';
+  }
+
+  /** Close the ACTIVE tab (Ctrl+W). Returns true if it needs a dirty-discard confirmation first. */
+  closeActiveTab(): boolean {
+    const index = this.buffers.activeIndex.value;
+    if (index < 0) return false;
+    if (this.tabNeedsCloseConfirm(index)) return true;
+    this.closeTab(index);
+    return false;
   }
 }
 

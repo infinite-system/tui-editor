@@ -89,6 +89,42 @@ class $Editor {
     this.undo.clear();
   }
 
+  // --- LiveBuffer surface (the OpenBufferSet flyweight drives these) --------
+  // A clean background tab is dehydrated to a light position handle and its document/undo/syntax are
+  // released; on re-activation the set recreates the buffer and restores the handle. A DIRTY tab is
+  // never dehydrated, so its unsaved edits survive.
+
+  /** Dirty = the document has unsaved edits (drives the tab's dirty dot + the never-dehydrate rule). */
+  get dirty(): boolean {
+    return this.document.dirty.value;
+  }
+
+  /** Capture the resumable cursor + scroll position so this buffer can be dehydrated. */
+  snapshotPosition(): { cursorLine: number; cursorColumn: number; scrollTop: number; scrollLeft: number } {
+    return {
+      cursorLine: this.cursor.line.value,
+      cursorColumn: this.cursor.col.value,
+      scrollTop: this.viewport.scrollTop.value,
+      scrollLeft: this.viewport.scrollLeft.value,
+    };
+  }
+
+  /** Restore a snapshot after rehydration (the file was just reloaded into a fresh document). */
+  restorePosition(position: { cursorLine: number; cursorColumn: number; scrollTop: number; scrollLeft: number }): void {
+    if (!this.hasDocument.value) return;
+    this.placeCursor(position.cursorLine, position.cursorColumn);
+    this.viewport.scrollTop.value = position.scrollTop;
+    this.viewport.scrollLeft.value = position.scrollLeft;
+  }
+
+  /** Release the owned document text + undo history so a closed/dehydrated tab frees memory promptly
+   *  (the Editor holds no external listeners/timers, so dropping these + the reference is complete). */
+  dispose(): void {
+    this.undo.clear();
+    this.document.loadFromText('', '');
+    this.hasDocument.value = false;
+  }
+
   /** Open a VIRTUAL read-only diff document (git panel drill-in). */
   openDiff(displayPath: string, diffText: string): void {
     this.document.loadFromText(diffText, `${displayPath}.diff`);
