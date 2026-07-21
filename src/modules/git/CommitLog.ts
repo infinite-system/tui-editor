@@ -9,7 +9,7 @@ import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
 import { GitCommands } from './GitCommands';
 import { parseLog, type CommitRecord } from './git.parsers';
-import { missingRanges, evictable } from './git.window';
+import { GitWindow } from './git.window';
 
 export type CommitPageFetch = (skip: number, limit: number) => Promise<CommitRecord[]>;
 
@@ -73,7 +73,7 @@ class $CommitLog {
    */
   async ensureRange(start: number, count: number, keepMargin = count): Promise<void> {
     const loadToken = ++this.loadId;
-    const gaps = missingRanges(new Set(this.cache.value.keys()), start, count);
+    const gaps = GitWindow.Class.missingRanges(new Set(this.cache.value.keys()), start, count);
     for (const { offset, length } of gaps) {
       const page = await this.fetchPage(offset, length);
       if (loadToken !== this.loadId) return; // superseded by a newer ensureRange — discard
@@ -88,7 +88,7 @@ class $CommitLog {
   private evict(start: number, count: number, margin: number): void {
     const keepStart = Math.max(0, start - margin);
     const keepCount = count + margin * 2;
-    const drop = evictable(this.cache.value.keys(), keepStart, keepCount);
+    const drop = GitWindow.Class.evictable(this.cache.value.keys(), keepStart, keepCount);
     if (drop.length === 0) return;
     const next = new Map(this.cache.value);
     for (const index of drop) next.delete(index);
