@@ -11,6 +11,7 @@ import {
   StyledText,
   fg,
   bg,
+  bold,
   type TextChunk,
   type CliRenderer,
 } from '@opentui/core';
@@ -23,6 +24,7 @@ import { highlightLine, type Role } from '../syntax/Highlighter';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { displayColumn, lineWidth, graphemeAtDisplayColumn, graphemeToU16 } from '../editor/editor.coordinates';
 import { SelectableText } from './SelectableText';
+import { buildChangeRows, nextFileRow } from '../git/git.rows';
 import { Logging } from '../system/Logging';
 
 function roleColor(role: Role, palette: Palette): string {
@@ -292,13 +294,32 @@ export function buildRootView(
   // VIRTUALIZED commit log (only the visible window is materialized, via CommitLog.rows). Split by
   // gitPanel.splitRatio. Keyboard-driven for now; mouse + drill-down + drag layer on next.
   // invariant: Cost tracks the actively observed set (project.invariants.md)
+  // Layout geometry of the last-rendered git panel, for mouse hit-testing — the renderer writes
+  // it, the click/hover/wheel handlers read it, so both always agree on what is where.
+  let gitPanelGeometry = {
+    changesTop: 0, // first screen row (sidebar-relative, border-inclusive) of the changes list
+    changesRows: 0, // visible change rows
+    dividerRow: 0,
+    logTop: 0,
+    logRows: 0,
+  };
+
   function renderGitPanel(): StyledText {
     const palette = readPalette();
-    const clip = (text: string) => (text.length > SIDEBAR_WIDTH - 2 ? text.slice(0, SIDEBAR_WIDTH - 2) : text);
+    const innerWidth = SIDEBAR_WIDTH - 2;
     const chunks: TextChunk[] = [];
-    const push = (text: string, color: string, newline = true) => {
-      chunks.push(fg(color)(clip(text)));
-      if (newline) chunks.push(fg(palette.fg)('\n'));
+    const pushRow = (
+      text: string,
+      color: string,
+      options: { background?: string | null; bold?: boolean; newline?: boolean } = {},
+    ) => {
+      let label = text.length > innerWidth ? text.slice(0, innerWidth) : text;
+      label = label.padEnd(innerWidth, ' ');
+      let chunk = fg(color)(label);
+      if (options.bold) chunk = bold(chunk);
+      if (options.background) chunk = bg(options.background)(chunk);
+      chunks.push(chunk);
+      if (options.newline !== false) chunks.push(fg(palette.fg)('\n'));
     };
     const git = workspace.git.value;
     const gitPanel = workspace.gitPanel;
@@ -306,26 +327,39 @@ export function buildRootView(
     if (!git) return new StyledText([fg(palette.dim)('  no repository')]);
 
     const bodyHeight = Math.max(1, (sidebar.height as number) - 2);
-    push(` ${git.branch.value || '(no branch)'}  ${git.head.value.slice(0, 7)}`, palette.accent);
+    pushRow(` ${git.branch.value || '(no branch)'}  ${git.head.value.slice(0, 7)}`, palette.accent);
     if (git.error.value) {
-      push(`  ${git.error.value}`, palette.number);
+      pushRow(`  ${git.error.value}`, palette.deleted);
       return new StyledText(chunks);
     }
 
-    // Changes region (top). Rows: staged (green), unstaged (yellow), untracked (dim).
-    const rows: { label: string; color: string }[] = [];
-    for (const file of git.staged.value) rows.push({ label: `+ ${file.xy.trim() || 'M'} ${file.path}`, color: palette.string });
-    for (const file of git.unstaged.value) rows.push({ label: `  ${file.xy.trim() || 'M'} ${file.path}`, color: palette.number });
-    for (const file of git.untracked.value) rows.push({ label: `? ${file.path}`, color: palette.dim });
+    // Changes region (top): headers + glyphed file rows from the SHARED row model, windowed.
+    const changeRows = buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
     const topHeight = Math.max(2, Math.floor(bodyHeight * gitPanel.splitRatio.value));
-    if (rows.length === 0) push('  (working tree clean)', palette.dim);
-    else
-      rows.slice(0, topHeight - 1).forEach((row, index) => {
-        const marker = active && gitPanel.region.value === 'changes' && index === gitPanel.changesIndex.value ? '›' : ' ';
-        push(`${marker}${row.label}`, row.color);
-      });
+    const changesVisible = topHeight - 1;
+    const changesTop = Math.min(
+      gitPanel.changesScrollTop.value,
+      Math.max(0, changeRows.length - changesVisible),
+    );
+    const glyphColor = (glyph: string): string =>
+      glyph === 'A' ? palette.added : glyph === 'D' ? palette.deleted : glyph === '?' ? palette.dim : palette.modified;
+    changeRows.slice(changesTop, changesTop + changesVisible).forEach((row, visibleIndex) => {
+      const rowIndex = changesTop + visibleIndex;
+      if (row.kind === 'header') {
+        pushRow(` ${row.label} (${row.count})`, palette.dim, { bold: true });
+      } else if (row.kind === 'placeholder') {
+        pushRow(`  ${row.label}`, palette.dim);
+      } else {
+        const selected = active && gitPanel.region.value === 'changes' && rowIndex === gitPanel.changesIndex.value;
+        const hovered = rowIndex === gitPanel.changesHovered.value;
+        const background = selected ? palette.selection : hovered ? palette.cursorLine : null;
+        pushRow(`  ${row.glyph} ${row.path}`, glyphColor(row.glyph), { background });
+      }
+    });
+    const changesRendered = Math.min(changeRows.length - changesTop, changesVisible);
+    for (let filler = changesRendered; filler < changesVisible; filler++) pushRow('', palette.fg);
 
-    push('─'.repeat(SIDEBAR_WIDTH - 2), palette.border);
+    pushRow('─'.repeat(innerWidth), palette.border);
 
     // Commit log region (bottom) — virtualized: only the visible window is read from the cache.
     const logHeight = Math.max(1, bodyHeight - topHeight - 1);
@@ -335,11 +369,23 @@ export function buildRootView(
       const visibleCommits = commitLog.rows(top, logHeight);
       visibleCommits.forEach((record, index) => {
         const commitIndex = top + index;
-        const marker = active && gitPanel.region.value === 'log' && commitIndex === gitPanel.logIndex.value ? '›' : ' ';
-        if (record) push(`${marker}${record.shortSha} ${record.subject}`, palette.fg, index < visibleCommits.length - 1);
-        else push(`${marker}…`, palette.dim, index < visibleCommits.length - 1);
+        const selected = active && gitPanel.region.value === 'log' && commitIndex === gitPanel.logIndex.value;
+        const hovered = commitIndex === gitPanel.logHovered.value;
+        const background = selected ? palette.selection : hovered ? palette.cursorLine : null;
+        const newline = index < visibleCommits.length - 1;
+        if (record) pushRow(` ${record.shortSha} ${record.subject}`, palette.fg, { background, newline });
+        else pushRow(' …', palette.dim, { background, newline });
       });
     }
+
+    // Geometry for the hit-testers (sidebar-relative rows; +1 = sidebar top border, +1 branch row).
+    gitPanelGeometry = {
+      changesTop,
+      changesRows: changesVisible,
+      dividerRow: 1 + 1 + changesVisible,
+      logTop: gitPanel.logScrollTop.value,
+      logRows: logHeight,
+    };
     return new StyledText(chunks);
   }
 
@@ -506,21 +552,56 @@ export function buildRootView(
   // parity holds: everything here is also reachable via arrows/Enter.
   // Hover highlight (enhancement only — selection/activation stay on click/keys). The hovered row
   // is model view-state so the frame effect repaints when it changes; cost is one marker cell.
+  // Map a sidebar-relative screen row to a git-panel target using the SAME geometry the renderer
+  // wrote (changes row / divider / log row).
+  const gitRowAt = (screenY: number): { region: 'changes' | 'log'; index: number } | null => {
+    const row = screenY - sidebar.y;
+    if (row >= 2 && row < gitPanelGeometry.dividerRow) {
+      return { region: 'changes', index: gitPanelGeometry.changesTop + (row - 2) };
+    }
+    if (row > gitPanelGeometry.dividerRow) {
+      return { region: 'log', index: gitPanelGeometry.logTop + (row - gitPanelGeometry.dividerRow - 1) };
+    }
+    return null;
+  };
+  const gitChangeRowsNow = () => {
+    const git = workspace.git.value;
+    return git ? buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value) : [];
+  };
   sidebar.onMouseMove = (event) => {
-    if (workspace.focus.value === 'git') return;
+    if (workspace.focus.value === 'git') {
+      const hit = gitRowAt(event.y);
+      const rows = gitChangeRowsNow();
+      workspace.gitPanel.changesHovered.value =
+        hit?.region === 'changes' && rows[hit.index]?.kind === 'file' ? hit.index : -1;
+      workspace.gitPanel.logHovered.value = hit?.region === 'log' ? hit.index : -1;
+      return;
+    }
     const rowIndex = treeWindowTop() + (event.y - (sidebar.y + 1));
     workspace.tree.hoveredIndex.value =
       rowIndex >= 0 && rowIndex < workspace.tree.rows.length ? rowIndex : -1;
   };
   sidebar.onMouseOut = () => {
     workspace.tree.hoveredIndex.value = -1;
+    workspace.gitPanel.changesHovered.value = -1;
+    workspace.gitPanel.logHovered.value = -1;
   };
 
   sidebar.onMouseDown = (event) => {
     if (workspace.focus.value === 'git') {
-      // Git rows get click-select with the changes-list treatment; for now the click just keeps
-      // focus on the git panel.
       workspace.focusGit();
+      const hit = gitRowAt(event.y);
+      if (!hit) return;
+      if (hit.region === 'changes') {
+        const rows = gitChangeRowsNow();
+        if (rows[hit.index]?.kind !== 'file') return;
+        workspace.gitPanel.region.value = 'changes';
+        workspace.gitPanel.changesIndex.value = hit.index;
+        void workspace.toggleStageAtRow(hit.index); // single click selects AND stages/unstages
+      } else {
+        workspace.gitPanel.region.value = 'log';
+        workspace.gitPanel.logIndex.value = hit.index;
+      }
       return;
     }
     workspace.focusFiles(); // click-to-focus

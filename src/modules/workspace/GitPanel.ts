@@ -34,6 +34,16 @@ class $GitPanel {
   get logScrollTop() {
     return ref(0);
   }
+  // Changes-list window + hover state (hover is highlight-only, never selection truth).
+  get changesScrollTop() {
+    return ref(0);
+  }
+  get changesHovered() {
+    return ref(-1);
+  }
+  get logHovered() {
+    return ref(-1);
+  }
   // Momentum state for the commit-log wheel glide (see ui/scroll-momentum).
   get logMomentum() {
     return shallowRef<ScrollMomentum>(AT_REST);

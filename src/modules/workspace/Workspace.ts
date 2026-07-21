@@ -12,6 +12,7 @@ import { GitRepository } from '../git/GitRepository';
 import { CommitLog } from '../git/CommitLog';
 import { GitPanel } from './GitPanel';
 import { addImpulse, stepMomentum, isMoving, AT_REST } from '../ui/scroll-momentum';
+import { buildChangeRows } from '../git/git.rows';
 
 export type Focus = 'files' | 'editor' | 'git';
 
@@ -98,6 +99,21 @@ class $Workspace {
   /** Halt the log glide immediately (keyboard paging / a jump — One-Writer-Per-Regime). */
   haltGitLogScroll(): void {
     this.gitPanel.logMomentum.value = AT_REST;
+  }
+
+  /**
+   * Stage/unstage the FILE row at `rowIndex` of the changes row model (headers no-op):
+   * staged → unstage; unstaged/untracked → stage. Refreshes status after.
+   */
+  async toggleStageAtRow(rowIndex: number): Promise<void> {
+    const git = this.git.value;
+    if (!git) return;
+    const rows = buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
+    const row = rows[rowIndex];
+    if (row?.kind !== 'file') return;
+    if (row.bucket === 'staged') await git.unstage([row.path]);
+    else await git.stage([row.path]);
+    await git.refresh();
   }
 
   // invariant: One writer per scroll regime per frame (src/modules/ui/ui.invariants.md)

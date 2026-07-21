@@ -16,6 +16,7 @@ import { StatusChannel } from '../system/StatusChannel';
 import { FrameProbe } from '../system/FrameProbe';
 import { ScrollPhysics } from '../ui/ScrollPhysics';
 import { Clipboard } from '../system/Clipboard';
+import { buildChangeRows, nextFileRow } from '../git/git.rows';
 import { Environment } from '../system/Environment';
 import { Logging } from '../system/Logging';
 import { dirname, join } from 'node:path';
@@ -141,6 +142,9 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     void gitPanel.changesIndex.value;
     void gitPanel.logIndex.value;
     void gitPanel.logScrollTop.value;
+    void gitPanel.changesScrollTop.value;
+    void gitPanel.changesHovered.value;
+    void gitPanel.logHovered.value;
     void gitPanel.splitRatio.value;
     void commands.open.value;
     void commands.query.value;
@@ -302,7 +306,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     if (key.name === 'g' && key.ctrl) {
       workspace.toggleGit();
       if (workspace.focus.value === 'git') {
-        workspace.gitPanel.region.value = 'log';
+        workspace.gitPanel.region.value = 'changes';
         void workspace.git.value?.refresh();
         void workspace.commitLog.value?.ensureRange(0, 50);
       }
@@ -325,13 +329,46 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
           gitPanel.logScrollTop.value = gitPanel.logIndex.value - approximateVisible + 1;
         void workspace.commitLog.value?.ensureRange(gitPanel.logScrollTop.value, 50);
       };
-      switch (key.name) {
-        case 'up': moveLog(-1); break;
-        case 'down': moveLog(1); break;
-        case 'pageup': moveLog(-10); break;
-        case 'pagedown': moveLog(10); break;
-        case 'escape': workspace.focusFiles(); break;
-        default: break;
+      // Region-aware nav with CONTINUOUS flow: Down past the last change row enters the log;
+      // Up from the top of the log returns to the changes. Enter toggles stage/unstage.
+      const changeRows = (() => {
+        const git = workspace.git.value;
+        return git ? buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value) : [];
+      })();
+      const moveChanges = (direction: 1 | -1): void => {
+        const next = nextFileRow(changeRows, gitPanel.changesIndex.value, direction);
+        if (next >= 0) {
+          gitPanel.changesIndex.value = next;
+        } else if (direction === 1) {
+          gitPanel.region.value = 'log'; // flow into the log
+        }
+      };
+      if (gitPanel.region.value === 'changes') {
+        switch (key.name) {
+          case 'up': moveChanges(-1); break;
+          case 'down': moveChanges(1); break;
+          case 'return':
+          case 'space':
+            void workspace.toggleStageAtRow(gitPanel.changesIndex.value);
+            break;
+          case 'escape': workspace.focusFiles(); break;
+          default: break;
+        }
+      } else {
+        switch (key.name) {
+          case 'up':
+            if (gitPanel.logIndex.value === 0) {
+              gitPanel.region.value = 'changes'; // flow back up into the changes
+              const last = nextFileRow(changeRows, changeRows.length, -1);
+              if (last >= 0) gitPanel.changesIndex.value = last;
+            } else moveLog(-1);
+            break;
+          case 'down': moveLog(1); break;
+          case 'pageup': moveLog(-10); break;
+          case 'pagedown': moveLog(10); break;
+          case 'escape': workspace.focusFiles(); break;
+          default: break;
+        }
       }
     } else if (focus === 'files') {
       switch (key.name) {
