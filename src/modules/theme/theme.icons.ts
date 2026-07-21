@@ -1,5 +1,6 @@
 // File-type icon sets as swappable data, each level of the glyph fallback ladder.
 // invariant: Appearance is data with a capability fallback (project.invariants.md)
+import { Static } from '../system/Static';
 import type { GlyphLevel } from './TerminalCapabilities';
 
 export interface IconSet {
@@ -48,15 +49,25 @@ const SETS: Record<GlyphLevel, IconSet> = {
   ascii: ASCII,
 };
 
-export function iconSetFor(level: GlyphLevel): IconSet {
+function iconSetForImplementation(level: GlyphLevel): IconSet {
   return SETS[level];
 }
 
 /** Resolve an icon for a filename against a set (extension keyed, with folder/file default). */
-export function iconFor(set: IconSet, name: string, isDirectory: boolean, open = false): string {
+function iconForImplementation(set: IconSet, name: string, isDirectory: boolean, open = false): string {
   if (isDirectory) return open ? set.folderOpen : set.folderClosed;
   const dotIndex = name.lastIndexOf('.');
   const extension = dotIndex >= 0 ? name.slice(dotIndex + 1).toLowerCase() : '';
   if (name === '.gitignore') return set.ext.git ?? set.file;
   return set.ext[extension] ?? set.file;
+}
+
+class $ThemeIcons {
+  static iconSetFor = iconSetForImplementation;
+  static iconFor = iconForImplementation;
+}
+
+export namespace ThemeIcons {
+  export const $Class = $ThemeIcons;
+  export const Class = Static($ThemeIcons);
 }

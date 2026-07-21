@@ -1,6 +1,6 @@
 import { test, expect } from 'bun:test';
 import { DARK, quantizePalette } from '../theme.palettes';
-import { iconSetFor, iconFor } from '../theme.icons';
+import { ThemeIcons } from '../theme.icons';
 
 test('truecolor quantization is identity', () => {
   const palette = quantizePalette(DARK, 'truecolor');
@@ -28,15 +28,15 @@ test('256 quantization keeps hex shape', () => {
 });
 
 test('icon fallback ladder: nerd has glyphs, ascii uses markers', () => {
-  const nerd = iconSetFor('nerd');
-  const ascii = iconSetFor('ascii');
-  expect(iconFor(nerd, 'x.ts', false).length).toBeGreaterThan(0);
-  expect(iconFor(ascii, 'sub', true, false)).toBe('+');
-  expect(iconFor(ascii, 'sub', true, true)).toBe('-');
+  const nerd = ThemeIcons.Class.iconSetFor('nerd');
+  const ascii = ThemeIcons.Class.iconSetFor('ascii');
+  expect(ThemeIcons.Class.iconFor(nerd, 'x.ts', false).length).toBeGreaterThan(0);
+  expect(ThemeIcons.Class.iconFor(ascii, 'sub', true, false)).toBe('+');
+  expect(ThemeIcons.Class.iconFor(ascii, 'sub', true, true)).toBe('-');
 });
 
 test('unicode icon set resolves known extension and falls back for unknown', () => {
-  const unicodeSet = iconSetFor('unicode');
-  expect(iconFor(unicodeSet, 'main.ts', false)).toBe('◆');
-  expect(iconFor(unicodeSet, 'weird.zzz', false)).toBe(unicodeSet.file);
+  const unicodeSet = ThemeIcons.Class.iconSetFor('unicode');
+  expect(ThemeIcons.Class.iconFor(unicodeSet, 'main.ts', false)).toBe('◆');
+  expect(ThemeIcons.Class.iconFor(unicodeSet, 'weird.zzz', false)).toBe(unicodeSet.file);
 });

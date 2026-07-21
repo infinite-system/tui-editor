@@ -6,7 +6,7 @@ import { Reactive } from 'ivue';
 import { ref } from 'vue';
 import { TerminalCapabilities, type ColorDepth, type GlyphLevel } from './TerminalCapabilities';
 import { PALETTES, DARK, quantizePalette, type Palette } from './theme.palettes';
-import { iconSetFor, iconFor, type IconSet } from './theme.icons';
+import { ThemeIcons, type IconSet } from './theme.icons';
 
 class $Theme {
   get paletteName() {
@@ -25,11 +25,11 @@ class $Theme {
     return quantizePalette(base, this.colorDepth.value);
   }
   get icons(): IconSet {
-    return iconSetFor(this.glyphLevel.value);
+    return ThemeIcons.Class.iconSetFor(this.glyphLevel.value);
   }
 
   icon(name: string, isDir: boolean, open = false): string {
-    return iconFor(this.icons, name, isDir, open);
+    return ThemeIcons.Class.iconFor(this.icons, name, isDir, open);
   }
 
   setPalette(name: string): void {
