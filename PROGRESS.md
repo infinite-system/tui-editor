@@ -110,34 +110,43 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   keybindings · destructive ops need confirmation · authoritative-channel verification · delegation
   = full-parity packet, worktree/disjoint isolation, IBR+invariants embedded.
 
-## RESUME HERE (frontier as of commit 5984766)
-- **State:** 11 module contracts · 136 tests pass · tsc green · checker 0 problems · smoke ALL-PASS
-  (20 assertions incl. caret-cell, no-wrap gutter, drag-select persistence, copy, tree-click, hover).
-- **HUMAN-QA BATCH COMPLETE (all committed):** caret off-by-one (1-based ANSI + layout-anchored,
-  bc06ee8) · wrap-off root cause + right-arrow-opens (80e4c2c) · selection persistence + Ctrl+C
-  (one-writer mouse->model, d23dca7) · tree clicks + click-to-focus (966fc8d) · goal-column
-  DISPLAY-preservation (e83d89d) · hover highlighting (c0b50b4). De-abbreviation pass landed
-  (7254c3c+0a0ea67); naming convention binding (full names, no abbreviations, ALL code).
-- **NEXT (queue):**
-  1. **KEYBINDINGS COMPLETION (contract + registry landed at f5c2d6d):** keybindings.defaults.ts
-     (ALL current bindings as data incl the quit chord + git o/d/y-N modal), mac overlay
-     (Option word-jumps incl ESC-b/f forms, Cmd via terminal translations + kitty super aliases,
-     enable useKittyKeyboard, graceful degradation), Bootstrap dissolution (onKey -> resolve ->
-     action-handler map; modal contexts palette/confirm as contexts), resolver+floor tests, tmux
-     sequence tests, every existing shortcut re-verified via the registry (smoke must stay
-     ALL-PASS), palette hints from effectiveBindings(). Then a FULLER Claude review panel on it.
-  2. Commit->files->diff drill-down (GitPanel.openCommit stack ready; commitFiles via
-     `git show --name-status`; diff view reuses editor or a diff renderable).
-  3. Word-wrap MODE (toggleable; logical<->visual row map; spec in git history).
-  4. Editor/tree wheel momentum parity; changes-list momentum (optional).
-  5. Static-capability pass (single owner) -> M5 diagnostics/definition + editable diff -> M6
-     markdown split-preview -> multi-workspace -> search -> piece-table undo -> M7 plugins
-     (registry now exists for binding contributions) -> 5-pass gauntlet (fuller Claude panel) ->
-     isolated blackline acceptance test -> §5.1 gate.
+## RESUME HERE (frontier as of commit ab98fb8)
+- **State:** 252 tests pass · tsc green · checker 0 problems · conventions-gate PASS · smoke ALL-PASS
+  (incl. the NEW always-run **idle frame-delta == 0** assertion). `conventions @ f41a241`.
+- **LANDED THIS BLOCK:**
+  - Conventions infrastructure: file-name-follows-content + atomic-bind + `$`-raw-form (replaces the
+    `...Implementation` suffix) + fractal-delegation, all with HARD conventions-gate checks
+    (fault-injection verified). 9-file PascalCase sweep done (ThemeIcons/ThemePalettes/CommandScoring/
+    CommandDefaults/GitParsers/GitWindow/GitRows/GitLogRows/ScrollbarGeometry) + Highlighter $-rework.
+  - `Static` migrated to `import { Static } from 'ivue/extras'` (ivue ^2.1.0); vendored copy deleted;
+    build:prod recompiles.
+  - **Idle quiescence ENFORCED (item 8):** root-caused (OpenTUI loop reschedules while
+    liveRequestCount>0; our syncAnimationLiveness drops to 0 at rest → loop stops). The 142/145-frame
+    "FAIL" was a STALE measurement of the pre-fix build (f8771ab, predates 68f897e). Now asserted in
+    smoke (frame-delta==0, HARD FAIL) + perf-baselines exits non-zero on violation. Re-measured on
+    current HEAD: idle delta 0, CPU 0.60%, input latency p50 5ms/p95 7ms (the fix improved latency too).
+  - Merged 3 of 4 stalled workers: D (perf-baselines, b076759), C (word wrap, 23ee28f), A (context
+    menu + tooltip + git multi-select, ab98fb8). Each reconciled to current conventions on merge.
+- **NEXT (in order — momentum before tabs; they touch the same files):**
+  1. **Merge codex-momentum (LAST stalled worker, HIGH RISK).** Rewrites Workspace.ts (~93 lines) +
+     RootView.ts (~156) + Editor/Viewport/FileTree/GitPanel + Workspace.scroll.test.ts for
+     editor/tree wheel-momentum parity. Work is UNCOMMITTED in `.claude/worktrees/codex-momentum`
+     (commit on its branch, then cherry-pick onto main like C/A). MUST verify it does NOT regress the
+     working scroll-glide + the `applyingBarGeometry` onChange guard (the "wheel not smooth" fix), and
+     that idle-quiescence smoke stays green. Codex worktree → review `git status` for unexpected
+     deletions before committing.
+  2. **Item 10a buffer tabs** — foundation `OpenBufferSet.ts` already landed (e193574); integrate into
+     Workspace/RootView/Editor (tab bar, open=add-or-focus, flyweight dispose). AFTER momentum.
+  3. **Item 14 side-by-side diff.**
+  4. Item 9 tail: convert editor.coordinates/scroll-momentum/RootView to Static (deferred while these
+     files churned under the merges); item 11b scroll-feel tune.
+  5. → M5 diagnostics/definition + editable diff → M6 markdown split-preview → multi-workspace →
+     search → piece-table undo → M7 plugins → 5-pass gauntlet → blackline acceptance → §5.1 gate.
 
 ## Environment (established)
 - Bun `~/.bun/bin/bun` (v1.3.14). Prefix: `export PATH="$HOME/.bun/bin:$PATH"`. Node also on PATH.
-- Deps: `ivue@2.0.0`, `vue@3.5.40`, `@opentui/core@0.4.5`, `web-tree-sitter@0.26.11`.
+- Deps: `ivue@2.1.0` (Static via the `ivue/extras` subpath), `vue@3.5.40`, `@opentui/core@0.4.5`,
+  `web-tree-sitter@0.26.11`.
 - Runbook: DB-free. Run `bun run <file>`; test `bun test`; typecheck `bunx tsc --noEmit`
   (NEVER pipe tsc through tail/tee — masks the exit code; use `; echo TSC=$?`).
 - Invariants checker (VENDORED project-local via `npx @invariantai/ibr install`; /ibr + /invariants
