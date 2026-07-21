@@ -1,2 +1,16 @@
 2026-07-21T08:11:29.404Z [info] Boot start
 2026-07-21T08:11:29.412Z [info] App started
+2026-07-21T08:12:05.487Z [info] Boot complete
+2026-07-21T08:12:21.357Z [info] Boot start
+2026-07-21T08:12:21.365Z [info] App started
+2026-07-21T08:12:21.402Z [info] Boot complete
+2026-07-21T08:12:21.556Z [info] Shutdown start
+2026-07-21T08:12:21.578Z [info] App disposed
+2026-07-21T08:13:07.650Z [info] Kernel sealed (2 hooks)
+2026-07-21T08:13:07.650Z [info] Kernel sealed (0 hooks)
+2026-07-21T08:13:07.650Z [info] Kernel sealed (0 hooks)
+2026-07-21T08:13:07.650Z [info] Kernel sealed (1 hooks)
+2026-07-21T08:13:17.186Z [info] Boot start
+2026-07-21T08:13:17.191Z [info] Kernel sealed (0 hooks)
+2026-07-21T08:13:17.193Z [info] App started
+2026-07-21T08:13:17.230Z [info] Boot complete

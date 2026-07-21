@@ -3,7 +3,7 @@
 The system shape is *generated* by the invariants, not chosen alongside them. Read
 [`project.invariants.md`](./project.invariants.md) and [`project.lattice.md`](./project.lattice.md)
 first; this file is the narrative of what those generators produce. ivue mechanics and page
-references are in [`DECISIONS.md`](./DECISIONS.md).
+references are in [`project.decisions.md`](./project.decisions.md).
 
 **Product thesis (not a falsifiable invariant, per the brief):** developer ergonomics and
 runtime performance reinforce each other — coherent ownership → fewer accidental reactive graphs
@@ -21,7 +21,7 @@ runtime performance reinforce each other — coherent ownership → fewer accide
   with late reads and a **seal-before-construct kernel** — the only shape in which the cyclic
   entity graph (panes ↔ app root ↔ workspaces) and the plugin system coexist.
 - Because *completion is proven not declared*, the build carries an **evidence gate + independent
-  review panel** (`IMPLEMENTATION_PLAN.md` §5).
+  review panel** (`project.implementation-plan.md` §5).
 
 ## Two owners: ivue and OpenTUI
 
@@ -48,7 +48,7 @@ visible window from the model during render; it holds no state.
 markdown · commands · keybindings · ui · theme` — each a folder under `src/modules/` with
 PascalCase class files, `<module>.<role>.ts` role files (no HTTP roles — this is a TUI), and a
 colocated `<module>.invariants.md` bootstrapped at its milestone. Module map and milestone
-mapping: `IMPLEMENTATION_PLAN.md` §3–4.
+mapping: `project.implementation-plan.md` §3–4.
 
 ## Lifecycle tiers
 

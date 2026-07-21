@@ -122,7 +122,7 @@ are the identifiers — referenced by name everywhere, matching code annotations
   `BENCHMARKS.md`. The invariant is *every subsystem carries a reproducible benchmark*, not
   the number.
 - "No integrated terminal in the first release" → scope / `KNOWN_LIMITATIONS.md`.
-- "DX and performance improve together" → the product thesis in `ARCHITECTURE.md`, not a
+- "DX and performance improve together" → the product thesis in `project.architecture.md`, not a
   falsifiable record.
 - Workspace label content, user-controlled order, source-order outlines → feature records in
   the `workspace` / `syntax` module contracts, written when those modules are built.
@@ -210,7 +210,7 @@ when it works, has tests, disposes resources, has a recorded benchmark, its larg
 removed, and its architecture reads cleanly.
 
 - **M0 — Setup & foundations.** Install Bun + toolchain; `bun init`; pin versions; read the
-  ivue guide + examples (record conclusions in `ARCHITECTURE.md`/`DECISIONS.md`); write
+  ivue guide + examples (record conclusions in `project.architecture.md`/`project.decisions.md`); write
   `project.invariants.md` + `project.lattice.md`; scaffold the module tree; stand up the
   tmux harness skeleton and the benchmark runner. Contracts: project-level.
 - **M1 — Boot & Frame.** `app`, `kernel`, `system`. OpenTUI root renderer, clean start/stop,
@@ -375,12 +375,12 @@ than byte-identical ANSI.
 ## 6. Documents maintained
 
 Contracts: `project.invariants.md`, `project.lattice.md`, per-module `*.invariants.md`
-(+ `*.lattice.md` where composition is real). Build docs (per the brief): `ARCHITECTURE.md`,
-`DECISIONS.md`, `BENCHMARKS.md`, `KNOWN_LIMITATIONS.md`, `TODO.md`, `VERIFICATION_PLAN.md`,
+(+ `*.lattice.md` where composition is real). Build docs (per the brief): `project.architecture.md`,
+`project.decisions.md`, `BENCHMARKS.md`, `KNOWN_LIMITATIONS.md`, `TODO.md`, `VERIFICATION_PLAN.md`,
 `VERIFICATION_RESULTS.md`, `PERFORMANCE_BASELINES.md`, `RESOURCE_LIFECYCLE_AUDIT.md`,
-`ARCHITECTURE_COMPLIANCE.md`, `UX_REVIEW.md`, and `DELEGATION_LOG.md` (the ledger of work
+`ARCHITECTURE_COMPLIANCE.md`, `UX_REVIEW.md`, and `project.delegation-log.md` (the ledger of work
 delegated to subagents/codex — tally and per-agent build share reported at each check-in,
-sub-par agents deprecated). `ARCHITECTURE.md`/`DECISIONS.md` link the ivue guide/example pages
+sub-par agents deprecated). `project.architecture.md`/`project.decisions.md` link the ivue guide/example pages
 that informed each choice.
 
 ---

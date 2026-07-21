@@ -5,6 +5,7 @@
 // invariant: The terminal shows a bounded viewport (project.invariants.md)
 import { createCliRenderer, type CliRenderer, type KeyEvent } from '@opentui/core';
 import { App } from './App';
+import { Kernel } from '../kernel/Kernel';
 import { buildRootView, type RootViewHandles } from '../ui/RootView';
 import { StatusChannel } from '../system/StatusChannel';
 import { Logging } from '../system/Logging';
@@ -31,17 +32,31 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     // event-driven: we drive frames with requestRender(), no idle animation loop.
   });
 
+  // Seal the kernel before any application instance exists.
+  Kernel.instance.seal();
+  Kernel.instance.assertSealed();
+
   const app = new App.Class();
   app.attach(renderer);
 
   const view = buildRootView(renderer, app);
 
-  // Settle detection: after any render request, wait for the queue to go idle, then
-  // publish a quiescent snapshot the harness can trust.
+  // Settle detection: request a render, wait for the next real frame emission (with a
+  // timeout fallback so the harness never hangs), then publish a quiescent snapshot.
   let frame = 0;
   const settle = async (): Promise<void> => {
-    renderer.requestRender();
-    await renderer.idle();
+    await new Promise<void>((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        renderer.off('frame', finish);
+        resolve();
+      };
+      renderer.once('frame', finish);
+      renderer.requestRender();
+      setTimeout(finish, 120);
+    });
     frame += 1;
     StatusChannel.Class.settle(frame);
   };

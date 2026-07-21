@@ -9,7 +9,7 @@ matched byte-for-byte by `// invariant:` code annotations. Chosen invariants sta
 invariants, never the reverse.
 
 Grounding: the ivue mechanisms cited below are verified against `../ivue` source/docs and a
-headless smoke test (`scripts/ivue-smoke.ts`); see `DECISIONS.md` for the study and page
+headless smoke test (`scripts/ivue-smoke.ts`); see `project.decisions.md` for the study and page
 references.
 
 ## Reality-based invariants
@@ -586,7 +586,7 @@ completeness critic dry twice — each a checkable artifact.
 **Generates:** The layered verification model; the subagent cross-check; the completion gate;
 `VERIFICATION_RESULTS.md` and the traceability matrix.
 
-**Evidence:** `IMPLEMENTATION_PLAN.md` §5 (the completion gate + layered verification + subagent
+**Evidence:** `project.implementation-plan.md` §5 (the completion gate + layered verification + subagent
 panel). Enforced at every gate.
 
 **Impossible if true:** A milestone declared done because "it works"; the author certifying

@@ -1,7 +1,7 @@
 # Decisions
 
 Architecture decisions, grounded in the ivue documentation study (delegated, reviewed against
-`../ivue` source + a headless smoke test — see `DELEGATION_LOG.md` #1). The brief mandates
+`../ivue` source + a headless smoke test — see `project.delegation-log.md` #1). The brief mandates
 documenting these; each cites the ivue page that informed it. ivue docs live at
 `../ivue/docs_v2/{guide,examples}/`.
 
