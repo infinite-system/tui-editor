@@ -51,6 +51,31 @@ Performance invariants that bind your module:
 VERIFY before finishing: `bun test src/modules/<MODULE>` passes and `bunx tsc --noEmit` reports no new errors from your files. Then `git add -A && git commit`. In your final message, list files created, interface assumptions about other modules, and any invariant you could not yet verify.
 
 == YOUR MODULE AND SCOPE ==
+
+== EXISTING INTERFACES (already built — READ these files; do NOT reinvent or modify them) ==
+Buffer/text — src/modules/editor/TextDocument.ts → `TextDocument.Model`:
+  get revision(): Ref<number>; get dirty(): Ref<boolean>; get binary(); get text(): string; get lineCount(): number;
+  line(i): string; lines: readonly string[]; slice(start,count): string[]; get eol(): '\n'|'\r\n';
+  loadFromFile(path); loadFromText(text,path); setLine/insertLine/removeLine; insertInline(line,col,str); splitLine(line,col); markSaved().
+  → markdown & lsp: assume the document you consume is a `TextDocument.Model` (use `.text`, `.revision.value`, `.line(i)`). Do NOT invent a different buffer shape.
+Editor — src/modules/editor/Editor.ts → openFile(path), insertText(str), insertNewline(), backspace(), deleteChar(), performUndo/Redo(), save(): boolean, get title(), move*(); holds document+cursor+viewport.
+Cursor — get line/col/goalCol; set(line,col). Viewport — get scrollTop/scrollLeft/height/width, firstVisible, visibleCount, setSize, scrollToLine, scrollBy.
+system (static capability namespaces, call as `Files.Class.read(...)` or per existing usage) — 
+  Files: exists/isDir/basename/extname/dirname/join/relative/list(dir):DirEntry[]/read/readBytes.
+  Clock: now()/freeze(). Environment: env(key). Logging: info/error/write. Processes (src/modules/system/Processes.ts — use for subprocess spawning; read it). 
+  StatusChannel: update(patch)/flush()/settle(frame) — the tmux observability side-channel (writes artifacts/status.json); call update() when your module changes user-visible state.
+theme — src/modules/theme/Theme.ts → Theme.Model: get palette/icons/colorDepth/glyphLevel, icon(name,isDir,open), setPalette/toggleDark. theme.palettes.ts: Palette type, DARK/LIGHT/PALETTES, quantizePalette(p,depth).
+OpenTUI (only markdown needs it, for MarkdownRenderable) — import { BoxRenderable, TextRenderable } from '@opentui/core'; construct `new BoxRenderable(renderer, { flexGrow, flexDirection, width, height, padding })`, `new TextRenderable(renderer, { id, content })`; call renderer.requestRender(); see src/modules/ui/RootView.ts for the real usage pattern. For a scrolling custom viewport, check @opentui/core exports (ScrollBoxRenderable, Renderable base) and follow RootView.
+Tests — `import { test, expect } from 'bun:test';` files in __tests__/*.test.ts; construct models via `new X.Class()` (or `new X.$Class()` for a raw instance in a unit test); run `bun test src/modules/<MODULE>`.
+
+== DON'T (each is a real failure mode) ==
+- Do NOT import ref/shallowRef/computed/watch/watchEffect/effectScope from 'ivue' — they come from 'vue'. From 'ivue' you import ONLY `Reactive`.
+- Do NOT import `Static` from 'ivue' (not exported). A static-capability class is a normal class in a namespace with `let Class = $Class` (no wrapper), matching src/modules/system/*.
+- Do NOT create one reactive object per commit / token / diagnostic / line — compact records/arrays + a viewport view + revision refs. Cost tracks the OBSERVED set.
+- Do NOT block on a subprocess (git/LSP) on any path the UI awaits — async, non-blocking, stale-superseded by revision/id.
+- Do NOT snapshot `X.Class` in a module-scope const, top-level `new`, or default export — read deps late in getters/methods.
+- Do NOT use `computed()` for cheap derived state — named plain getter. Reserve computed() for expensive/memoized derivations only.
+- Do NOT modify or assume a different shape for the existing interfaces above — match them exactly.
 MODULE: markdown   (brief milestone M6; lazy split preview)
 Files (write under src/modules/markdown/):
 - MarkdownParser.ts — plain class. Incremental/debounced block-level parse into compact BlockRecord[] {kind: heading|paragraph|list|listitem|code|blockquote|table|hr, level?, text/spans, range}. Support headings, paragraphs, lists, links, code blocks, emphasis, blockquotes, tables if practical. No object per token — compact array.

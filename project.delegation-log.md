@@ -17,10 +17,15 @@ defects the verification layers catch. A deprecated agent's output is discarded,
 | # | Executor | Task | Milestone / module | Share of build | Status | Quality | Notes |
 |---|----------|------|--------------------|----------------|--------|---------|-------|
 | 1 | claude:general-purpose | Study ivue docs → code-level architecture reference | M0 / architecture | ~2% | completed | **pass (high)** | Grounded the contracts; caught 3 real corrections (vue runtime dep; Static/kernel not in package → vendor; `createX()` is ours not ivue's). Reviewed against `../ivue` source + smoke test. |
+| — | **`/fork` (Claude Code quirk)** | Autonomously built M1–M3 ungoverned, in background, resurrecting several times until goal cleared | M1–M3 / app,kernel,system,editor,workspace,theme,syntax | ~25% | stopped by user | **pending review** | Committed working code (M2 base: tsc clean, 27/27 tests). NOT contract-governed — must be invariant-reviewed + contracts back-filled before it counts. |
+| 2 | codex (worktree `codex/git`) | Build `git` module (M4) + `git.invariants.md` + tests | M4 / git | ~8% | running | — | Isolated worktree; task `bp48klg6r` |
+| 3 | codex (worktree `codex/markdown`) | Build `markdown` module (M6) + contract + tests | M6 / markdown | ~6% | running | — | Isolated worktree; task `b17offsd1` |
+| 4 | codex (worktree `codex/lsp`) | Build `lsp` module (M5) + contract + tests | M5 / lsp | ~8% | running | — | Isolated worktree; task `b0825yloe` |
 
 ## Running tally
 
-- Agents launched: **1** · completed: **1** · deprecated: **0**
-- Estimated build share delegated so far: **~2%** (M0 architecture study)
+- Agents launched: **4** (1 study, 3 codex) + 1 rogue fork · completed: **1** · running: **3** · deprecated: **0**
+- Delegated build share so far: fork ~25% (M1–M3, pending review) + codex ~22% in flight (M4/M5/M6)
+- Model: fork built the editor core fast but ungoverned; codex now builds forward modules governed (own worktree, own contract, reviewed before merge).
 
 _Percentages are rough estimates of each task's share of total build effort; updated as work lands._
