@@ -34,6 +34,7 @@ import { ScrollbarGeometry } from './ScrollbarGeometry';
 import type { ContextMenu, ContextMenuItem } from './ContextMenu';
 import type { Tooltip } from './Tooltip';
 import type { SettingsPanel } from '../settings/SettingsPanel';
+import { SplitterModel } from '../layout/SplitterModel';
 import { Logging } from '../system/Logging';
 
 function roleColor(role: Role, palette: Palette): string {
@@ -51,7 +52,6 @@ function roleColor(role: Role, palette: Palette): string {
   }
 }
 
-const SIDEBAR_WIDTH = 32;
 
 export interface RootView {
   update(): void;
@@ -92,6 +92,24 @@ export function buildRootView(
 ): RootView {
   const root = renderer.root;
   const readPalette = () => theme.palette;
+  const settings = settingsPanel.settings;
+
+  // Sidebar↔editor width divider: a vertical SplitterModel in CELLS whose size IS the sidebar width,
+  // bound to settings.sidebarWidth so a drag persists + live-applies. onSizeChange writes the setting.
+  const sidebarSplitter = new SplitterModel.Class({
+    orientation: 'vertical',
+    mode: 'cells',
+    initialSize: settings.sidebarWidth.value,
+    minimumSize: 18,
+    maximumSize: 70,
+    onSizeChange: (width) => {
+      settings.sidebarWidth.value = Math.round(width);
+      settings.save();
+    },
+  });
+  // settings.sidebarWidth is the SINGLE source of truth: the settings panel AND the drag both write
+  // it, and the layout reads it here — so changing it in Ctrl+, resizes live, and dragging persists.
+  const sidebarWidth = (): number => Math.round(settings.sidebarWidth.value);
 
   const column = new BoxRenderable(renderer, {
     id: 'root-column',
@@ -110,7 +128,7 @@ export function buildRootView(
 
   const sidebar = new BoxRenderable(renderer, {
     id: 'sidebar',
-    width: SIDEBAR_WIDTH,
+    width: sidebarWidth(),
     height: '100%',
     border: true,
     borderStyle: 'rounded',
@@ -166,7 +184,46 @@ export function buildRootView(
   editorColumn.add(tabBar);
   editorColumn.add(editorArea);
 
+  // Draggable sidebar↔editor divider (1-cell bar). onMouseDrag fires globally while the button is
+  // held (even off the bar), so a drag resizes smoothly; the model clamps to [min,max] + persists.
+  const sidebarDivider = new BoxRenderable(renderer, {
+    id: 'sidebar-divider',
+    width: 1,
+    height: '100%',
+    flexShrink: 0, // keep the 1-cell grab column (flex must not squeeze it to zero)
+    backgroundColor: readPalette().border, // a visible bg also puts it in the mouse hit grid
+  });
+  let sidebarDividerHover = false;
+  sidebarDivider.onMouseDown = (event) => {
+    sidebarSplitter.size.value = settings.sidebarWidth.value; // anchor from the live width
+    sidebarSplitter.beginDrag(event.x);
+    renderer.requestRender();
+  };
+  sidebarDivider.onMouseDrag = (event) => {
+    sidebarSplitter.dragTo(event.x);
+    renderer.requestRender();
+  };
+  const endSidebarDrag = (): void => {
+    sidebarSplitter.endDrag();
+    renderer.requestRender();
+  };
+  sidebarDivider.onMouseUp = endSidebarDrag;
+  sidebarDivider.onMouseDragEnd = endSidebarDrag;
+  sidebarDivider.onMouseMove = () => {
+    if (!sidebarDividerHover) {
+      sidebarDividerHover = true;
+      renderer.requestRender();
+    }
+  };
+  sidebarDivider.onMouseOut = () => {
+    if (sidebarDividerHover) {
+      sidebarDividerHover = false;
+      renderer.requestRender();
+    }
+  };
+
   mainRow.add(sidebar);
+  mainRow.add(sidebarDivider);
   mainRow.add(editorColumn);
 
   const statusBar = new BoxRenderable(renderer, {
@@ -465,7 +522,7 @@ export function buildRootView(
     // log rows below — offsets RECOMPUTED from the rendered geometry each frame (splitRatio and
     // the changes count move them).
     const gitVisible = workspace.sidebarView.value === 'git' && workspace.git.value !== null;
-    const sidebarInnerWidth = SIDEBAR_WIDTH - 2;
+    const sidebarInnerWidth = sidebarWidth() - 2;
     const changesRegion = { top: 1, left: 0, width: sidebarInnerWidth, height: Math.max(1, gitPanelGeometry.changesRows) };
     applyBarGeometry(changesBar, 'vertical', changesRegion, {
       scrollSize: gitVisible ? gitChangeRowsNow().length : 0,
@@ -501,7 +558,7 @@ export function buildRootView(
     const selectedIndex = workspace.tree.selectedIndex.value;
     const hoveredIndex = workspace.tree.hoveredIndex.value;
     const height = Math.max(1, (sidebar.height as number) - 2);
-    const innerWidth = SIDEBAR_WIDTH - 2;
+    const innerWidth = sidebarWidth() - 2;
     // Flyweight: only render the visible window around the selection.
     const top = treeWindowTop();
     const visible = rows.slice(top, top + height);
@@ -965,7 +1022,7 @@ export function buildRootView(
 
   function renderGitPanel(): StyledText {
     const palette = readPalette();
-    const innerWidth = SIDEBAR_WIDTH - 2;
+    const innerWidth = sidebarWidth() - 2;
     const chunks: TextChunk[] = [];
     const pushRow = (
       text: string,
@@ -1124,8 +1181,12 @@ export function buildRootView(
     const palette = readPalette();
     column.backgroundColor = palette.bg;
     const gitView = workspace.sidebarView.value === 'git';
+    sidebar.width = sidebarWidth(); // live width from the draggable splitter (persisted to settings)
     sidebar.backgroundColor = palette.panel;
     sidebar.borderColor = workspace.focus.value === 'files' || gitView ? palette.borderActive : palette.border;
+    // Divider: brighten while hovered or dragging so it reads as a grab handle.
+    sidebarDivider.backgroundColor =
+      sidebarSplitter.dragging.value || sidebarDividerHover ? palette.accent : palette.border;
     sidebar.titleColor = workspace.focus.value === 'files' || gitView ? palette.accent : palette.dim;
     sidebar.title = gitView ? 'Git' : 'Files';
     editorArea.backgroundColor = palette.bg;
@@ -1546,7 +1607,7 @@ export function buildRootView(
   // names exactly what a click at that cell would do.
   type GitActionButton = 'open' | 'discard' | 'stageToggle';
   const gitActionButtonAt = (relativeX: number): GitActionButton | null => {
-    const innerWidth = SIDEBAR_WIDTH - 2;
+    const innerWidth = sidebarWidth() - 2;
     if (relativeX >= innerWidth - 8 && relativeX <= innerWidth - 7) return 'open';
     if (relativeX >= innerWidth - 5 && relativeX <= innerWidth - 4) return 'discard';
     if (relativeX >= innerWidth - 2) return 'stageToggle';

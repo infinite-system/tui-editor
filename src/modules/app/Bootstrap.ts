@@ -123,6 +123,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       tooltipVisible: tooltip.visible.value,
       settingsOpen: settingsPanel.open.value,
       settingsSelected: settingsPanel.selectedIndex.value,
+      sidebarWidth: settings.sidebarWidth.value,
       // Total working-tree changes — proves the GitWatcher live-refreshes on EXTERNAL fs changes.
       gitChangedCount: (() => {
         const repository = workspace.git.value;
