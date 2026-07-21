@@ -36,6 +36,20 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       clamp unchanged; then tune FASTER (bigger impulse, snappier decay); compare 158ce95 feel;
       verify post-input glide cadence under tmux.
 - [x] 12. Diff-open from git panel (VS Code-style; panel stays; read-only colored diff) (0cf3d88).
+- [x] 13. Click-double-dispatch + shared status.json (f8771ab): channels are now PER-INSTANCE
+      (TUI_STATUS_PATH/TUI_FRAME_PATH; harness per-session status-<s>.json; `field <session> <name>`);
+      double-dispatch REFUTED on a clean channel (instrumented: tree click -> cursor {0,0}, zero
+      codeBody fires — the reported evidence matched the polluted-channel failure mode) and LOCKED
+      by a smoke regression (23 assertions).
+
+### FLEET (launched this turn; worktree-isolated; coordinator merges serially)
+- Worker A (Sub-Fable): items 3-remainder + 4 — ContextMenu + right-click + Ctrl/Shift-click +
+  tooltips. Worker B: item 5 — inline commit expansion. Worker C: item 6 — word-wrap mode.
+- Worker D (Sub-Fable, verification): item 8 — perf-baselines script + PERFORMANCE_BASELINES.md.
+- codex: item 7 — momentum parity port (worktree codex-momentum, log .claude/worktrees/codex-momentum.log).
+- COORDINATOR (me): item 11 scroll-feel regression tune (after codex lands — same code), reviews +
+  merges (review gates: naming convention, contracts+checker, session-scoped verification evidence,
+  RootView merge conflicts resolved by hand).
 - Standing conventions (in HANDOFF + decisions): full descriptive names · one-canonical-set+overlay
   keybindings · destructive ops need confirmation · authoritative-channel verification · delegation
   = full-parity packet, worktree/disjoint isolation, IBR+invariants embedded.
