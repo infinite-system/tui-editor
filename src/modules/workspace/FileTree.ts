@@ -6,6 +6,7 @@
 import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
 import { Files, type DirEntry } from '../system/Files';
+import { AT_REST, type ScrollMomentum } from '../ui/scroll-momentum';
 
 export interface TreeRow {
   name: string;
@@ -32,6 +33,9 @@ class $FileTree {
   // Row index under the mouse pointer (-1 = none) — hover highlight only, never selection truth.
   get hoveredIndex() {
     return ref(-1);
+  }
+  get selectionMomentum() {
+    return shallowRef<ScrollMomentum>(AT_REST);
   }
   // shallowRef holding the last flattened rows (recomputed on structural change only).
   private get rowsRef() {

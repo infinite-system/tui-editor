@@ -4,7 +4,8 @@
 // invariant: The terminal shows a bounded viewport (project.invariants.md)
 // invariant: Cost tracks the actively observed set (project.invariants.md)
 import { Reactive } from 'ivue';
-import { ref } from 'vue';
+import { ref, shallowRef } from 'vue';
+import { AT_REST, halt, type ScrollMomentum } from '../ui/scroll-momentum';
 
 class $Viewport {
   get scrollTop() {
@@ -12,6 +13,12 @@ class $Viewport {
   }
   get scrollLeft() {
     return ref(0);
+  }
+  get verticalScrollMomentum() {
+    return shallowRef<ScrollMomentum>(AT_REST);
+  }
+  get horizontalScrollMomentum() {
+    return shallowRef<ScrollMomentum>(AT_REST);
   }
   get height() {
     return ref(20);
@@ -27,6 +34,7 @@ class $Viewport {
 
   /** Ensure line `line` is visible within [scrollTop, scrollTop+height). */
   scrollToLine(line: number, totalLines: number): void {
+    this.haltScrollMomentum();
     const viewportHeight = this.height.value;
     if (line < this.scrollTop.value) {
       this.scrollTop.value = line;
@@ -47,6 +55,12 @@ class $Viewport {
   scrollByColumns(delta: number, contentWidth: number): void {
     const maxScrollLeft = Math.max(0, contentWidth - this.width.value);
     this.scrollLeft.value = Math.max(0, Math.min(this.scrollLeft.value + delta, maxScrollLeft));
+  }
+
+  /** Precise cursor movement or a scrollbar drag adopts both axes and stops wheel glide. */
+  haltScrollMomentum(): void {
+    this.verticalScrollMomentum.value = halt();
+    this.horizontalScrollMomentum.value = halt();
   }
 
   /** Keep `displayColumn` visible within [scrollLeft, scrollLeft + width): auto-hscroll on cursor moves. */

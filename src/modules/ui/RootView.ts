@@ -266,7 +266,7 @@ export function buildRootView(
   // True while applyBarGeometry is ASSIGNING scrollPosition: the widget fires onChange for
   // programmatic writes too, and treating those as user thumb-drags halted the momentum glide on
   // every paint (the 'wheel not smooth since scrollbars' regression). onChange handlers must act
-  // only on USER-initiated changes.
+  // only on USER-initiated changes — a real thumb drag then halts momentum and adopts authority.
   let applyingBarGeometry = false;
 
   // Thin draggable scrollbars (OpenTUI ScrollBar: built-in draggable thumb + onChange). Each bar
@@ -280,6 +280,7 @@ export function buildRootView(
     showArrows: false,
     onChange: (position) => {
       if (applyingBarGeometry) return;
+      workspace.editor.viewport.haltScrollMomentum(); // real thumb drag adopts authority
       workspace.editor.viewport.scrollTop.value = trueScrollPosition(editorVerticalBar, position);
     },
   });
@@ -291,6 +292,7 @@ export function buildRootView(
     showArrows: false,
     onChange: (position) => {
       if (applyingBarGeometry) return;
+      workspace.editor.viewport.haltScrollMomentum(); // real thumb drag adopts authority
       workspace.editor.viewport.scrollLeft.value = trueScrollPosition(editorHorizontalBar, position);
     },
   });
@@ -304,6 +306,7 @@ export function buildRootView(
     showArrows: false,
     onChange: (position) => {
       if (applyingBarGeometry) return;
+      workspace.haltGitChangesScroll(); // real thumb drag adopts authority
       workspace.gitPanel.changesScrollTop.value = trueScrollPosition(changesBar, position);
     },
   });
@@ -410,18 +413,18 @@ export function buildRootView(
     });
     // Wrap mode has NO horizontal scroll axis: scrollSize 0 routes through the ONE visibility
     // rule (no scrollable range -> the bar does not exist), so the h-bar hides itself.
-    let widestVisible = 0;
+    let widestVisibleLineWidth = 0;
     if (editorVisible && !editor.wordWrap.value) {
-      const top = editor.viewport.scrollTop.value;
-      for (const line of editor.document.slice(top, viewportHeight)) {
-        widestVisible = Math.max(widestVisible, lineWidth(line));
+      const firstVisibleLine = editor.viewport.scrollTop.value;
+      for (const line of editor.document.slice(firstVisibleLine, viewportHeight)) {
+        widestVisibleLineWidth = Math.max(widestVisibleLineWidth, lineWidth(line));
       }
     }
-    applyBarGeometry(editorHorizontalBar, 'horizontal', editorRegion, {
-      scrollSize: widestVisible,
-      viewportSize: viewportWidth,
-      scrollPosition: editor.viewport.scrollLeft.value,
-    });
+      applyBarGeometry(editorHorizontalBar, 'horizontal', editorRegion, {
+        scrollSize: widestVisibleLineWidth,
+        viewportSize: viewportWidth,
+        scrollPosition: editor.viewport.scrollLeft.value,
+      });
 
     // Git regions, in the sidebar's content box: branch row 0; changes rows 1..; divider;
     // log rows below — offsets RECOMPUTED from the rendered geometry each frame (splitRatio and
@@ -979,29 +982,26 @@ export function buildRootView(
   // onMouseScroll (events bubble to the box). Each scrollable pane mutates only its own window
   // (scrollTop / selection), never materializing the whole list — the frame effect observes those
   // signals and repaints. invariant: Cost tracks the actively observed set (project.invariants.md)
-  const WHEEL_STEP = 3;
-  const wheelDelta = (event: { scroll?: { direction?: string } }): number =>
-    (event.scroll?.direction === 'up' ? -1 : 1) * WHEEL_STEP;
   sidebar.onMouseScroll = (event) => {
     if (workspace.sidebarView.value === 'git') {
       // Route by pointer position: wheel over the changes region scrolls it; over the log, the
       // momentum glide (same gesture, per-region window).
       const row = event.y - sidebar.y;
       if (row < gitPanelGeometry.dividerRow) {
-        const total = gitChangeRowsNow().length;
-        const maxTop = Math.max(0, total - gitPanelGeometry.changesRows);
-        workspace.gitPanel.changesScrollTop.value = Math.max(
-          0,
-          Math.min(workspace.gitPanel.changesScrollTop.value + wheelDelta(event), maxTop),
-        );
+        workspace.impulseGitChangesScroll(event.scroll?.direction === 'up' ? -1 : 1);
       } else {
         workspace.impulseGitLog(event.scroll?.direction === 'up' ? -1 : 1);
       }
-    } else workspace.tree.moveSelection(wheelDelta(event));
+    } else workspace.impulseTreeScroll(event.scroll?.direction === 'up' ? -1 : 1);
   };
   // Vertical scroll of the editor window. Wrap mode: scrollTop stays a LOGICAL line index, but
   // tall (wrapped) lines mean the logical clamp `lineCount - height` could strand tail rows below
   // the fold — so the clamp relaxes to let the LAST line reach the top of the window.
+  // Wrap-mode vertical wheel + drag-edge auto-scroll step directly (rows), NOT through the momentum
+  // regime: wrap mode's scroll bound is lineCount-1 (a wrapped line occupies many visual rows), which
+  // the momentum regime's scrollBy clamp (lineCount - height) does not model. Non-wrap wheel goes
+  // through momentum (impulse) below.
+  const WHEEL_STEP = 3;
   const scrollEditorVertically = (delta: number): void => {
     const editorViewport = workspace.editor.viewport;
     if (workspace.editor.wordWrap.value) {
@@ -1029,15 +1029,10 @@ export function buildRootView(
     }
     const horizontal = direction === 'left' || direction === 'right' || event.modifiers.shift;
     if (horizontal) {
-      // Clamp to the widest VISIBLE line (O(window), never the whole file).
-      const top = workspace.editor.viewport.scrollTop.value;
-      const visible = workspace.editor.document.slice(top, editorViewportHeight());
-      let widestVisible = 0;
-      for (const line of visible) widestVisible = Math.max(widestVisible, lineWidth(line));
       const backward = direction === 'left' || direction === 'up';
-      workspace.editor.viewport.scrollByColumns((backward ? -1 : 1) * WHEEL_STEP, widestVisible);
+      workspace.impulseEditorHorizontalScroll(backward ? -1 : 1);
     } else {
-      workspace.editor.viewport.scrollBy(wheelDelta(event), workspace.editor.document.lineCount);
+      workspace.impulseEditorVerticalScroll(direction === 'up' ? -1 : 1);
     }
   };
 
@@ -1305,6 +1300,7 @@ export function buildRootView(
       const hit = gitRowAt(event.y);
       if (!hit) return;
       if (hit.region === 'changes') {
+        workspace.haltGitChangesScroll();
         const rows = gitChangeRowsNow();
         const row = rows[hit.index];
         if (row?.kind !== 'file') return;
@@ -1348,6 +1344,7 @@ export function buildRootView(
       return;
     }
     workspace.focusFiles(); // click-to-focus
+    workspace.haltTreeScroll();
     const rowIndex = treeWindowTop() + (event.y - (sidebar.y + 1)); // +1: sidebar top border
     if (rowIndex < 0 || rowIndex >= workspace.tree.rows.length) return;
     // Single-click activation: one click selects AND opens the file / toggles the folder.

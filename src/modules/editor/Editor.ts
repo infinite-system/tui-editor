@@ -136,6 +136,7 @@ class $Editor {
    * stays inert, and the reveal moves by visual rows.
    */
   placeCursor(line: number, column: number): void {
+    this.viewport.haltScrollMomentum(); // precise cursor move adopts authority, stops wheel glide
     const lineText = this.document.line(line);
     const absoluteDisplayColumn = displayColumn(lineText, column);
     if (this.wordWrap.value) {

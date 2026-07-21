@@ -12,10 +12,11 @@ import { GitRepository } from '../git/GitRepository';
 import { CommitLog } from '../git/CommitLog';
 import { CommitExpansion } from '../git/CommitExpansion';
 import { GitPanel } from './GitPanel';
-import { addImpulse, stepMomentum, isMoving, AT_REST } from '../ui/scroll-momentum';
+import { addImpulse, stepMomentum, isMoving, halt } from '../ui/scroll-momentum';
 import { GitRows } from '../git/GitRows';
 import { GitLogRows, type CommitLogRow } from '../git/GitLogRows';
 import { GitCommands } from '../git/GitCommands';
+import { lineWidth } from '../editor/editor.coordinates';
 import { Logging } from '../system/Logging';
 
 export type Focus = 'files' | 'editor' | 'git';
@@ -189,9 +190,35 @@ class $Workspace {
     this.gitPanel.logMomentum.value = addImpulse(this.gitPanel.logMomentum.value, deltaRows);
   }
 
+  impulseEditorVerticalScroll(deltaRows: number): void {
+    const viewport = this.editor.viewport;
+    viewport.verticalScrollMomentum.value = addImpulse(viewport.verticalScrollMomentum.value, deltaRows);
+  }
+
+  impulseEditorHorizontalScroll(deltaColumns: number): void {
+    const viewport = this.editor.viewport;
+    viewport.horizontalScrollMomentum.value = addImpulse(viewport.horizontalScrollMomentum.value, deltaColumns);
+  }
+
+  impulseTreeScroll(deltaRows: number): void {
+    this.tree.selectionMomentum.value = addImpulse(this.tree.selectionMomentum.value, deltaRows);
+  }
+
+  impulseGitChangesScroll(deltaRows: number): void {
+    this.gitPanel.changesMomentum.value = addImpulse(this.gitPanel.changesMomentum.value, deltaRows);
+  }
+
   /** Halt the log glide immediately (keyboard paging / a jump — One-Writer-Per-Regime). */
   haltGitLogScroll(): void {
-    this.gitPanel.logMomentum.value = AT_REST;
+    this.gitPanel.logMomentum.value = halt();
+  }
+
+  haltTreeScroll(): void {
+    this.tree.selectionMomentum.value = halt();
+  }
+
+  haltGitChangesScroll(): void {
+    this.gitPanel.changesMomentum.value = halt();
   }
 
   /**
@@ -210,17 +237,58 @@ class $Workspace {
   }
 
   // invariant: One writer per scroll regime per frame (src/modules/ui/ui.invariants.md)
-  /**
-   * Advance the commit-log glide by one frame of `dtSec`. Steps the momentum, moves the window by
-   * the resulting whole rows (clamped, pages fetched/evicted), and returns whether it is still
-   * moving (the frame loop keeps requesting frames while true). Cost stays O(window).
-   */
-  tickGitLogScroll(dtSec: number): boolean {
+  /** Advance every wheel glide by one frame and report whether another frame is required. */
+  tickScrollAnimations(dtSeconds: number): boolean {
     const gitPanel = this.gitPanel;
-    const { momentum, rows } = stepMomentum(gitPanel.logMomentum.value, dtSec);
-    gitPanel.logMomentum.value = momentum;
-    if (rows !== 0) this.scrollGitLog(rows);
-    return isMoving(momentum);
+    const editorViewport = this.editor.viewport;
+
+    const gitLogStep = stepMomentum(gitPanel.logMomentum.value, dtSeconds);
+    gitPanel.logMomentum.value = gitLogStep.momentum;
+    if (gitLogStep.rows !== 0) this.scrollGitLog(gitLogStep.rows);
+
+    const editorVerticalStep = stepMomentum(editorViewport.verticalScrollMomentum.value, dtSeconds);
+    editorViewport.verticalScrollMomentum.value = editorVerticalStep.momentum;
+    if (editorVerticalStep.rows !== 0) {
+      editorViewport.scrollBy(editorVerticalStep.rows, this.editor.document.lineCount);
+    }
+
+    const editorHorizontalStep = stepMomentum(editorViewport.horizontalScrollMomentum.value, dtSeconds);
+    editorViewport.horizontalScrollMomentum.value = editorHorizontalStep.momentum;
+    if (editorHorizontalStep.rows !== 0) {
+      let widestVisibleLineWidth = 0;
+      for (const line of this.editor.document.slice(editorViewport.scrollTop.value, editorViewport.height.value)) {
+        widestVisibleLineWidth = Math.max(widestVisibleLineWidth, lineWidth(line));
+      }
+      editorViewport.scrollByColumns(editorHorizontalStep.rows, widestVisibleLineWidth);
+    }
+
+    const treeStep = stepMomentum(this.tree.selectionMomentum.value, dtSeconds);
+    this.tree.selectionMomentum.value = treeStep.momentum;
+    if (treeStep.rows !== 0) this.tree.moveSelection(treeStep.rows);
+
+    const changesStep = stepMomentum(gitPanel.changesMomentum.value, dtSeconds);
+    gitPanel.changesMomentum.value = changesStep.momentum;
+    if (changesStep.rows !== 0) {
+      const git = this.git.value;
+      const changeRows = git ? GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value) : [];
+      const changesRegionHeight = Math.max(
+        1,
+        Math.max(2, Math.floor(editorViewport.height.value * gitPanel.splitRatio.value)) - 1,
+      );
+      const maximumChangesScrollTop = Math.max(0, changeRows.length - changesRegionHeight);
+      gitPanel.changesScrollTop.value = Math.max(
+        0,
+        Math.min(gitPanel.changesScrollTop.value + changesStep.rows, maximumChangesScrollTop),
+      );
+    }
+
+    return [
+      gitLogStep.momentum,
+      editorVerticalStep.momentum,
+      editorHorizontalStep.momentum,
+      treeStep.momentum,
+      changesStep.momentum,
+    ].some(isMoving);
   }
 
   /** Open the DIFF of the file at a changes-row (row click / 'o'): the git panel STAYS in the
@@ -305,6 +373,7 @@ class $Workspace {
 
   /** Activate the current tree selection: open a file (and focus editor) or toggle a dir. */
   activate(): { opened?: string } {
+    this.haltTreeScroll();
     const result = this.tree.activateSelected();
     if (result && 'openFile' in result) {
       this.editor.openFile(result.openFile);
