@@ -189,6 +189,35 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   keybindings · destructive ops need confirmation · authoritative-channel verification · delegation
   = full-parity packet, worktree/disjoint isolation, IBR+invariants embedded.
 
+## LIVE QUEUE (user QA during audit work — newest coordinator requests, priority-ordered)
+1. **BUG (P2 follow-up, HIGH): wordWrap ON breaks scrolling.** Scroll extent + scrollbar thumb + cursor/
+   scroll-into-view are computed over LOGICAL line count, not VISUAL (wrapped) row count. When wrap is on,
+   N logical lines → M>N visual rows (EditorWrap segments); max-scroll/thumb/scroll-math must use the
+   visual-row count. Drive-verify: long-line file, wrap ON → content wraps AND scrollbar thumb reflects
+   the larger visual extent AND wheel/drag reaches true bottom without over/undershoot; cursor up/down +
+   scroll-into-view move by visual rows. Add to P3 wordWrap test. (editor/scroll-geometry/RootView.)
+2. **BUG (P2 follow-up): scrollbarThickness MOVES the bar, doesn't thicken it.** ROOT CAUSE FOUND:
+   OpenTUI's ScrollBarRenderable thickness comes from its CONSTRUCTION width (yoga flex); my per-frame
+   `bar.width = thickness` (ca4a578) is IGNORED by layout, so the bar renders at construction width (2)
+   while `bar.left -= (thickness-1)` still shifts it → "moves not thickens". ca4a578's verification was a
+   FALSE-GREEN (asserted the debug-log thickness value, not painted columns). FIX: render N actual
+   columns (construct bars at settings.scrollbarThickness + a working live-update path, OR the correct
+   yoga runtime setter) with bar x-position UNCHANGED. Drive-verify by FrameProbe COLUMN COUNT (not the
+   log). Add the column-count assertion to P3.
+3. **Grip handles on dividers (low-med):** visible GRIP glyph on the sidebar divider (vertical: nerd grip
+   → ⋮/┃/║/▕ → ascii ':'/'|') + git divider (horizontal: ⋯/═/┅ → ascii '-'), theme icon ladder. 3 states
+   idle→hover→pressed (brighten to accent on hover, pressed color on drag) — reuse the existing hit-strip
+   hover hooks. TUI can't change the OS mouse-cursor shape, so a grip is the discoverability signal.
+   Drive-verify: FrameProbe grip glyph present; hover brightens; drag still resizes+persists. (RootView/theme.)
+4. **Context-menu adaptive positioning (medium):** mirror tooltip flip (3ec106d/c69ec4a). Default open
+   RIGHT+BELOW cursor; flip HORIZONTALLY to LEFT of cursor near right edge (anchor menu's right edge at
+   cursor so it extends left — user wants leftward so it coexists with VS Code's own right-click menu),
+   flip vertically ABOVE near bottom; clamp fully on-screen. Same for submenus. Generous right-side flip
+   threshold. Drive-verify: right-click (SGR button-2) near each edge/corner → FrameProbe menu fully
+   visible + flips; mid-screen opens right+below. Extend context-menu smoke. (RootView/ContextMenu.)
+   NOTE: the overlap the user saw is VS Code's host terminal menu (terminal.integrated.rightClickBehavior)
+   — their setting, not our bug; but adaptive positioning is still correct.
+
 ## AUDIT PACKAGE STATUS (3-Sonnet audit, 2026-07-21; packet in scratchpad AUDIT_FINDINGS_PACKET.md)
 Disease = build-but-don't-wire. Session frontier HEAD **c7ee4d8**. Progress:
 - **HARDENING (highest leverage) — DONE:** `scripts/check-unwired-capabilities.sh` (in conventions-gate
