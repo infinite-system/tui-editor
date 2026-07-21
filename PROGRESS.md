@@ -4,7 +4,7 @@ Live status ledger for the autonomous build. Updated every turn so state survive
 compaction. **If you are resuming: read this, then `HANDOFF.md`, then continue at the first
 unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
-## RESUME HERE (frontier as of commit e7130ea)
+## RESUME HERE (frontier as of commit cbdbbd2)
 - **State:** 11 module contracts · 136 tests pass · tsc green · checker 0 problems · smoke ALL-PASS
   (20 assertions incl. caret-cell, no-wrap gutter, drag-select persistence, copy, tree-click, hover).
 - **HUMAN-QA BATCH COMPLETE (all committed):** caret off-by-one (1-based ANSI + layout-anchored,
@@ -13,31 +13,21 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   DISPLAY-preservation (e83d89d) · hover highlighting (c0b50b4). De-abbreviation pass landed
   (7254c3c+0a0ea67); naming convention binding (full names, no abbreviations, ALL code).
 - **NEXT (queue):**
-  1. **KEYBINDINGS MODULE (user mandate: full mac support, "IBR it hard"):** write
-     `keybindings.invariants.md` FIRST (the reduction), then implement from it.
-     REALITY: terminals deliver ENCODED SEQUENCES not keys (same chord = different bytes per
-     terminal/protocol; some chords intercepted upstream and NEVER arrive — Cmd+C in Terminal.app);
-     modifier fidelity varies (kitty: super/repeat/release; legacy collapses).
-     CHOSEN: intent-addressed bindings (action ids, never byte sequences; ONE decode layer);
-     layered resolution (canonical Ctrl floor <- mac overlay [Option word-jumps, Cmd nav via the
-     sequences mac terminals actually emit, super aliases via kitty protocol] <- user rebinds;
-     later shadows earlier; pure data lookup); deliverability honesty (UI shows EFFECTIVE bindings
-     for the live session; never advertise what can't arrive).
-     IMPOSSIBILITIES: no key handling outside registry dispatch (Bootstrap's if/else chains
-     DISSOLVE into data); no action reachable only by an unlisted binding (palette lists all); no
-     encoding logic outside the decode layer.
-     Module: Keybinding/KeybindingRegistry/keybindings.defaults.ts + mac overlay; enable
-     useKittyKeyboard (KeyEvent.super), degrade gracefully; the Ctrl+X..Ctrl+C chord becomes DATA.
-     Verify: resolver unit tests (precedence/shadowing/chords); tmux alt+arrow + mac Home/End
-     translations + kitty-super sequences; every existing shortcut re-verified via the registry.
-     Then run a FULLER Claude review panel on it. Record the one-set+overlays decision in
-     project.decisions.md.
-  2. Commit->files->diff drill-down (git panel; GitPanel.openCommit stack is ready).
-  3. Word-wrap MODE (spec in git history / earlier PROGRESS; toggleable, logical<->visual row map).
-  4. Editor/tree wheel momentum (reuse pattern; changes-list momentum optional).
+  1. **KEYBINDINGS COMPLETION (contract + registry landed at f5c2d6d):** keybindings.defaults.ts
+     (ALL current bindings as data incl the quit chord + git o/d/y-N modal), mac overlay
+     (Option word-jumps incl ESC-b/f forms, Cmd via terminal translations + kitty super aliases,
+     enable useKittyKeyboard, graceful degradation), Bootstrap dissolution (onKey -> resolve ->
+     action-handler map; modal contexts palette/confirm as contexts), resolver+floor tests, tmux
+     sequence tests, every existing shortcut re-verified via the registry (smoke must stay
+     ALL-PASS), palette hints from effectiveBindings(). Then a FULLER Claude review panel on it.
+  2. Commit->files->diff drill-down (GitPanel.openCommit stack ready; commitFiles via
+     `git show --name-status`; diff view reuses editor or a diff renderable).
+  3. Word-wrap MODE (toggleable; logical<->visual row map; spec in git history).
+  4. Editor/tree wheel momentum parity; changes-list momentum (optional).
   5. Static-capability pass (single owner) -> M5 diagnostics/definition + editable diff -> M6
-     markdown split-preview -> multi-workspace -> search -> piece-table undo -> M7 plugins ->
-     5-pass gauntlet (fuller Claude panel; codex cautious) -> isolated blackline test -> §5.1 gate.
+     markdown split-preview -> multi-workspace -> search -> piece-table undo -> M7 plugins
+     (registry now exists for binding contributions) -> 5-pass gauntlet (fuller Claude panel) ->
+     isolated blackline acceptance test -> §5.1 gate.
 
 ## Environment (established)
 - Bun `~/.bun/bin/bun` (v1.3.14). Prefix: `export PATH="$HOME/.bun/bin:$PATH"`. Node also on PATH.
