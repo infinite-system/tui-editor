@@ -1,7 +1,7 @@
 # Build Progress — Fable TUI Code Workspace
 
 Live status ledger for the autonomous build. Updated every turn so state survives context
-compaction. **If you are resuming: read this, then `HANDOFF.md`, then continue at the first
+compaction. **If you are resuming: read this, then `project.handoff.md`, then continue at the first
 unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
 ## USER PIPELINE (durable — no user request drops; statused per item)
@@ -38,10 +38,10 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       quiescence was measured-once, not enforced-always — is now closed by the smoke assertion.
       BUILD TARGET: `bun run build:prod` -> dist/fable standalone (--external web-tree-sitter unblocks
       --compile; lazy wasm never fires as tree-sitter is unwired; BUILD.md documents run modes +
-      the ship-wasm-when-wired follow-up) (bae00b7). Worker D's PERFORMANCE_BASELINES.md folds in on
+      the ship-wasm-when-wired follow-up) (bae00b7). Worker D's project.performance-baselines.md folds in on
       merge (its idle numbers are the stale pre-fix build; other metrics — RSS itemization, lifecycle,
       latency-at-30fps — stand and should be re-measured on current HEAD). — 10s at-rest assertion (frame delta 0, CPU ~0; 14% live
-      sample to disambiguate), RSS 110MB vs 100MB target itemized (PERFORMANCE_BASELINES.md),
+      sample to disambiguate), RSS 110MB vs 100MB target itemized (project.performance-baselines.md),
       create/dispose lifecycle stability.
 - [~] 9. Static-capability pass — ACCELERATED by partition: codex converting the STABLE legacy bags
       NOW (worktree codex-static, per-file commits, gate-verified, allowlist shrinks per commit;
@@ -100,13 +100,13 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 ### FLEET (launched this turn; worktree-isolated; coordinator merges serially)
 - Worker A (Sub-Fable): items 3-remainder + 4 — ContextMenu + right-click + Ctrl/Shift-click +
   tooltips. Worker B: item 5 — inline commit expansion. Worker C: item 6 — word-wrap mode.
-- Worker D (Sub-Fable, verification): item 8 — perf-baselines script + PERFORMANCE_BASELINES.md.
+- Worker D (Sub-Fable, verification): item 8 — perf-baselines script + project.performance-baselines.md.
 - codex #1: item 7 — momentum parity port (worktree codex-momentum, log .claude/worktrees/codex-momentum.log).
 - codex #2: item 9 stable partition — Static conversions (worktree codex-static, per-file commits).
 - COORDINATOR (me): item 11 scroll-feel regression tune (after codex lands — same code), reviews +
   merges (review gates: naming convention, contracts+checker, session-scoped verification evidence,
   RootView merge conflicts resolved by hand).
-- Standing conventions (in HANDOFF + decisions): full descriptive names · one-canonical-set+overlay
+- Standing conventions (in `project.handoff.md` + decisions): full descriptive names · one-canonical-set+overlay
   keybindings · destructive ops need confirmation · authoritative-channel verification · delegation
   = full-parity packet, worktree/disjoint isolation, IBR+invariants embedded.
 
@@ -246,7 +246,7 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 - [ ] M7 — plugin demo (kernel composition + one contribution plugin).
 - [ ] Gauntlet — 5 refinement passes + independent subagent panel + completeness-critic-until-dry.
 - [ ] §5.1 gate green — traceability matrix + checker + lifecycle audit + benchmarks + panel + critic
-      + **large-project acceptance test (blackline, isolated worktree)** — see VERIFICATION_RESULTS.md.
+      + **large-project acceptance test (blackline, isolated worktree)** — see project.verification-results.md.
       REQUIRED for done; isolation mandatory (throwaway worktree, never touch live blackline-app).
 
 ## Delegation (see project.delegation-log.md)

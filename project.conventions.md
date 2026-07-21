@@ -1,7 +1,7 @@
 # project.conventions.md — THE operative convention set (load-bearing infrastructure)
 
 This file is the single canonical WHAT. `project.decisions.md` keeps the WHY/history. Every resume
-loads this FIRST (HANDOFF MUST-RE-READ position 1); every delegate packet embeds it mechanically
+loads this FIRST (`project.handoff.md` MUST-RE-READ position 1); every delegate packet embeds it mechanically
 (`scripts/delegate-packet.sh`); the greppable rules run at every merge (`scripts/conventions-gate.sh`).
 Change a convention → change it HERE (and note the why in decisions.md).
 
@@ -105,7 +105,7 @@ Change a convention → change it HERE (and note the why in decisions.md).
   unexpected removals.
 
 ## Self-handoff
-- On ANY resume: read THIS file first, then PROGRESS.md (USER PIPELINE + RESUME HERE), then
-  HANDOFF.md, then the contracts of whatever is in flight.
+- On ANY resume: read THIS file first, then `project.progress.md` (USER PIPELINE + RESUME HERE), then
+  `project.handoff.md`, then the contracts of whatever is in flight.
 - Every turn-ending status carries: the COMPACTION line + `conventions @ <git hash of this file>`
   (drift made visible).

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# perf-baselines.sh — measured performance baselines for the TUI editor (PROGRESS item 8).
+# perf-baselines.sh — measured performance baselines for the TUI editor (project.progress.md item 8).
 #
 # Four measurements, all session-scoped (unique tmux session names + per-session status files,
 # so a live user demo instance is never touched):

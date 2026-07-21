@@ -118,7 +118,7 @@ are the identifiers — referenced by name everywhere, matching code annotations
 
 ### Explicitly not invariants (relocated so they don't pollute the contract)
 
-- Performance budgets (startup < 150 ms, idle < 100 MB, …) → `PERFORMANCE_BASELINES.md` /
+- Performance budgets (startup < 150 ms, idle < 100 MB, …) → `project.performance-baselines.md` /
   `BENCHMARKS.md`. The invariant is *every subsystem carries a reproducible benchmark*, not
   the number.
 - "No integrated terminal in the first release" → scope / `KNOWN_LIMITATIONS.md`.
@@ -272,7 +272,7 @@ their own work at the gate), and **empirical** (the real app is driven and obser
 I may not declare any milestone or the project complete on my own assessment. Done is a set of
 checkable artifacts, all of which must be green:
 
-1. **Traceability matrix** (`VERIFICATION_RESULTS.md`) — every requirement in the brief maps to:
+1. **Traceability matrix** (`project.verification-results.md`) — every requirement in the brief maps to:
    implementation location · verification procedure · expected · actual · evidence artifact ·
    pass/fail · follow-up. **Any unmapped or red row means not done.** A requirement with no
    verification procedure is itself a red row.
@@ -367,7 +367,7 @@ because the author of a bug is the worst reviewer of it. Protocol:
   nothing new for two consecutive sweeps.
 - **No silent truncation:** wherever verification is bounded (a scenario skipped, a benchmark
   not run on a platform, a sampled rather than exhaustive check), it is logged in
-  `VERIFICATION_RESULTS.md` — an unstated cap reads as "covered" when it was not.
+  `project.verification-results.md` — an unstated cap reads as "covered" when it was not.
 
 ### 5.6 Artifacts
 
@@ -383,7 +383,7 @@ than byte-identical ANSI.
 Contracts: `project.invariants.md`, `project.lattice.md`, per-module `*.invariants.md`
 (+ `*.lattice.md` where composition is real). Build docs (per the brief): `project.architecture.md`,
 `project.decisions.md`, `BENCHMARKS.md`, `KNOWN_LIMITATIONS.md`, `TODO.md`, `VERIFICATION_PLAN.md`,
-`VERIFICATION_RESULTS.md`, `PERFORMANCE_BASELINES.md`, `RESOURCE_LIFECYCLE_AUDIT.md`,
+`project.verification-results.md`, `project.performance-baselines.md`, `RESOURCE_LIFECYCLE_AUDIT.md`,
 `ARCHITECTURE_COMPLIANCE.md`, `UX_REVIEW.md`, and `project.delegation-log.md` (the ledger of work
 delegated to subagents/codex — tally and per-agent build share reported at each check-in,
 sub-par agents deprecated). `project.architecture.md`/`project.decisions.md` link the ivue guide/example pages

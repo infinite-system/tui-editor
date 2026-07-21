@@ -116,7 +116,7 @@ self, not a fresh underling. The prompt =
 **(shared cold-start orientation) + (only the contracts the task touches) + (role-framed task) −
 (conductor identity).**
 
-- **Shared orientation (fixed, reusable — the HANDOFF MUST-RE-READ foundation):** the ivue reference
+- **Shared orientation (fixed, reusable — the `project.handoff.md` MUST-RE-READ foundation):** the ivue reference
   + namespace pattern (`class $X` + `namespace X { const $Class; let Class = Reactive($X)/Static($X);
   type Instance }`, plain getters not `computed()`, late dependency reads, `createX()` seams, the
   `$stopEffects` footgun, `Static()` for stateless capabilities); the naming/module conventions; the
@@ -124,7 +124,7 @@ self, not a fresh underling. The prompt =
   pane-scrape; `bunx tsc --noEmit; echo TSC=$?` — never piped through tail/tee); the
   coordinate/frame-effect facts; and the codex-integration protocol (files land UNTRACKED in the
   worktree, the coordinator reviews + commits, codex often skips tests + the contract so demand
-  them). Point the delegate at `HANDOFF.md` + `project.ivue-reference.md` + the OpenTUI/coordinate
+  them). Point the delegate at `project.handoff.md` + `project.ivue-reference.md` + the OpenTUI/coordinate
   facts rather than re-inlining — start it where the coordinator stands.
 - **Scope contracts only (tiered):** include the target module's `*.invariants.md` + the specific
   `project.invariants.md` records the task touches — NOT all contracts. Cloning everything multiplies
@@ -180,7 +180,7 @@ version (`@invariantai/ibr` 0.1.0), intentionally vendored, byte-identical to ca
 `diff`), refreshed by re-running the installer. Version pinning + the release-sync workflow manage
 drift. The canonical source remains the npm package.
 
-**Applied:** codex preamble + HANDOFF + PROGRESS now point at the project-local checker/skill paths.
+**Applied:** codex preamble + `project.handoff.md` + `project.progress.md` now point at the project-local checker/skill paths.
 
 **Status:** adopted · **Logged:** 2026-07-21
 
