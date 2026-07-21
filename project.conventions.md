@@ -26,6 +26,24 @@ Change a convention → change it HERE (and note the why in decisions.md).
   `src/modules/**`.
 - One class per `PascalCase.ts` file (ivue namespace pattern); role collections are
   `<module>.<role>.ts`. Docs are `project.<role>.md`. "ivue" is always lowercase.
+- FILE-NAME-FOLLOWS-CONTENT: a file whose primary export is a `namespace X` backing a Static/Reactive
+  class (`export const/let Class = Static($X)` / `Reactive($X)`) is named `X.ts` (PascalCase matching
+  the namespace). A genuine role-collection of loose data/config with NO class stays
+  `<module>.<role>.ts` (e.g. `keybindings.defaults.ts`). The filename tells you which shape is inside.
+- ATOMIC-BIND (forgetting is made impossible, not discouraged): converting a bare-function module to a
+  namespace+Static/Reactive class REQUIRES renaming the file to `<Namespace>.ts` in the SAME commit. A
+  converted-but-not-renamed file is an INCOMPLETE conversion, not a smaller one. CHECK: conventions-gate
+  hard-fails if any `src/modules/**/*.ts` exporting `namespace X { … Static(/Reactive( }` has filename
+  ≠ `X.ts`.
+- `$` = THE RAW/UNDERLYING FORM OF A PUBLIC SEAM MEMBER — one sigil, one meaning, at BOTH scopes: class
+  level (`$Class` → `Class`) and member level (`$fuzzyScore` → `fuzzyScore`). A manifest member's
+  backing function is the same name prefixed `$`: `function $fuzzyScore(…) {}` then
+  `class $CommandScoring { static fuzzyScore = $fuzzyScore }`. `$name` is the full descriptive name with
+  a semantic marker — NOT an abbreviation (the full-names rule still holds). Replaces the old
+  `…Implementation` suffix. Rules: (a) `$name` functions are module-private by DEFAULT — export only if
+  a subclass/other module needs the raw form (parallel to `$Class`); (b) manifest-shape only — a tiny
+  inline-body capability needs no `$name` backing. CHECK: conventions-gate grep for the `…Implementation`
+  suffix.
 - Reactive state = ref-returning getters; cheap derived state = PLAIN getters (never `computed()`
   unless memoization is proven). Cross-module deps are read LATE (getters/method bodies) — never
   top-level `new`/snapshot. Owned constructions go through overridable `createX()` seams.
@@ -65,6 +83,11 @@ Change a convention → change it HERE (and note the why in decisions.md).
 ## Delegation
 - Every delegate packet is assembled MECHANICALLY by `scripts/delegate-packet.sh` — conventions +
   method essentials + target contracts + task spec. Never hand-assembled from memory.
+- FRACTAL INHERITANCE: this applies RECURSIVELY down the spawn tree. ANY agent that spawns a
+  sub-agent — coordinator, delegate, or a delegate's delegate — MUST assemble the sub-agent's prompt
+  via `scripts/delegate-packet.sh`. Spawning a sub-agent without it is a convention violation. This is
+  what makes convention-inheritance self-perpetuating: every clone, at every depth, is born with the
+  same conventions + method + contracts because the ONLY sanctioned way to spawn carries them.
 - Full-parity context, task-scoped: worktree-per-writer isolation; disjoint file sets where
   possible; NO conductor identity (delegates do the one task and stop); delegates never commit —
   the coordinator reviews (naming gate, contracts, verification evidence) and commits with credit.
