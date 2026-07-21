@@ -79,5 +79,16 @@ if [ -n "$impl_suffix" ]; then
   fail=1
 fi
 
+# 7) NO UNWIRED CAPABILITY: every namespace+Static/Reactive module must have a live caller outside its
+#    own file + test (the build-but-don't-wire disease — GitWatcher/DiffView). Delegated to its own
+#    script (allowlist + justification live there). This is the generator-level fix: a capability whose
+#    only reference is its isolated test now HARD-BLOCKS the gate.
+if ! bash "$(dirname "$0")/check-unwired-capabilities.sh" >/tmp/conventions-gate-unwired.$$.log 2>&1; then
+  echo "CONVENTIONS FAIL: unwired capability (build-but-don't-wire):"
+  cat /tmp/conventions-gate-unwired.$$.log
+  fail=1
+fi
+rm -f /tmp/conventions-gate-unwired.$$.log
+
 [ "$fail" = 0 ] && echo "conventions-gate: PASS"
 exit "$fail"

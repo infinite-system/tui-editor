@@ -25,6 +25,30 @@ NOTHING decided is lost across compaction or a cold restart, and so EVERY spawne
 - `tsc --noEmit` GREEN before EVERY commit — `scripts/conventions-gate.sh` HARD-BLOCKS on tsc failure
   (it runs tsc as check 0). Never pipe tsc (`bunx tsc --noEmit; echo TSC=$?`).
 
+## Definition of Done + wiring discipline (build-but-don't-wire is THE tracked disease)
+
+Three independent audits (2026-07-21) converged on one systemic failure: capabilities and settings get
+built cleanly, pass ISOLATED tests, and their contracts read as live — but nothing consumes them (zero
+callers). Confirmed dead at the time: DiffView (700 lines), 8 of 13 settings, palette entries. Isolated
+tests HIDE it. The craft is fine; wiring is the blind spot. These rules make it structurally impossible:
+
+- **DEFINITION OF DONE (load-first; a feature/capability is NOT done until all three hold):**
+  (a) WIRED into the running app with a live caller path (a real user can reach it);
+  (b) an e2e test DRIVES the real user path (FrameProbe/tmux/status.json) — an isolated unit test is
+      explicitly NOT sufficient;
+  (c) verified in the demo/framebuffer.
+  "Isolated test green + contract written" is NOT done. This is inherited by every worker via the packet.
+- **MERGE RULE:** a worker-delivered capability does NOT merge until it is WIRED + its DRIVING test is
+  added in the SAME integration. No "merge the capability now, wire it later" — that backlog is the disease.
+- **CONTRACT-LIVENESS:** a user-facing capability's `*.invariants.md` MUST name its wiring/mount point
+  (the caller). If it can't name one, it is not live and not done.
+- **MECHANICAL GATE (#1, enforced):** `scripts/check-unwired-capabilities.sh` (run inside
+  conventions-gate) fails if any namespace+Static/Reactive module is referenced ONLY by its own file +
+  test. Forward-milestones (LSP/Markdown) are allowlisted WITH a justification; the list only SHRINKS.
+- **SETTINGS APPLIED-EFFECT META-GATE (#2, being built as P3):** every Settings field MUST have an e2e
+  test that DRIVES its observable effect; a schema-enumeration meta-assertion fails the gate if any field
+  lacks one. This is why 8 dead settings went unnoticed — the existing tests only assert the ref changed.
+
 ## Verification (the discipline that makes parallelism safe)
 - Verify by DRIVING — FrameProbe framebuffer / tmux / per-session `status-<session>.json` — NEVER by
   reading code. "The handler looks right" is not verification.
