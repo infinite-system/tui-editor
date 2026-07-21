@@ -149,3 +149,27 @@ strongest signals so far; feed back to the skills.
 
 - **WebFetch upgrades HTTP→HTTPS and won't reach a local dev server** *(minor)* — the ivue docs at
   `10.211.55.7:5174` are served from `../ivue/docs_v2/`; read the local source file instead.
+
+## codex integration round (2026-07-21)
+
+### ivue skill
+
+- **`$stopEffects()` clears ALL cached getter cells, not just effects — a real footgun.**
+  *(moderate)* `Reactive()` stores ref-getter STATE (`get status(){ return ref('idle') }`) in the
+  same per-instance cached cells that `$stopEffects()` deletes. So calling `$stopEffects()`
+  "defensively" on a class that owns NO `$watch`/`$watchEffect` effects but HAS ref-getter state
+  corrupts that state: after dispose the getter re-materializes its DEFAULT (`'idle'`, `''`, `[]`),
+  not the last value, and any `publish()`/read after the call sees the reset. Bit two integrated
+  modules (LanguageClient, GitRepository) — both had a speculative `$stopEffects()` in `dispose()`.
+  **Rule:** call `$stopEffects()` ONLY on classes that actually own effects (e.g. the App frame
+  effect). For pure ref-getter-state classes, disposal = invalidate in-flight work + close
+  resources; do NOT call `$stopEffects()`. **Proposed:** the skill's lifecycle/disposal section
+  must state this explicitly (it currently implies `$stopEffects()` is a harmless teardown call).
+
+### Delegation
+
+- **codex delivers code but routinely skips the required tests AND the module contract.** *(pattern)*
+  All 3 workers wrote working code; git included a contract + tests, but markdown and lsp shipped
+  code only. Completion (contract + tests + minor fixes) was delegated to review subagents that also
+  caught real bugs (lsp dispose). **Takeaway:** budget a review+completion pass per codex module by
+  default; a codex "done" is code-done, not milestone-done.

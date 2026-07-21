@@ -211,8 +211,9 @@ class $GitRepository {
     this.historyRequestId++;
     this.operationId++;
     this.refreshing.value = false;
-    // $stopEffects is injected by Reactive() on the wrapped instance, not the raw $GitRepository.
-    (this as { $stopEffects?: () => void }).$stopEffects?.();
+    // No owned effects here — bumping the request IDs makes any in-flight refresh/history/op inert.
+    // (Do NOT call $stopEffects: it clears cached ref-getter STATE cells, corrupting the
+    // publishStatus() read below and any final state — only effect-owning classes should call it.)
     this.publishStatus();
   }
 }
