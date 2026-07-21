@@ -13,8 +13,10 @@ import { CommandRegistry } from '../commands/CommandRegistry';
 import { registerDefaultCommands } from '../commands/commands.defaults';
 import { buildRootView, type RootView } from '../ui/RootView';
 import { StatusChannel } from '../system/StatusChannel';
+import { FrameProbe } from '../system/FrameProbe';
 import { Environment } from '../system/Environment';
 import { Logging } from '../system/Logging';
+import { dirname, join } from 'node:path';
 
 export interface BootOptions {
   root?: string;
@@ -113,10 +115,13 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   });
 
   // Frame-settle signal for the tmux harness (a frame actually rendered).
+  const framePath = join(dirname(StatusChannel.Class.path), 'frame.json');
   let frame = 0;
   const onFrame = (): void => {
     frame += 1;
     StatusChannel.Class.settle(frame);
+    // Exact per-cell visual snapshot for tests (env-gated; no-op otherwise).
+    FrameProbe.Class.dump(renderer, framePath);
   };
   renderer.on('frame', onFrame);
   app.onDispose(() => renderer.off('frame', onFrame));

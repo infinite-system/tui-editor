@@ -119,8 +119,19 @@ ends inside a surrogate pair or a combined emoji; a shaded range that disagrees 
 `selectionRange()` columns.
 
 **Verification:** `bun test src/modules/ui/ui.selection.test.ts` (chunk fg/bg + grapheme boundaries);
-smoke selection assertions.
+smoke selection assertions. Per-cell visual verified with `FrameProbe` (`TUI_FRAME_DUMP=1` dumps the
+OpenTUI render buffer to `artifacts/frame.json`) — the authoritative visual channel, since
+`tmux capture-pane -e` is lossy for truecolor bg.
 
-**Status:** provisional
+**KNOWN RENDER BUG (found by FrameProbe 2026-07-21):** the span-splitting LOGIC is correct
+(unit-proven), but embedding `bg` chunks in a multi-line `StyledText` mis-positions the shaded cells
+— the frame probe shows the selection bg painted on the wrong buffer row (e.g. selection on doc
+line 2 paints near y=13, not the cursor's content row). OpenTUI lays out bg chunks differently from
+text chunks. **Fix path:** drive OpenTUI's native text selection instead — `TextBufferRenderable`
+(`selectionBg`/`selectionFg` + `onSelectionChanged`, backed by `TextBufferView.setLocalSelection`),
+mapping the model selection to LOCAL text-buffer coords (account for the per-line gutter/marker
+prefix and the visible window). Self-do (editor-core); see PROGRESS RESUME HERE.
+
+**Status:** provisional (logic proven; render integration to be reworked to native selection)
 
 **Last refined:** 2026-07-21
