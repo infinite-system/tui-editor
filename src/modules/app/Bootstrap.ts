@@ -1,8 +1,9 @@
 // Boot sequence: seal the kernel, create the renderer, open the workspace, build the frame,
-// wire input, stand up the settle-detecting status channel, and run until quit.
+// wire ONE reactive frame effect, wire input, and run until quit.
 //
 // invariant: The app is built only after the kernel is sealed (project.invariants.md)
 // invariant: Data flows one way (project.invariants.md)
+// invariant: Rendering is one coarse frame effect (app.invariants.md)
 import { createCliRenderer, type CliRenderer, type KeyEvent } from '@opentui/core';
 import { App } from './App';
 import { Kernel } from '../kernel/Kernel';
@@ -43,14 +44,13 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
 
   const theme = new Theme.Class();
   const workspace = new Workspace.Class();
-  const root = options.root ?? Environment.Class.cwd;
-  workspace.open(root);
+  workspace.open(options.root ?? Environment.Class.cwd);
 
   const commands = new CommandRegistry.Class();
 
   const view = buildRootView(renderer, workspace, theme, commands);
 
-  // Publish model state to the observability side channel.
+  // Publish model state to the observability side channel (read-only over model state).
   const publish = (): void => {
     const ed = workspace.editor;
     StatusChannel.Class.update({
@@ -72,15 +72,59 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     });
   };
 
-  let frame = 0;
-  const render = async (): Promise<void> => {
-    // Keep the editor viewport sized to the current frame before rendering.
-    workspace.editor.viewport.setSize(view.editorViewportWidth(), view.editorViewportHeight());
+  // Pull current state into the renderables and request a frame. READ-ONLY over model state
+  // (no ref writes), so it is safe to run inside the reactive effect with no feedback loop.
+  const paint = (): void => {
     view.update();
     publish();
+    renderer.requestRender();
+  };
+
+  // The editor viewport size derives from the rendered layout (non-reactive), so it is synced on
+  // the external triggers (boot, resize) — NOT inside the frame effect, which would be a
+  // projection→model write feeding the effect it observes.
+  // invariant: Rendering is one coarse frame effect (app.invariants.md)
+  const syncSize = (): void => {
+    workspace.editor.viewport.setSize(view.editorViewportWidth(), view.editorViewportHeight());
+  };
+
+  // The single coarse reactive frame effect: observe the load-bearing signals and repaint on ANY
+  // change — keyboard input OR an async producer (syntax/LSP/git). This is what lets a git refresh
+  // or an LSP diagnostic repaint the screen without a keypress.
+  // invariant: Rendering is one coarse frame effect (app.invariants.md)
+  app.$watchEffect(() => {
+    const ed = workspace.editor;
+    // Explicit subscriptions to the load-bearing signals (document.revision in particular is only
+    // read indirectly by update(), so touch it here to guarantee content changes repaint).
+    void ed.document.revision.value;
+    void ed.cursor.line.value;
+    void ed.cursor.col.value;
+    void ed.viewport.scrollTop.value;
+    void workspace.focus.value;
+    void workspace.tree.selectedIndex.value;
+    void commands.open.value;
+    void commands.query.value;
+    void commands.selectedIndex.value;
+    void theme.paletteName.value;
+    paint();
+  });
+
+  // Frame-settle signal for the tmux harness (a frame actually rendered).
+  let frame = 0;
+  const onFrame = (): void => {
+    frame += 1;
+    StatusChannel.Class.settle(frame);
+  };
+  renderer.on('frame', onFrame);
+  app.onDispose(() => renderer.off('frame', onFrame));
+
+  // Awaitable render for boot/resize/harness determinism: sync size, paint, wait one frame.
+  const render = async (): Promise<void> => {
+    syncSize();
+    paint();
     await new Promise<void>((resolve) => {
       let done = false;
-      const finish = () => {
+      const finish = (): void => {
         if (done) return;
         done = true;
         renderer.off('frame', finish);
@@ -90,8 +134,6 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       renderer.requestRender();
       setTimeout(finish, 120);
     });
-    frame += 1;
-    StatusChannel.Class.settle(frame);
   };
 
   let shuttingDown = false;
@@ -99,6 +141,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     if (shuttingDown) return;
     shuttingDown = true;
     Logging.Class.info('Shutdown start');
+    app.$stopEffects(); // stop the frame effect FIRST — no repaint during teardown
     view.dispose();
     app.dispose();
     options.onQuit?.();
@@ -108,13 +151,13 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     workspace,
     theme,
     quit: () => void shutdown(),
-    requestRender: () => void render(),
+    requestRender: () => app.requestRender(),
   });
 
-  // --- input ---------------------------------------------------------------
-  // Accelerated arrows: terminals report key REPEAT (not down/up), so we ramp the step size
-  // when the same arrow keeps arriving quickly, and reset when the direction changes or the
-  // stream pauses. invariant: Terminals report key repeat not key up (project.invariants.md)
+  // --- input: handlers MUTATE model state only; the frame effect repaints. -----------------
+  // Accelerated arrows: terminals report key REPEAT (not down/up), so we ramp the step size when
+  // the same arrow keeps arriving quickly, and reset on direction change or pause.
+  // invariant: Terminals report key repeat not key up (project.invariants.md)
   let accelDir = '';
   let accelRun = 0;
   let accelLast = 0;
@@ -129,7 +172,6 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     }
     accelDir = dir;
     accelLast = now;
-    // 1,1,1 then ramp: after ~4 rapid repeats start accelerating, cap at 8.
     if (accelRun < 4) return 1;
     return Math.min(8, 1 + Math.floor((accelRun - 3) / 2));
   };
@@ -168,18 +210,15 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
         default:
           if (isTypedCharacter(key)) commands.appendQuery(key.sequence);
       }
-      void render();
       return;
     }
 
     // Ctrl+P opens the palette from anywhere.
     if (key.name === 'p' && key.ctrl) {
       commands.openPalette();
-      void render();
       return;
     }
 
-    let changed = true;
     const focus = workspace.focus.value;
 
     if (key.name === 'tab') {
@@ -206,7 +245,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
             workspace.activate();
           break;
         default:
-          changed = false;
+          break;
       }
     } else {
       // editor focus
@@ -240,23 +279,20 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
         ed.backspace();
       } else if (key.name === 'delete') {
         ed.deleteChar();
-      } else if (key.name === 'tab' /* already handled above, but guard */) {
-        // no-op (focus switch handled earlier)
       } else if (key.name === 'escape') {
         workspace.focusFiles();
       } else if (isTypedCharacter(key)) {
         ed.insertText(key.sequence);
-      } else {
-        changed = false;
       }
     }
-
-    if (changed) void render();
+    // No explicit render here — any model mutation above triggers the frame effect.
   };
   renderer.keyInput.on('keypress', onKey);
   app.onDispose(() => renderer.keyInput.off('keypress', onKey));
 
-  const onResize = (): void => void render();
+  const onResize = (): void => {
+    void render();
+  };
   renderer.on('resize', onResize);
   app.onDispose(() => renderer.off('resize', onResize));
 

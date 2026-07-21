@@ -58,6 +58,14 @@ class $App {
   dispose(): void {
     StatusChannel.Class.update({ lifecycleTier: 'disposing', ready: false });
     StatusChannel.Class.flush();
+    // Stop the frame effect (and any other owned effect) before tearing down renderables.
+    // Idempotent — shutdown() also calls this first. invariant: A referenced resource stays alive.
+    // $stopEffects is injected by Reactive() on the wrapped instance, not on the raw $App type.
+    try {
+      (this as { $stopEffects?: () => void }).$stopEffects?.();
+    } catch {
+      /* no effects registered */
+    }
     for (const d of this.disposers.reverse()) {
       try {
         d();

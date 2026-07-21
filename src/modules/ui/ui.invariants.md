@@ -11,41 +11,6 @@ bounded viewport; terminal color and glyph support varies) rather than adding it
 
 ## Chosen invariants
 
-### Rendering is one coarse frame effect
-
-**Invariant:** If model state changes — by input OR by an async producer (syntax, LSP, git) —
-then a single reactive frame effect observes it and calls `requestRender()`; repaint is never
-conditional on a keypress.
-
-**Scope:** The render trigger in `app/Bootstrap` + `ui/RootView.update()`.
-
-**Mechanism:** One `watchEffect` reads the load-bearing signals `update()` consumes (buffer
-`revision`, cursor line/col, viewport top, workspace focus, tree selection, palette open/query,
-theme selection) and calls `view.update()` + `requestRender()`; any mutation invalidates it. The
-lone projection→model edge (`viewport.setSize`) stays OUTSIDE this effect to avoid a feedback
-loop. Realizes *Data flows one way* (the reactive-invalidation half).
-
-**Generates:** async repaint for git/LSP/diagnostics without input; the single coarse
-invalidation effect (not effect-per-line/token/cell).
-
-**Evidence:** currently VIOLATED — rendering is imperative (`Bootstrap.ts:171,179,254` call
-`void render()` from input handlers; `RootView.ts:211` reads state outside any effect; zero
-`$watch`/`watchEffect` in `src/`). The `revision` refs are bumped but unobserved ("decorative
-reactivity"). Outcome (one-way) holds; the mechanism does not.
-
-**Impossible if true:** an async result (LSP diagnostic, git refresh) that changes model state
-but does not repaint until the next keystroke.
-
-**Open question:** wire the single frame `watchEffect` (the planned rework) before M4/M5 async
-producers land.
-
-**Verification:** a test that mutates model state with no key event (simulate an async result)
-and asserts a repaint was requested.
-
-**Status:** provisional
-
-**Last refined:** 2026-07-21
-
 ### Renderables hold no model state
 
 **Invariant:** If a renderable exists, then it holds only presentation state; it pulls all
