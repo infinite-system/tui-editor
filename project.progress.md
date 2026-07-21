@@ -189,32 +189,105 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   keybindings · destructive ops need confirmation · authoritative-channel verification · delegation
   = full-parity packet, worktree/disjoint isolation, IBR+invariants embedded.
 
-## RESUME HERE (frontier as of commit 1afc574)
+## RESUME HERE (frontier as of commit 6fc0858 — COMPACTION CHECKPOINT)
 - **READ FIRST on resume/cold-start:** `project.requirements.md` (persistent cross-cutting brief) →
   `project.conventions.md` → this file (USER PIPELINE below) → `project.invariants.md` → in-flight contracts.
-- **State:** ~300 tests pass · tsc green · checker 0 · conventions-gate PASS (hard-blocks tsc) · smokes
-  (editor/tabs/tree-scroll/git-watch) ALL-PASS. Demo auto-bumps on every commit.
+- **HEAD = 6fc0858** · git status CLEAN · tsc green · conventions-gate PASS · **0 workers in flight.**
 - **MERGED CAPABILITIES available to wire:** `src/modules/diff/` (DiffAlignment aligned-row model +
   DiffView, item 14 — NOT yet mounted in a tab), `src/modules/layout/SplitterModel.ts` (reusable
-  draggable-divider model — NOT yet given a bar renderable / hit-test / Settings persistence),
-  `src/modules/settings/` (Settings store + SettingsPanel — panel edits+persists but scroll-physics
-  values are NOT yet read live by the momentum engine).
+  draggable-divider model — merged; sidebar divider drafted in RootView but the 1-cell childless bar is
+  NOT in OpenTUI's mouse hit-grid so drag doesn't register — panel-path resize works), `src/modules/
+  settings/` (Settings store + SettingsPanel — live for scroll physics; word-wrap/theme/thickness/glyph TAIL pending).
 - **DONE since last anchor:** Cmd+Left/Right disambiguation (raw ^A/^E vs Kitty Ctrl+A — corrected the
-  2da0384 false-green, 9694579) · Settings LIVE-APPLY for scroll physics (momentum reads the store,
-  1afc574 — E's ceiling is now the settings default) · single-glyph checkbox (23616f9).
-- **NEXT (coordinator priority, RootView integration = mine; delegate isolated builds to codex/Fable):**
-  1. Splitter RootView integration — mount a draggable bar for the sidebar width + git changes/log
-     divider using SplitterModel (merged, src/modules/layout/); make SIDEBAR_WIDTH / gitSplitRatio
-     dynamic; persist via onSizeChange → Settings (settings.sidebarWidth / settings.gitSplitRatio,
-     which are ALREADY in the store + panel).
-  2. Diff-view integration — mount DiffView (merged, src/modules/diff/) as a diff TAB (replacing the
-     transient diffEditor); wire open-full-editor + jump-next/prev + the N-of-M counter callbacks.
-  3. Scrollbars on EVERY overflowing pane BOTH axes + unify thickness (avg constant, = settings
-     scrollbarThickness) + tree scrollbar — reuse ScrollbarGeometry.
-  4. Settings live-apply TAIL — word-wrap / theme / scrollbar-thickness / glyph-mode read the store
-     (scroll physics already live; these renderers still read their own state).
-  5. Low-pri: symlink node_modules ignore-robustness; fast-scroll modifier [F] (awaiting user's key).
-  6. FOLLOW-UP: keyboard nav inside the tab-count dropdown (click works; Down/Enter doesn't activate).
+  2da0384 false-green, 9694579) · Settings LIVE-APPLY for scroll physics (1afc574) · sidebar-width
+  drives layout live (dead-setting #1 fixed, 29c9d29 — user-CONFIRMED ✅) · **FILE-TREE VERTICAL SCROLLBAR landed (6fc0858,
+  scrollbar-both-axes pane #1 of the elevated priority)** — drive-verified via TUI_DEBUG_BARS
+  (trackLeft=29→left=28, visible, inside the 32-wide sidebar; the earlier "not rendering" was a
+  false-negative from a persisted sidebarWidth=76 that put the thumb at col ~73 off the probed range).
+- **NEXT (coordinator priority order; RootView integration = mine; delegate isolated builds to codex):**
+  1. **SCROLLBARS BOTH-AXES — elevated TOP priority, land pane-by-pane** (tree ✓ DONE). Remaining panes:
+     git STAGING/CHANGES (v+h), git COMMITS/LOG (v+h), editor (v+h exist — audit h), diff. Shared
+     ScrollbarGeometry; draggable thumb + click-to-page + inertia; then UNIFY thickness (D: one constant
+     = settings.scrollbarThickness, currently avg of the two).
+  2. **GIT-PANEL ROW SIMPLIFICATION (user, LOCKED spec — supersedes single-glyph-checkbox 23616f9,
+     now SUPERSEDED):** REMOVE the per-row checkbox column entirely (its stage/unstage duplicates the
+     +/- action buttons). Status = an ICON GLYPH via the theme ladder (nerd→unicode→ascii), theme-colored:
+       · MODIFIED → pencil: nerd `` (nf-pencil) · unicode ✎ (fallback ●) · ascii `M` — AMBER/yellow.
+       · DELETED  → cross/trash: nerd `` (nf-trash) · unicode ✗ · ascii `D` — RED.
+       · ADDED (staged new) → PLUS: nerd `` (nf-plus-circle) · unicode ＋ · ascii `+` — GREEN.
+       · UNTRACKED (new, unstaged) → QUESTION: nerd `` · unicode ? · ascii `?` — GREEN (matches git ??).
+       · RENAMED → arrow: nerd `` · unicode → · ascii `R` — BLUE.
+     ascii row = `M / D / + / ? / R` (NOT letters for added/untracked — user wants + and ?). Color does
+     half the work (green=added/untracked, amber=modified, red=deleted, blue=renamed). Net row:
+     `[status glyph] filename … [+/- open discard]`. PRESERVE BULK STAGING: each SECTION header
+     (Staged / Changes / Untracked) gets a stage-all / unstage-all action; row-level +/- for individual
+     files. Verify by DRIVING: FrameProbe a changes row shows the glyph (not a letter in nerd/unicode)
+     and NO checkbox; +/- stages/unstages; section stage-all works. (RootView/git-panel/theme — mine.)
+  2b. **DEAD SETTING #3 — wordWrap (user-found, LIVE dead control, PRIORITY BUG; same pattern as
+     sidebarWidth #1, and #2 the settings-tail):** toggling "Word wrap" in the panel wraps NOTHING.
+     Root cause (coordinator-verified): TWO sources of truth. EditorWrap.ts has the engine ($wrapLine);
+     `settings.wordWrap` (Settings.ts:36/115) is the reactive boolean the PANEL flips; but
+     CommandDefaults.ts:68 `view.toggleWordWrap` → getEditor().toggleWordWrap() flips a SEPARATE
+     editor-internal flag. The editor renders from ITS OWN flag → the panel toggle changes the setting
+     and nothing wraps. FIX (single source of truth): the editor's wrap-enabled state READS
+     settings.wordWrap reactively (flip setting ⇒ wrap/unwrap live); `view.toggleWordWrap` flips
+     settings.wordWrap (not a private flag) so command + panel stay in sync; editor renders via
+     EditorWrap when settings.wordWrap is true at the content width. Drive-verify: long line, panel
+     wordWrap ON → FrameProbe the line spans multiple rows within editor width; OFF → one row + h-scroll;
+     also verify the command path flips the SAME state. Land the wordWrap applied-effect e2e test (item 11)
+     as part of this fix — it's the canonical case for the enforced meta-test.
+  2c. **DEAD SETTING #4 — gitSplitRatio (user-found, PRIORITY BUG; same class as #1/#3):** changing
+     "Git changes/log split" does NOT move the boundary between the Changes/Staging list and the Commit
+     Log. Root cause: the git panel doesn't derive its changes-vs-log split point from
+     settings.gitSplitRatio reactively. FIX (mirror sidebarWidth exactly): the vertical division between
+     the Changes/Staging region and the Commit Log region is computed from a reactive value =
+     settings.gitSplitRatio (clamp 0.1–0.9), so the panel moves the split LIVE and the future draggable
+     git divider updates the SAME persisted value. Drive-verify: set gitSplitRatio via the panel →
+     FrameProbe the boundary row between changes and log moves; extremes 0.1/0.9 clamp sanely. Add its
+     applied-effect e2e test alongside (item 11 suite).
+  3. **SPLITTERS DRAG (user-confirmed TOP priority, alongside scrollbars):**
+     (a) SIDEBAR divider hit-testable — the 1-cell CHILDLESS bar isn't in OpenTUI's mouse hit-grid, so
+     beginDrag/dragTo/endDrag never fire (panel-path resize works, drag doesn't). Give it a REAL hit
+     region (a divider renderable with actual width / a child cell spanning the column height) + a
+     hover/grab affordance (highlight). Drive-verify: tmux press-drag on the divider COLUMN → FrameProbe
+     sidebar width changes + persists to settings.sidebarWidth.
+     (b) GIT changes/log divider — horizontal SplitterModel driving settings.gitSplitRatio, SAME
+     hit-testable-region approach (this ALSO fixes dead-setting #4 gitSplitRatio, item 2c).
+     Both persist via onSizeChange → Settings and stay in sync with the panel (single source of truth).
+     Add applied-effect e2e tests (drag → size change → persisted) to the item-11 settings-e2e suite.
+  4. DIFF-VIEW integration — mount DiffView as a diff TAB; open-full + jump-next/prev + N-of-M counter.
+  5. SEARCH SUITE (4 codex workers, user priority): fuzzy quick-open (reuse CommandScoring.fuzzyScore);
+     in-file find/replace; ripgrep find-in-files panel (rg 14.1.1 installed); project-wide replace.
+  6. TAB count-badge DROPDOWN CARET (▾) with idle/hover/press states.
+  7. FILE-TREE QA: tighter per-level indent (single indentWidth constant, later a setting) + REMOVE the
+     leading chevron (folder glyph conveys open/closed); keep the whole row clickable.
+  8. SETTINGS GEAR button in the bottom status bar (toggles Ctrl+,).
+  9. Cmd+Up/Down → doc start/end — AWAITING user's `cat -v` bytes (do NOT assume — burned twice).
+ 10. Settings live-apply TAIL — word-wrap / theme / scrollbar-thickness / glyph-mode read the store.
+ 11. **SETTINGS E2E APPLIED-EFFECT TESTS (user, ENFORCED INVARIANT — pairs with "measured ≠ enforced /
+     verify by driving"):** for EACH settings field, a REPEATABLE e2e test that sets the value through
+     the real settings path (as the panel does) → asserts the REAL observable effect BY DRIVING
+     (status.json / FrameProbe / behavior) → changes it again → asserts it changed. This is the exact
+     failure mode just hit: sidebarWidth was a live panel control that did NOTHING (RootView didn't read
+     it) — a dead setting a persist-only test can't catch. Per-field coverage:
+       · verticalFlingCeiling → a fling caps at the new ceiling (fold into the existing momentum test).
+       · scrollAccelGain / scrollFriction / linesPerNotch → scroll distance/decay changes measurably.
+       · horizontalScrollModifier → the configured modifier routes a wheel to horizontal (set vs another).
+       · fastScrollModifier / fastScrollMultiplier → holding the modifier multiplies the scroll step.
+       · scrollbarThickness → the rendered bar occupies the set column/row count (FrameProbe).
+       · glyphMode → forcing nerd/unicode/ascii changes rendered glyphs (FrameProbe a known glyph).
+       · theme (dark/light) → palette colors in the framebuffer change.
+       · wordWrap → a long line wraps vs not (FrameProbe row count).
+       · sidebarWidth → sidebar column count changes (the dead one).
+       · gitSplitRatio → the staging/log split point moves.
+     REPEATABLE = deterministic, reset state each run via the fake-fs/settings seam; part of the
+     ALWAYS-RUN gate so a future dead-setting FAILS the gate. **META-ASSERTION:** enumerate the settings
+     schema and assert every field has a corresponding applied-effect test — adding a new setting without
+     an e2e test FAILS the gate. Turns "every setting must actually apply" into an enforced invariant, not
+     a hope. Implement alongside the settings-wiring TAIL (item 10).
+ 12. Low-pri: symlink node_modules ignore-robustness; fast-scroll modifier [F] (awaiting key); tab-dropdown keyboard nav.
+- **BUDGET RULE (coordinator):** codex = DEFAULT worker for almost everything; Fable/opus only for the
+  genuinely hard reasoning, and keep the concurrent Fable/opus count MODEST. codex never trusted with deletions.
 - **State:** 269 tests pass · tsc green · checker 0 · conventions-gate PASS (now hard-blocks tsc-fail) ·
   smoke-editor + smoke-tabs + smoke-tree-scroll ALL-PASS (incl. idle frame-delta==0). `conventions @ f41a241`.
 - **LANDED SINCE THE 4-WORKER MERGES (newest first):** tooltip centered-over-cursor (A, c69ec4a) ·

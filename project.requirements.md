@@ -35,6 +35,12 @@ NOTHING decided is lost across compaction or a cold restart, and so EVERY spawne
   tests; the missing enforcement was an external-fs-change → panel-update smoke.)
 - Audit for BUILT-BUT-UNWIRED capabilities: a capability referenced only by its own test is suspect.
   (Known forward-milestone, not-yet-wired-by-design: MarkdownRenderable [M6], LanguageClient [M5].)
+- SETTINGS APPLIED-EFFECT is an ENFORCED INVARIANT (user): a persist-only test is insufficient — every
+  settings field needs a REPEATABLE e2e test that drives the observable effect (status.json/FrameProbe/
+  behavior) after setting it the real way, then re-changes + re-asserts. A schema-enumeration
+  META-ASSERTION requires every field to have such a test (a new setting without one FAILS the gate).
+  Rationale: sidebarWidth was a live panel control that did nothing (RootView didn't read it) — a dead
+  setting only an applied-effect test catches. Deterministic via the fake-fs/settings seam; always-run.
 
 ## Input / terminal facts (terminal-dependent, hard-won — do NOT re-litigate)
 - Horizontal scroll = Option/Meta + wheel = SGR **74/75** (confirmed on the user's terminal). Routed

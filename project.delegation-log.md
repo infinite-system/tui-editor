@@ -37,3 +37,17 @@ diagnosis, not as a builder — it confirmed the real bug was in our verificatio
 the code under test. Reinforces: when a visual/oracle-based verdict looks like a deep bug, suspect the
 oracle's decode of the substrate first. Also: give codex the exact repro + the source-of-truth files;
 it correctly read the OpenTUI Zig + compiled buffer source to find the 4-lane layout.
+
+## In-flight status @ compaction checkpoint (HEAD 6fc0858)
+
+- **0 workers in flight.** All prior codex/subagent delegations merged or closed. The 4 merged
+  capability workers (perf-baselines, word-wrap, context-menu, wheel-momentum-parity) + the diff-core
+  codex worker are all landed/merged. No detached `codex exec` running.
+- **NEXT to delegate (post-resume, per the budget rule — codex = default worker, Fable/opus only for
+  hard reasoning, keep concurrent Fable count MODEST):** SEARCH SUITE = 4 codex workers (fuzzy
+  quick-open reusing CommandScoring.fuzzyScore; in-file find/replace; ripgrep find-in-files panel;
+  project-wide replace) — isolated new-file capability builds, ideal for codex. The dead-setting wiring
+  fixes (wordWrap/gitSplitRatio), the scrollbar panes, the splitter drag, and the git-panel row
+  simplification are RootView/cross-module integration = MAIN LOOP (mine), not delegated.
+- Before delegating: `git commit` first (codex not trusted with deletions); one `codex exec` per
+  worktree, no shell `&`; review against contract + tsc + tests before merging.
