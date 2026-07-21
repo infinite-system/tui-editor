@@ -14,6 +14,7 @@ import { registerDefaultCommands } from '../commands/commands.defaults';
 import { buildRootView, type RootView } from '../ui/RootView';
 import { StatusChannel } from '../system/StatusChannel';
 import { FrameProbe } from '../system/FrameProbe';
+import { ScrollPhysics } from '../ui/ScrollPhysics';
 import { Environment } from '../system/Environment';
 import { Logging } from '../system/Logging';
 import { dirname, join } from 'node:path';
@@ -213,20 +214,22 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   let accelerationDirection = '';
   let accelerationRun = 0;
   let accelerationLast = 0;
-  const ACCELERATION_WINDOW_MS = 90;
-  const movementAcceleration = (key: KeyEvent): number => {
+  // Continuous key-repeat run tracking; the CURVES live in ScrollPhysics (hand-tuned product
+  // values — quiet start, strong quadratic build, high cap).
+  const movementRun = (key: KeyEvent): number => {
     const now = Date.now();
     const direction = key.name;
-    if (direction === accelerationDirection && now - accelerationLast < ACCELERATION_WINDOW_MS) {
+    if (direction === accelerationDirection && now - accelerationLast < ScrollPhysics.Class.KEY_RUN_WINDOW_MS) {
       accelerationRun += 1;
     } else {
       accelerationRun = 0;
     }
     accelerationDirection = direction;
     accelerationLast = now;
-    if (accelerationRun < 4) return 1;
-    return Math.min(8, 1 + Math.floor((accelerationRun - 3) / 2));
+    return accelerationRun;
   };
+  const movementAcceleration = (key: KeyEvent): number =>
+    ScrollPhysics.Class.keyAcceleration(movementRun(key));
   const isTypedCharacter = (key: KeyEvent): boolean => {
     if (key.ctrl || key.meta || key.option) return false;
     const sequence = key.sequence;
@@ -359,6 +362,29 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       const acceleration = movementAcceleration(key);
       const extend = key.shift; // shift + movement extends the selection
       if (key.ctrl) {
+        // Ctrl+arrows: warp movement (Shift still composes to extend the selection).
+        switch (key.name) {
+          case 'up':
+            editor.moveVertical(-ScrollPhysics.Class.jumpRows(accelerationRun), extend);
+            return;
+          case 'down':
+            editor.moveVertical(ScrollPhysics.Class.jumpRows(accelerationRun), extend);
+            return;
+          case 'left':
+            editor.moveWordHorizontal(-1, extend);
+            return;
+          case 'right':
+            editor.moveWordHorizontal(1, extend);
+            return;
+          case 'home':
+            editor.moveDocumentStart(extend);
+            return;
+          case 'end':
+            editor.moveDocumentEnd(extend);
+            return;
+          default:
+            break;
+        }
         // Ctrl chords: save / select-all / clipboard / undo-redo.
         switch (key.name) {
           case 's': editor.save(); break;

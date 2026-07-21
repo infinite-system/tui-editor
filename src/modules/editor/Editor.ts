@@ -8,7 +8,7 @@ import { ref } from 'vue';
 import { TextDocument } from './TextDocument';
 import { Viewport } from './Viewport';
 import { Cursor } from './Cursor';
-import { graphemeCount, displayColumn, graphemeAtDisplayColumn } from './editor.coordinates';
+import { graphemeCount, displayColumn, graphemeAtDisplayColumn, graphemes } from './editor.coordinates';
 import { UndoStore, type EditKind } from '../storage/UndoStore';
 import { Files } from '../system/Files';
 import { Clock } from '../system/Clock';
@@ -259,6 +259,55 @@ class $Editor {
     }
     this.placeCursor(line, column);
     this.viewport.scrollToLine(line, this.document.lineCount);
+  }
+
+  /** Ctrl+Left/Right: jump to the previous/next word start (grapheme-safe). */
+  moveWordHorizontal(direction: -1 | 1, extend = false): void {
+    if (!this.hasDocument.value) return;
+    this.beginMove(extend);
+    const isWordCharacter = (cluster: string): boolean => /[\p{L}\p{N}_]/u.test(cluster);
+    let line = this.cursor.line.value;
+    let column = this.cursor.col.value;
+    const clusters = () => graphemes(this.document.line(line));
+    if (direction > 0) {
+      let row = clusters();
+      if (column >= row.length) {
+        if (line >= this.document.lineCount - 1) return;
+        line += 1;
+        column = 0;
+        row = clusters();
+      } else {
+        while (column < row.length && isWordCharacter(row[column] ?? '')) column += 1;
+      }
+      while (column < row.length && !isWordCharacter(row[column] ?? '')) column += 1;
+    } else {
+      let row = clusters();
+      if (column === 0) {
+        if (line === 0) return;
+        line -= 1;
+        row = clusters();
+        column = row.length;
+      }
+      while (column > 0 && !isWordCharacter(row[column - 1] ?? '')) column -= 1;
+      while (column > 0 && isWordCharacter(row[column - 1] ?? '')) column -= 1;
+    }
+    this.placeCursor(line, column);
+    this.viewport.scrollToLine(line, this.document.lineCount);
+  }
+
+  /** Ctrl+Home / Ctrl+End: jump to the document start/end. */
+  moveDocumentStart(extend = false): void {
+    if (!this.hasDocument.value) return;
+    this.beginMove(extend);
+    this.placeCursor(0, 0);
+    this.viewport.scrollToLine(0, this.document.lineCount);
+  }
+  moveDocumentEnd(extend = false): void {
+    if (!this.hasDocument.value) return;
+    this.beginMove(extend);
+    const lastLine = this.document.lineCount - 1;
+    this.placeCursor(lastLine, graphemeCount(this.document.line(lastLine)));
+    this.viewport.scrollToLine(lastLine, this.document.lineCount);
   }
 
   moveToLineStart(extend = false): void {
