@@ -145,3 +145,19 @@ wastes more time than doing it yourself. Full-parity context scoped to the task,
 boss-identity, is what stops drift.
 
 **Status:** adopted · **Logged:** 2026-07-21
+
+**Hardening (2026-07-21) — embed the method, gate on compliance:** codex cannot invoke Claude
+slash-commands and skips path-pointers, so the shared-orientation packet must INLINE the method, not
+just link it: (a) the IBR reduction discipline (reduce to load-bearing generators; if-then form;
+sort reality-based vs chosen; predict impossibilities; provisional-until-verified-by-execution), and
+(b) the /invariants contract essentials (both required headings verbatim, the record schema with
+Evidence + Impossible-if-true required, unnumbered declarative record names, the annotation format
+`// invariant: <exact record name> (<path>)`, the name charset = letters/digits/spaces/hyphens only —
+no commas). The absolute-path pointers stay, but the inline copy is the guarantee. This is embedded
+in `scripts/codex/_preamble.txt` (the "METHOD — IBR + /invariants (EMBEDDED)" section). **Hard review
+gate:** reject any delegate output whose `<module>.invariants.md` is not a proper IBR reduction
+(vacuous/bare records, missing impossibilities, wrong schema, no Evidence) — send it back or redo it;
+run the checker (`--all --refs`) on every delegated module before merge; non-conforming contracts
+never merge. Adversarial-review delegates apply the IBR breaking discipline + impossibility test
+against the module's contract. Every agent in this build — coordinator, codex, subagents — governs by
+IBR + /invariants.

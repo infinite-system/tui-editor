@@ -10,6 +10,24 @@ At your worktree root:
 Method skills (absolute paths — read them so you write proper invariant contracts by the IBR method):
 - /home/parallels/dev/ibr/.claude/skills/invariants/SKILL.md — the /invariants skill (the contract schema, kinds, and how invariants are written/verified). Your <MODULE>.invariants.md MUST follow it.
 - /home/parallels/dev/ibr/.claude/skills/ibr/SKILL.md and /home/parallels/dev/ibr/IBR/IBR.md — the /ibr skill + framework (invariant-based reasoning: reduce to load-bearing generators, sort reality vs chosen, predict impossibilities).
+
+== METHOD — IBR + /invariants (EMBEDDED; this governs your contract — the pointers above are the source, this inline copy is what you MUST apply even if you don't open them) ==
+You reason and write your `<MODULE>.invariants.md` by Invariant-Based Reasoning. This is not decoration — a bare-bones or vacuous contract FAILS review and gets sent back.
+IBR discipline:
+- REDUCE the module to its load-bearing GENERATORS — the few rules that, if true, force everything else about the module. Not a feature list; the structural core. Strip anything that is convention/decoration rather than structural.
+- Each invariant is an IF–THEN: "If <condition holds>, then <this necessarily follows>." State the actual consequence, not a vague quality.
+- SORT every invariant into exactly one of two kinds:
+  - Reality-based = true regardless of our choices (the terminal is a bounded grid; a subprocess can crash; bytes vs graphemes; async outlives its cause). Goes under `## Reality-based invariants`.
+  - Chosen = a design commitment we adopt and could have made differently (one-way data flow; revision-stamped supersession; lazy/disposable clients). Goes under `## Chosen invariants`.
+- Predict IMPOSSIBILITIES: for each invariant, name specific things that CANNOT happen if it holds (the "Impossible if true" field). An invariant with no impossibilities is a description, not a generator — insufficient.
+- PROVISIONAL until verified BY EXECUTION: a contract is backed by a test/assert that actually runs (`bun test`), not by prose. Status stays `provisional` until real evidence exists.
+/invariants contract essentials (schema is mechanically checked — get it exactly right or the checker rejects it):
+- The file MUST contain BOTH headings, verbatim: `## Reality-based invariants` and `## Chosen invariants` (include the heading even if a section is empty — put a one-line note).
+- Each record: `### <name>` (a plain declarative sentence, UNNUMBERED — the name is the identifier), then fields: **Invariant** (one if-then), **Scope**, **Mechanism**, **Generates**, **Evidence** (REQUIRED — where/how it holds; do not omit), **Impossible if true**, **Verification**, **Status:** provisional, **Last refined:** 2026-07-21.
+- Record-name charset = letters, digits, spaces, hyphens ONLY. NO commas, colons, slashes, or punctuation in the name (they break the checker/annotation match).
+- Annotate the code that upholds a record with a comment: `// invariant: <exact record name> (<path-to-the-invariants-file>)` — the name must match the `###` heading EXACTLY (same words, same case, no trailing punctuation); the path resolves colocated (your module dir) or repo-root. A mismatched or comma-bearing name is an orphan annotation = failure.
+- The orchestrator runs `node /home/parallels/dev/ibr/.claude/skills/invariants/scripts/check_invariants.mjs --all --refs` on your module and REJECTS it on any problem. Self-check by reading the schema; you cannot run the checker from your worktree but your contract must pass it.
+
 Existing code (read to learn interfaces; DO NOT modify): src/modules/{system,app,kernel,editor,workspace,theme,syntax} — Buffer/editor API, system capabilities, Theme, syntax highlighter.
 
 == ARCHITECTURE YOU MUST FOLLOW ==
