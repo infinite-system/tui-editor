@@ -83,10 +83,43 @@ Pending a tmux visual confirmation of the x/y offset math.
 **Impossible if true:** a caret drawn in a fixed gutter cell regardless of the cursor column; a
 caret whose cell disagrees with the character beneath it on a line with tabs or wide glyphs.
 
-**Open question:** the selection highlight (shift/mouse) lands with the selection rework.
-
 **Verification:** a harness capture asserting the caret cell matches the cursor's display column
 on lines with a leading tab and a wide (CJK) glyph.
+
+**Status:** provisional
+
+**Last refined:** 2026-07-21
+
+### The selected range renders with a background
+
+**Invariant:** If a non-empty selection exists, then exactly the selected grapheme range on each
+covered line is drawn with a selection background, while each character keeps its foreground
+(syntax) color; splits fall only on grapheme boundaries.
+
+**Scope:** the editor body rendering in `RootView` via `ui.selection.ts`.
+
+**Mechanism:** `lineSelectionRange` maps the normalized selection to each line's `[start, end)`
+grapheme columns (first line from `start.col`, last line to `end.col`, middle lines full content);
+`buildSelectedSpans` splits each syntax span at those boundaries (`graphemeToU16`) and wraps the
+selected slice with `bg(pal.selection)` over its existing `fg` (OpenTUI `applyStyle` merges fg+bg).
+Stands on *A cursor position resolves to three distinct coordinates* (editor) and *Selection is an
+anchor plus the cursor* (editor).
+
+**Generates:** a visible selection block; multi-line selection shading; correct highlight on lines
+with tabs, CJK, and combined (ZWJ) emoji.
+
+**Evidence:** `ui.selection.ts` + `RootView.renderEditorStyled`; deterministically unit-tested in
+`ui.selection.test.ts` (12 cases incl. `a中文👨‍👩‍👧b` grapheme-boundary split, multi-span, multi-line
+ranges) and exercised end-to-end by `scripts/smoke-editor.sh` (Shift+Right → `hasSelection`, Escape
+clears). Chunk-level bg is asserted directly (not via pane-scrape — `tmux capture-pane -e` proved
+lossy for truecolor bg).
+
+**Impossible if true:** a selected slice that loses its syntax color; a highlight that starts or
+ends inside a surrogate pair or a combined emoji; a shaded range that disagrees with the model's
+`selectionRange()` columns.
+
+**Verification:** `bun test src/modules/ui/ui.selection.test.ts` (chunk fg/bg + grapheme boundaries);
+smoke selection assertions.
 
 **Status:** provisional
 

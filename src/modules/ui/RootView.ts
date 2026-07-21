@@ -20,6 +20,7 @@ import type { Palette } from '../theme/theme.palettes';
 import { highlightLine, type Role } from '../syntax/Highlighter';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { displayColumn } from '../editor/editor.coordinates';
+import { buildSelectedSpans, lineSelectionRange, type SpanColor } from './ui.selection';
 
 function roleColor(role: Role, pal: Palette): string {
   switch (role) {
@@ -177,6 +178,7 @@ export function buildRootView(
     const gutterW = String(ed.document.lineCount).length + 1;
     const curLine = ed.cursor.line.value;
     const focused = ws.focus.value === 'editor';
+    const sel = ed.cursor.selectionRange();
     const chunks: TextChunk[] = [];
     win.forEach((text, i) => {
       const lineNo = top + i;
@@ -184,13 +186,15 @@ export function buildRootView(
       const num = String(lineNo + 1).padStart(gutterW, ' ');
       chunks.push(fg(isCur ? pal.accent : pal.dim)(`${num} `));
       chunks.push(fg(pal.accent)(isCur && focused ? '▏' : ' '));
-      if (ed.document.binary.value || lang === 'plain') {
-        chunks.push(fg(pal.fg)(text));
-      } else {
-        for (const span of highlightLine(text, lang)) {
-          chunks.push(fg(roleColor(span.role, pal))(span.text));
-        }
-      }
+
+      const spans: SpanColor[] =
+        ed.document.binary.value || lang === 'plain'
+          ? [{ text, color: pal.fg }]
+          : highlightLine(text, lang).map((sp) => ({ text: sp.text, color: roleColor(sp.role, pal) }));
+
+      // invariant: The selected range renders with a background (ui.invariants.md)
+      const selRange = lineSelectionRange(sel, lineNo, text);
+      for (const chunk of buildSelectedSpans(spans, selRange, pal.selection)) chunks.push(chunk);
       if (i < win.length - 1) chunks.push(fg(pal.fg)('\n'));
     });
     return new StyledText(chunks);

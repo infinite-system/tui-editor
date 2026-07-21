@@ -1,6 +1,6 @@
 {
   "ready": false,
-  "frame": 70,
+  "frame": 90,
   "renderQuiescent": true,
   "width": 120,
   "height": 40,
@@ -13,7 +13,7 @@
   "dirty": true,
   "cursor": {
     "line": 1,
-    "col": 2
+    "col": 3
   },
   "openBuffers": [
     "/home/parallels/dev/tui-editor/fixtures/README.md"
@@ -22,6 +22,8 @@
   "subprocessPids": [],
   "lifecycleTier": "disposing",
   "overlay": null,
+  "hasSelection": false,
+  "selection": null,
   "paletteQuery": "",
   "paletteMatches": 0,
   "focus": "editor",

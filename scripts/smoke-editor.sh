@@ -46,6 +46,13 @@ rev1="$(f bufferRevision)"
 gt "typing bumped bufferRevision" "$rev1" "$rev0"
 echo "  info: dirty=$(f dirty) cursor=$(f cursor)"
 
+echo "== selection (Shift+Right selects; Escape clears) =="
+"$H" send "$S" S-Right >/dev/null
+chk "hasSelection after Shift+Right" "$(f hasSelection)" "true"
+chkne "selection range published" "$(f selection)"
+"$H" send "$S" Escape >/dev/null
+chk "selection cleared after Escape" "$(f hasSelection)" "false"
+
 echo "== command palette (Ctrl+P) =="
 "$H" send "$S" C-p >/dev/null
 chk "palette overlay" "$(f overlay)" "palette"

@@ -62,6 +62,8 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       cursor: ed.hasDocument.value
         ? { line: ed.cursor.line.value, col: ed.cursor.col.value }
         : null,
+      hasSelection: ed.cursor.hasSelection,
+      selection: ed.cursor.selectionRange(),
       openBuffers: ed.hasDocument.value ? [ed.document.path] : [],
       overlay: commands.open.value ? 'palette' : null,
       paletteQuery: commands.open.value ? commands.query.value : '',
@@ -99,6 +101,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     void ed.document.revision.value;
     void ed.cursor.line.value;
     void ed.cursor.col.value;
+    void ed.cursor.anchor.value;
     void ed.viewport.scrollTop.value;
     void workspace.focus.value;
     void workspace.tree.selectedIndex.value;
