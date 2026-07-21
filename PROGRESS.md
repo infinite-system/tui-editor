@@ -45,17 +45,15 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       REQUIRED for done; isolation mandatory (throwaway worktree, never touch live blackline-app).
 
 ## Delegation (see project.delegation-log.md)
-- codex WORKERS FINISHED (they do NOT self-commit — integration is the main loop's job):
-  - **git**: reviewed (high quality: stale-supersede, porcelain-v2 parser, non-vacuous 5-record
-    contract), fixed $stopEffects cast, INTEGRATED to master (b5cf988). 7 tests pass. ✓
-  - **markdown**: code done + typechecks, but codex SKIPPED contract + tests. Completion
-    (review + markdown.invariants.md + tests) delegated to subagent — running in codex-markdown worktree.
-  - **lsp**: code done but 2 tsc errors (JsonRpc TextDecoder('ascii'); LspTransport stream type) +
-    SKIPPED contract + tests. Completion (fix + review + lsp.invariants.md + tests) delegated to
-    subagent — running in codex-lsp worktree.
-- On subagent return: review its diff/output, run tsc + bun test + checker in the worktree, then
-  copy the module into master + commit (credit codex + subagent). LSP↔editor coordinate mapping
-  (grapheme↔UTF-16 via editor.coordinates) is wired at M5 integration, not in the module.
+- ALL 3 codex MODULES INTEGRATED into master; worktrees + branches removed. (codex writes code only,
+  no self-commit; skipped tests/contract on markdown+lsp → completed by review subagents.)
+  - **git** (b5cf988): stale-supersede repo, porcelain-v2 parser, 2+4 contract, 7 tests. Later fixed
+    a $stopEffects footgun in dispose (1fd95de).
+  - **markdown** (6cae817): lazy/disposable preview, revision-stamped, 1+5 contract, 17 tests.
+  - **lsp** (f0f5334): JSON-RPC + lazy/disposable client, fake-server tests, 2+5 contract, 16 tests.
+- ivue gotcha found: `$stopEffects()` clears ref-getter STATE cells (not just effects) — only call it
+  on effect-owning classes (see project.skill-upgrades.md).
+- Remaining codex-buildable modules (later): `diff`, and `commands`/`keybindings` extensions for M7.
 - Audits done: Fable + Opus on M1–M3 (broadly sound; coordinate + reactive-frame the deep gaps). tsc-masking trap noted.
 
 ## Rework backlog (audits + own review)
