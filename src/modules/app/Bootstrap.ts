@@ -98,6 +98,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       gitLogIndex: workspace.gitPanel.logIndex.value,
       gitLogLoaded: workspace.commitLog.value?.loadedCount ?? 0,
       gitLogExpanded: workspace.commitExpansion.value?.entries.value.length ?? 0,
+      gitRegion: workspace.gitPanel.region.value,
     });
   };
 
