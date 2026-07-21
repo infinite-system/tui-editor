@@ -1,7 +1,7 @@
 import { Static } from '../system/Static';
 
 /** Case-insensitive subsequence match; returns a score (lower = tighter) or -1. */
-function fuzzyScoreImplementation(query: string, text: string): number {
+function $fuzzyScore(query: string, text: string): number {
   if (!query) return 0;
   const loweredQuery = query.toLowerCase();
   const loweredText = text.toLowerCase();
@@ -21,7 +21,7 @@ function fuzzyScoreImplementation(query: string, text: string): number {
 }
 
 class $CommandScoring {
-  static fuzzyScore = fuzzyScoreImplementation;
+  static fuzzyScore = $fuzzyScore;
 }
 
 export namespace CommandScoring {

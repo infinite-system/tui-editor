@@ -1,6 +1,6 @@
 import { test, expect } from 'bun:test';
 import { CommandRegistry } from '../CommandRegistry';
-import { CommandScoring } from '../commands.scoring';
+import { CommandScoring } from '../CommandScoring';
 
 test('fuzzyScore matches subsequences and rejects non-matches', () => {
   expect(CommandScoring.Class.fuzzyScore('sv', 'File: Save')).toBeGreaterThanOrEqual(0);

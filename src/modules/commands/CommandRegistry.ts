@@ -7,7 +7,7 @@
 // invariant: The core is complete without plugins (project.invariants.md)
 import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
-import { CommandScoring } from './commands.scoring';
+import { CommandScoring } from './CommandScoring';
 
 export interface Command {
   id: string;
