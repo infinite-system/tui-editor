@@ -4,7 +4,7 @@ Live status ledger for the autonomous build. Updated every turn so state survive
 compaction. **If you are resuming: read this, then `HANDOFF.md`, then continue at the first
 unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
-## RESUME HERE (frontier as of commit b283cd5)
+## RESUME HERE (frontier as of commit 8dd095e)
 - **State:** 11 module contracts · 114 tests pass · tsc green · checker 0 problems · end-to-end tmux
   smoke ALL-PASS. codex modules git/markdown/lsp INTEGRATED. Editor rework: reactive frame
   (established), grapheme coordinate model, native-cursor caret, selection + clipboard (model works),
@@ -88,15 +88,26 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       established; gutter/code split + native selection + FrameProbe 4-lane fix); (e) multi-workspace;
       (f) search; (g) piece-table undo.
       tmux harness (`scripts/tui-harness.sh`) + smoke (`scripts/smoke-editor.sh`) built, ALL-PASS.
-      **NEXT (M4): mouse-event input path → git sidebar UI (consuming `CommitLog`).**
-      Mouse path = OpenTUI is handler-based: set `useMouse:true` in `createCliRenderer` (Bootstrap)
-      + attach `onMouseDown`/`onMouseDrag`/`onMouseUp` to renderables (called with `this`=renderable,
-      hit-tested by x,y, has `isDragging`). Enabling mouse changes terminal behavior (captures mouse
-      from tmux text-select) — do it WITH handlers + verify a click actually arrives under tmux
-      (publish mouse hits to status.json or a log; drive a click via `tmux send-keys` SGR mouse or the
-      harness). Then sidebar UI: changes+commit-box top, virtualized log bottom via
-      `CommitLog.rows(scrollTop, viewportH)` + `ensureRange`, commit→files→diff drill-down, draggable
-      width/separator (divider renderable `onMouseDrag` → reactive split-ratio → yoga relayout).
+      **M4 done so far:** windowing core + `--skip=N` paging + reactive `CommitLog` model (data layer,
+      tested) + **mouse-event input path** (`useMouse:true`, global `renderer.root.onMouse` recorder →
+      status `mouse:{type,x,y,button}`; VERIFIED under tmux: real SGR click at (40,5) → {up,39,4,0};
+      harness `click <x> <y>` verb + smoke assertion). OpenTUI mouse = handler-based: attach
+      `onMouseDown`/`onMouseDrag`/`onMouseUp` on renderables (called with `this`=renderable, hit-tested
+      by x,y, has `isDragging`), events bubble to root.
+      **NEXT (M4 git sidebar UI — LARGE, multi-file):** git is NOT yet wired into the running app.
+      1. Instantiate `GitRepository` + `CommitLog` for the workspace root (own them off `Workspace`
+         via createX seams; `GitRepository.refresh()` on open; `CommitLog` for the log window).
+      2. Panel state (add to `Workspace` or a new `GitPanel` model): view mode
+         (changes | log | commit-files | file-diff), selected index per view, split ratio, scroll
+         positions. Keep it reactive; unit-test the state transitions.
+      3. Render the sidebar git view in `RootView` (or a new `GitSidebar` builder): changes list
+         (staged/unstaged/untracked, keyboard stage/unstage) + commit-message box (top); virtualized
+         commit log via `CommitLog.rows(scrollTop, viewportH)` + `ensureRange` on scroll (bottom).
+      4. Drill-down: click/Enter a commit → `git show --name-status <sha>` changed files → open a file
+         → diff (reuse the planned `diff` module or `git show <sha> -- <path>`). Breadcrumb back.
+      5. Mouse: `onMouseDown` on rows (click to select/stage), `onMouseScroll` on the log (scroll →
+         ensureRange). Draggable width/separator: a divider renderable `onMouseDrag` → reactive
+         split-ratio → yoga relayout. Verify all via FrameProbe (4-lane) + status assertions.
 - [~] M4 — git module INTEGRATED (b5cf988, 7 tests). Remaining: `diff` module (DiffEngine/DiffModel/
       DiffView/DiffRenderable) + the git sidebar UI (staged/unstaged, stage/unstage) + the
       split editable-diff view (left read-only blob, right live buffer).
