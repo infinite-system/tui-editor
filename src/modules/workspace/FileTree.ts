@@ -6,7 +6,7 @@
 import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
 import { Files, type DirEntry } from '../system/Files';
-import { AT_REST, type ScrollMomentum } from '../ui/scroll-momentum';
+import { AT_REST, type ScrollMomentum } from '../ui/Momentum';
 
 export interface TreeRow {
   name: string;

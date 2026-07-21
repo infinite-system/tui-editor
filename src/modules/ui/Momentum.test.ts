@@ -1,33 +1,26 @@
 import { test, expect, describe } from 'bun:test';
-import {
-  addImpulse,
-  stepMomentum,
-  halt,
-  isMoving,
-  AT_REST,
-  type MomentumOptions,
-} from './scroll-momentum';
+import { Momentum, AT_REST, type MomentumOptions } from './Momentum';
 
 // No-decay options: isolate the crossing-regularity property from the decay curve.
 const NO_DECAY: MomentumOptions = { impulse: 10, max: 100, decayPerSec: 1, stopVelocity: 0.0001 };
 
 describe('scroll-momentum', () => {
   test('at rest emits no rows', () => {
-    expect(stepMomentum(AT_REST, 1 / 30).rows).toBe(0);
-    expect(isMoving(AT_REST)).toBe(false);
+    expect(Momentum.Class.stepMomentum(AT_REST, 1 / 30).rows).toBe(0);
+    expect(Momentum.Class.isMoving(AT_REST)).toBe(false);
   });
 
   test('an impulse sets velocity in the wheel direction and accumulates', () => {
-    let momentum = addImpulse(AT_REST, 1, NO_DECAY); // +1 notch
+    let momentum = Momentum.Class.addImpulse(AT_REST, 1, NO_DECAY); // +1 notch
     expect(momentum.velocity).toBe(10);
-    momentum = addImpulse(momentum, 1, NO_DECAY); // same direction accumulates
+    momentum = Momentum.Class.addImpulse(momentum, 1, NO_DECAY); // same direction accumulates
     expect(momentum.velocity).toBe(20);
-    momentum = addImpulse(momentum, -3, NO_DECAY); // opposite reverses
+    momentum = Momentum.Class.addImpulse(momentum, -3, NO_DECAY); // opposite reverses
     expect(momentum.velocity).toBe(-10);
   });
 
   test('velocity is capped', () => {
-    const momentum = addImpulse(AT_REST, 100, NO_DECAY);
+    const momentum = Momentum.Class.addImpulse(AT_REST, 100, NO_DECAY);
     expect(momentum.velocity).toBe(100); // max
   });
 
@@ -36,7 +29,7 @@ describe('scroll-momentum', () => {
     let momentum: typeof AT_REST = { velocity: 15, residual: 0 };
     const crossFrames: number[] = [];
     for (let frame = 1; frame <= 12; frame++) {
-      const result = stepMomentum(momentum, 1 / 30, NO_DECAY);
+      const result = Momentum.Class.stepMomentum(momentum, 1 / 30, NO_DECAY);
       momentum = result.momentum;
       if (result.rows > 0) crossFrames.push(frame);
     }
@@ -48,7 +41,7 @@ describe('scroll-momentum', () => {
     let momentum: typeof AT_REST = { velocity: 30, residual: 0 };
     let total = 0;
     for (let index = 0; index < 30; index++) {
-      const result = stepMomentum(momentum, 1 / 30, NO_DECAY); // 1s total
+      const result = Momentum.Class.stepMomentum(momentum, 1 / 30, NO_DECAY); // 1s total
       momentum = result.momentum;
       total += result.rows;
     }
@@ -56,20 +49,20 @@ describe('scroll-momentum', () => {
   });
 
   test('decay glides to a halt with no slow sub-row tail', () => {
-    let momentum = addImpulse(AT_REST, 3); // real decay defaults
+    let momentum = Momentum.Class.addImpulse(AT_REST, 3); // real decay defaults
     let frames = 0;
-    while (isMoving(momentum) && frames < 1000) {
-      momentum = stepMomentum(momentum, 1 / 30).momentum;
+    while (Momentum.Class.isMoving(momentum) && frames < 1000) {
+      momentum = Momentum.Class.stepMomentum(momentum, 1 / 30).momentum;
       frames++;
     }
-    expect(isMoving(momentum)).toBe(false); // it stops
+    expect(Momentum.Class.isMoving(momentum)).toBe(false); // it stops
     expect(momentum.residual).toBe(0); // residual dropped at halt (no lingering sub-row)
     expect(frames).toBeLessThan(120); // halts within a few seconds, not forever
   });
 
-  test('halt() immediately stops (adopt-and-stop for a programmatic jump)', () => {
-    const moving = addImpulse(AT_REST, 5);
-    expect(isMoving(moving)).toBe(true);
-    expect(isMoving(halt())).toBe(false);
+  test('Momentum.Class.halt() immediately stops (adopt-and-stop for a programmatic jump)', () => {
+    const moving = Momentum.Class.addImpulse(AT_REST, 5);
+    expect(Momentum.Class.isMoving(moving)).toBe(true);
+    expect(Momentum.Class.isMoving(Momentum.Class.halt())).toBe(false);
   });
 });

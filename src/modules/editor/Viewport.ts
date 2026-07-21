@@ -5,7 +5,7 @@
 // invariant: Cost tracks the actively observed set (project.invariants.md)
 import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
-import { AT_REST, halt, type ScrollMomentum } from '../ui/scroll-momentum';
+import { Momentum, AT_REST, type ScrollMomentum } from '../ui/Momentum';
 
 class $Viewport {
   get scrollTop() {
@@ -59,8 +59,8 @@ class $Viewport {
 
   /** Precise cursor movement or a scrollbar drag adopts both axes and stops wheel glide. */
   haltScrollMomentum(): void {
-    this.verticalScrollMomentum.value = halt();
-    this.horizontalScrollMomentum.value = halt();
+    this.verticalScrollMomentum.value = Momentum.Class.halt();
+    this.horizontalScrollMomentum.value = Momentum.Class.halt();
   }
 
   /** Keep `displayColumn` visible within [scrollLeft, scrollLeft + width): auto-hscroll on cursor moves. */

@@ -34,16 +34,13 @@ import type { Theme } from '../theme/Theme';
 import type { Palette } from '../theme/ThemePalettes';
 import { ScrollbarGeometry, type BarGeometry } from '../ui/ScrollbarGeometry';
 import {
+  Momentum,
   AT_REST,
   DEFAULT_MOMENTUM,
   VERTICAL_MOMENTUM,
-  addImpulse,
-  halt,
-  isMoving,
-  stepMomentum,
   type ScrollMomentum,
   type MomentumOptions,
-} from '../ui/scroll-momentum';
+} from '../ui/Momentum';
 import type { Settings } from '../settings/Settings';
 import {
   DiffAlignment,
@@ -280,7 +277,7 @@ class $DiffView {
   }
 
   impulseVerticalScroll(deltaRows: number): void {
-    this.verticalScrollMomentum.value = addImpulse(
+    this.verticalScrollMomentum.value = Momentum.Class.addImpulse(
       this.verticalScrollMomentum.value,
       deltaRows,
       this.verticalMomentum,
@@ -288,7 +285,7 @@ class $DiffView {
   }
 
   impulseHorizontalScroll(deltaColumns: number): void {
-    this.horizontalScrollMomentum.value = addImpulse(
+    this.horizontalScrollMomentum.value = Momentum.Class.addImpulse(
       this.horizontalScrollMomentum.value,
       deltaColumns,
       DEFAULT_MOMENTUM,
@@ -296,8 +293,8 @@ class $DiffView {
   }
 
   tickScrollMomentum(deltaTimeSeconds: number): boolean {
-    const verticalStep = stepMomentum(this.verticalScrollMomentum.value, deltaTimeSeconds, this.verticalMomentum);
-    const horizontalStep = stepMomentum(this.horizontalScrollMomentum.value, deltaTimeSeconds, DEFAULT_MOMENTUM);
+    const verticalStep = Momentum.Class.stepMomentum(this.verticalScrollMomentum.value, deltaTimeSeconds, this.verticalMomentum);
+    const horizontalStep = Momentum.Class.stepMomentum(this.horizontalScrollMomentum.value, deltaTimeSeconds, DEFAULT_MOMENTUM);
     this.verticalScrollMomentum.value = verticalStep.momentum;
     this.horizontalScrollMomentum.value = horizontalStep.momentum;
     if (verticalStep.rows !== 0) {
@@ -312,18 +309,18 @@ class $DiffView {
       );
     }
     if (verticalStep.rows !== 0 || horizontalStep.rows !== 0) this.update();
-    return isMoving(verticalStep.momentum) || isMoving(horizontalStep.momentum);
+    return Momentum.Class.isMoving(verticalStep.momentum) || Momentum.Class.isMoving(horizontalStep.momentum);
   }
 
   moveByKeyboardAlignedRows(deltaRows: number): void {
-    this.verticalScrollMomentum.value = halt();
+    this.verticalScrollMomentum.value = Momentum.Class.halt();
     this.alignedRowScrollOffset.value = this.clampAlignedRowOffset(this.alignedRowScrollOffset.value + deltaRows);
     this.synchronizeActiveChangeBlockNumber();
     this.update();
   }
 
   moveByKeyboardColumns(deltaColumns: number): void {
-    this.horizontalScrollMomentum.value = halt();
+    this.horizontalScrollMomentum.value = Momentum.Class.halt();
     this.horizontalScrollOffset.value = this.clampHorizontalOffset(this.horizontalScrollOffset.value + deltaColumns);
     this.update();
   }
@@ -333,8 +330,8 @@ class $DiffView {
   }
 
   haltScrollMomentum(): void {
-    this.verticalScrollMomentum.value = halt();
-    this.horizontalScrollMomentum.value = halt();
+    this.verticalScrollMomentum.value = Momentum.Class.halt();
+    this.horizontalScrollMomentum.value = Momentum.Class.halt();
   }
 
   // --- toolbar actions and callback seams ---
@@ -349,7 +346,7 @@ class $DiffView {
       this.alignedRowScrollOffset.value,
     ) ?? this.alignment.changeBlocks[0]?.startAlignedRowIndex ?? null;
     if (nextAlignedRowIndex === null) return;
-    this.verticalScrollMomentum.value = halt();
+    this.verticalScrollMomentum.value = Momentum.Class.halt();
     this.alignedRowScrollOffset.value = this.clampAlignedRowOffset(nextAlignedRowIndex);
     this.activeChangeBlockNumber.value =
       this.changeBlockNumberAt(nextAlignedRowIndex) ?? 0;
@@ -367,7 +364,7 @@ class $DiffView {
       this.alignedRowScrollOffset.value,
     ) ?? this.alignment.changeBlocks[this.alignment.changeBlocks.length - 1]?.startAlignedRowIndex ?? null;
     if (previousAlignedRowIndex === null) return;
-    this.verticalScrollMomentum.value = halt();
+    this.verticalScrollMomentum.value = Momentum.Class.halt();
     this.alignedRowScrollOffset.value = this.clampAlignedRowOffset(previousAlignedRowIndex);
     this.activeChangeBlockNumber.value =
       this.changeBlockNumberAt(previousAlignedRowIndex) ?? 0;
@@ -597,7 +594,7 @@ class $DiffView {
 
   onVerticalScrollbarChanged(reportedPosition: number): void {
     if (this.isApplyingScrollbarGeometry) return;
-    this.verticalScrollMomentum.value = halt();
+    this.verticalScrollMomentum.value = Momentum.Class.halt();
     this.alignedRowScrollOffset.value = this.clampAlignedRowOffset(
       Math.round(reportedPosition * this.verticalReportedToTrueScale),
     );
@@ -607,7 +604,7 @@ class $DiffView {
 
   onHorizontalScrollbarChanged(reportedPosition: number): void {
     if (this.isApplyingScrollbarGeometry) return;
-    this.horizontalScrollMomentum.value = halt();
+    this.horizontalScrollMomentum.value = Momentum.Class.halt();
     this.horizontalScrollOffset.value = this.clampHorizontalOffset(
       Math.round(reportedPosition * this.horizontalReportedToTrueScale),
     );
