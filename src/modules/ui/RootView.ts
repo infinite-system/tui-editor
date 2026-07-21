@@ -364,11 +364,14 @@ export function buildRootView(
     const cursorLine = editor.cursor.line.value;
     if (editor.hasDocument.value && workspace.focus.value === 'editor' && !open && cursorLine >= scrollTop && cursorLine < scrollTop + viewportHeight) {
       const cursorDisplayColumn = displayColumn(editor.document.line(cursorLine), editor.cursor.col.value);
-      const lineNumberWidth = String(editor.document.lineCount).length + 1;
-      // x: sidebar + editorArea left border + gutter("NN ") + the current-line marker cell + display col.
-      const x = SIDEBAR_WIDTH + 1 + lineNumberWidth + 2 + cursorDisplayColumn;
-      const y = 1 + (cursorLine - scrollTop); // mainRow top + editorArea top border
-      renderer.setCursorPosition(x, y, true);
+      // Anchor the caret to the code renderable's ACTUAL laid-out screen cell (codeBody.x/y from
+      // yoga), not hand-derived layout constants — the constants drifted from the real layout (the
+      // human-QA off-by-one) and would break again when the sidebar becomes draggable.
+      const caretCellX = codeBody.x + cursorDisplayColumn;
+      const caretCellY = codeBody.y + (cursorLine - scrollTop);
+      // The native terminal cursor is 1-BASED (ANSI CUP): +1 on both axes — OpenTUI's own
+      // renderCursor does `screenX + visualCol + 1`.
+      renderer.setCursorPosition(caretCellX + 1, caretCellY + 1, true);
     } else {
       renderer.setCursorPosition(0, 0, false);
     }

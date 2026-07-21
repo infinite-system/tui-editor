@@ -7,6 +7,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 H="$DIR/tui-harness.sh"
 ROOT="$(cd "$DIR/.." && pwd)"
 S="smoke-$$"
+BUN="$HOME/.bun/bin/bun"
 FIX="${1:-$ROOT/fixtures}"
 fail=0
 f()    { "$H" field "$1"; }
@@ -17,7 +18,8 @@ gt()   { if [ "${2:-0}" -gt "${3:-0}" ] 2>/dev/null; then echo "  PASS  $1 ($3->
 trap '"$H" kill "$S" >/dev/null 2>&1' EXIT
 
 echo "== launch + boot =="
-"$H" launch "$S" 120x40 bun run src/main.ts "$FIX" >/dev/null
+"$H" launch "$S" 120x40 env TUI_FRAME_DUMP=1 bun run src/main.ts "$FIX" >/dev/null
+export TUI_FRAME_DUMP=1
 if "$H" ready "$S" 20 >/dev/null; then echo "  PASS  boot: ready+quiescent"; else
   echo "  FAIL  boot never ready"; echo "--- status ---"; "$H" status; echo "--- pane ---"; "$H" capture "$S"; exit 1
 fi
@@ -45,6 +47,21 @@ rev0="$(f bufferRevision)"
 rev1="$(f bufferRevision)"
 gt "typing bumped bufferRevision" "$rev1" "$rev0"
 echo "  info: dirty=$(f dirty) cursor=$(f cursor)"
+
+"$H" settle "$S" >/dev/null 2>&1
+echo "== caret cell == typed glyph cell (human-QA regression: was one row high) =="
+if [ "${TUI_FRAME_DUMP:-}" = "1" ]; then
+  caret_check="$("$BUN" -e '
+const f=JSON.parse(require("fs").readFileSync("artifacts/frame.json"));
+let qx=-1,qy=-1;
+for(let y=0;y<f.height && qx<0;y++){let cell=0;for(const ch of f.rows[y].text){if(ch==="X"){qx=cell;qy=y;break}cell++;}}
+const [cx,cy]=process.argv[1].split(",").map(Number);
+console.log(qx>=0 && cx===qx+1 && cy===qy ? "OK" : `WRONG glyph=(${qx},${qy}) caret=(${cx},${cy})`);
+' "$(tmux display-message -p -t "$S" '#{cursor_x},#{cursor_y}')")"
+  if [ "$caret_check" = "OK" ]; then echo "  PASS  caret immediately after typed glyph, same row"; else echo "  FAIL  caret misplaced: $caret_check"; fail=1; fi
+else
+  echo "  SKIP  (run with TUI_FRAME_DUMP=1 for the caret-cell check)"
+fi
 
 echo "== selection (Shift+Right selects; Escape clears) =="
 "$H" send "$S" S-Right >/dev/null

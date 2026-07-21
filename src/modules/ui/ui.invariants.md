@@ -129,24 +129,32 @@ on its line — not merely a marker in the gutter — accounting for tabs and wi
 
 **Scope:** the editor body caret in `RootView`.
 
-**Mechanism:** the view maps the cursor's grapheme index to a display column (the editor
-coordinate model) and renders the caret there. Stands on *A cursor position resolves to three
-distinct coordinates* (editor).
+**Mechanism:** the view anchors the caret to the code renderable's ACTUAL laid-out screen cell
+(`codeBody.x/y` from yoga — never hand-derived layout constants) plus
+`displayColumn(line, cursor.col)`, then adds **+1 on both axes** because the native terminal cursor
+is 1-based (ANSI CUP; OpenTUI's own `renderCursor` does `screenX + visualCol + 1`). Stands on
+*A cursor position resolves to three distinct coordinates* (editor).
 
-**Generates:** a real caret; correct visual position on lines with tabs/wide chars.
+**Generates:** a real caret; correct visual position on lines with tabs/wide chars; a caret that
+stays correct when the layout changes (the anchor moves with the renderable).
 
-**Evidence:** IMPLEMENTED — `RootView.ts` `update()` calls `renderer.setCursorPosition(x, y, true)`
-with `x` derived from `displayColumn(line, cursor.col)` (tab/wide aware, via `editor.coordinates`)
-and hides the cursor when unfocused/off-screen/palette-open. Uses OpenTUI's native terminal cursor.
-Pending a tmux visual confirmation of the x/y offset math.
+**Evidence:** HUMAN-QA BUG FIXED (2026-07-21): the caret rendered one row HIGH — two stacked causes:
+(1) 0-based cells passed to the 1-based `setCursorPosition`, and (2) hand-derived x constants that
+had drifted from the real layout. Both fixed by anchoring to `codeBody.x/y` + the ANSI +1. Verified
+against tmux's OWN cursor position (`#{cursor_x},#{cursor_y}` — the authoritative channel for a
+native caret): after typing, the caret cell is exactly one right of the typed glyph's frame cell on
+the SAME row. Permanent smoke regression (`smoke-editor.sh` caret-cell check).
 
 **Impossible if true:** a caret drawn in a fixed gutter cell regardless of the cursor column; a
-caret whose cell disagrees with the character beneath it on a line with tabs or wide glyphs.
+caret whose cell disagrees with the character beneath it on a line with tabs or wide glyphs; a caret
+one row/column off from the typed glyph.
 
-**Verification:** a harness capture asserting the caret cell matches the cursor's display column
-on lines with a leading tab and a wide (CJK) glyph.
+**Verification:** the smoke's caret regression — tmux `#{cursor_x},#{cursor_y}` == typed glyph's
+FrameProbe cell + (1,0). LESSON: the earlier "established"-by-frame-diff proofs never asserted the
+NATIVE cursor cell (FrameProbe cannot see it) — a channel gap human QA caught; tmux's cursor
+position is the right oracle for the caret.
 
-**Status:** provisional
+**Status:** established
 
 **Last refined:** 2026-07-21
 
