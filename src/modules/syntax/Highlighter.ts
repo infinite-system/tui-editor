@@ -158,7 +158,7 @@ function tokenizeMarkdown(line: string): Span[] {
   return [{ text: line, role: 'text' }];
 }
 
-function highlightLineImplementation(line: string, language: LangId): Span[] {
+function $highlightLine(line: string, language: LangId): Span[] {
   if (language === 'diff') {
     // Line-level diff coloring: whole-line roles keyed by the unified-diff prefix.
     if (line.startsWith('+')) return [{ text: line, role: 'added' }];
@@ -181,7 +181,7 @@ function highlightLineImplementation(line: string, language: LangId): Span[] {
 }
 
 class $Highlighter {
-  static highlightLine = highlightLineImplementation;
+  static highlightLine = $highlightLine;
 }
 
 export namespace Highlighter {
