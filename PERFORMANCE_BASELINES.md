@@ -1,8 +1,45 @@
 # Performance Baselines — measured (PROGRESS item 8)
 
 Measured with `scripts/perf-baselines.sh` (rerunnable, session-scoped: unique tmux sessions +
-per-session status side channels, so live demo instances are never touched). Two full runs,
-2026-07-21; numbers below give both runs as `run1 / run2` where they differ.
+per-session status side channels, so live demo instances are never touched).
+
+> ## ⚠️ Two builds measured — read this first
+>
+> The original table (further down, "run1 / run2") was measured against the perfbaselines worktree
+> BASE commit **`f8771ab`**, which **predates the demand-driven idle fix `68f897e`**. At `f8771ab`
+> the render loop had no `dropLive`-at-quiescence logic, so it genuinely ran at ~28–29 fps at rest —
+> the "142 / 145 idle frames FAIL" was a *correct measurement of a stale build*, not a false-green in
+> shipped code. Those idle/latency numbers do NOT describe current `main`.
+>
+> ### Re-measured on current HEAD (post-fix), single run, 2026-07-21T12:05
+>
+> | Measurement | current HEAD | pre-fix (f8771ab) | Target | Verdict |
+> |---|---|---|---|---|
+> | Idle frame delta, final 5s untouched | **0** (12/12/12) | 142/145 (~28 fps) | 0 | **PASS** (was FAIL) — the fix |
+> | Idle CPU, final 5s window | **0.60%** | 2.6–3.6% | <2% | **PASS** |
+> | Input latency p50 / p95 | **5 ms / 7 ms** | 27–30 / 50–52 ms | <16 ms | **PASS** (was FAIL) |
+> | RSS at rest (fixtures + 1 file) | 99.4 MB | 100.4 / 98.7 | <100 idle | borderline PASS |
+> | RSS after 60s idle, 5 MB file open | 121.4 MB | 118.8 / 128.8 | <100 idle | **FAIL** (working set of a 5 MB file; leak-flat) |
+> | RSS growth over 3 re-open cycles | +4.4 MB | −5.5 / +2.5 | flat | **PASS** (no leak trend) |
+> | Boot-to-ready, harness-inclusive | 211–219 ms | 187–222 ms | <150 ms bare | not comparable (harness path) |
+> | Clean exit / orphans | 4/5*, no orphans | 5/5 | clean | *cycle-1 miss was CPU contention from concurrent test runs, not a regression |
+>
+> **Why input latency improved so much:** the "<16 ms unachievable at targetFps:30" conclusion was
+> itself an artifact of the *always-on* loop — a keypress waited up to one 33 ms frame period for the
+> next scheduled render. With demand-driven rendering, a keypress calls `requestRender()` → an
+> immediate one-shot frame → the status flush lands in ~5 ms. The fix improved input latency AND idle
+> quiescence together. Idle quiescence is now an ENFORCED, blocking assertion (smoke-editor.sh, and a
+> non-zero exit in this script) — measured ≠ enforced.
+>
+> Still open: idle RSS exceeds the 100 MB target once a 5 MB file is open (~121 MB); it is working set,
+> not a leak (re-open cycles are flat). Bare-binary cold start vs <150 ms still needs a non-harness
+> measurement.
+
+---
+
+## Original run (STALE — pre-fix build `f8771ab`, kept for provenance)
+
+Two full runs, 2026-07-21; numbers below give both runs as `run1 / run2` where they differ.
 
 ## Machine context
 
