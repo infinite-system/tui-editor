@@ -5,6 +5,8 @@
 import type { LangId } from './Highlighter';
 
 const BY_EXTENSION: Record<string, LangId> = {
+  diff: 'diff',
+  patch: 'diff',
   ts: 'typescript', tsx: 'typescript', mts: 'typescript', cts: 'typescript',
   js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
   json: 'json', jsonc: 'json',

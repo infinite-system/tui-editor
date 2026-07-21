@@ -43,6 +43,18 @@ class $Editor {
     this.undo.clear();
   }
 
+  /** Open a VIRTUAL read-only diff document (git panel drill-in). */
+  openDiff(displayPath: string, diffText: string): void {
+    this.document.loadFromText(diffText, `${displayPath}.diff`);
+    this.placeCursor(0, 0);
+    this.cursor.clearSelection();
+    this.viewport.scrollTop.value = 0;
+    this.viewport.scrollLeft.value = 0;
+    this.hasDocument.value = true;
+    this.readOnly.value = true; // a diff is a VIEW; editing happens in the real file
+    this.undo.clear();
+  }
+
   // --- selection ------------------------------------------------------------
 
   get hasSelection(): boolean {

@@ -76,6 +76,15 @@ class $GitCommands {
     return this.run(options.cwd, arguments_);
   }
 
+  /** Unified diff for one file: staged -> index vs HEAD; unstaged -> worktree vs index;
+   *  untracked -> the whole file as additions (--no-index exits 1 on differences: not an error). */
+  static diffFile(cwd: string, filePath: string, bucket: 'staged' | 'unstaged' | 'untracked'): Promise<GitCommandResult> {
+    if (bucket === 'staged') return this.run(cwd, ['diff', '--no-ext-diff', '--no-color', '--cached', '--', filePath]);
+    if (bucket === 'untracked')
+      return this.run(cwd, ['diff', '--no-ext-diff', '--no-color', '--no-index', '--', '/dev/null', filePath]);
+    return this.run(cwd, ['diff', '--no-ext-diff', '--no-color', '--', filePath]);
+  }
+
   /**
    * Discard a file's changes in the working tree — DESTRUCTIVE (guarded by an explicit user
    * confirmation upstream; see 'Destructive working-tree operations require confirmation' in

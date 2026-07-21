@@ -131,6 +131,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     void editor.viewport.scrollTop.value;
     void editor.viewport.scrollLeft.value;
     void workspace.focus.value;
+    void workspace.sidebarView.value;
     void workspace.tree.selectedIndex.value;
     void workspace.tree.hoveredIndex.value;
     // Git state is produced asynchronously (refresh/log outlive boot); observe it so the sidebar
@@ -356,7 +357,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     },
     'git.openFile': () => {
       normalizeChangesIndex();
-      workspace.openChangeAtRow(workspace.gitPanel.changesIndex.value);
+      void workspace.openChangeAtRow(workspace.gitPanel.changesIndex.value);
     },
     'git.discard': () => {
       normalizeChangesIndex();

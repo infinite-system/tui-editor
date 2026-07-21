@@ -37,6 +37,8 @@ function roleColor(role: Role, palette: Palette): string {
     case 'func': return palette.func;
     case 'type': return palette.type;
     case 'operator': return palette.operator;
+    case 'added': return palette.added;
+    case 'removed': return palette.deleted;
     default: return palette.fg;
   }
 }
@@ -300,7 +302,7 @@ export function buildRootView(
       editor.viewport.scrollLeft.value,
     );
 
-    const gitVisible = workspace.focus.value === 'git' && workspace.git.value !== null;
+    const gitVisible = workspace.sidebarView.value === 'git' && workspace.git.value !== null;
     const changeRowCount = gitVisible ? gitChangeRowsNow().length : 0;
     changesBar.top = 2;
     changesBar.height = Math.max(1, gitPanelGeometry.changesRows);
@@ -604,7 +606,7 @@ export function buildRootView(
   function update(): void {
     const palette = readPalette();
     column.backgroundColor = palette.bg;
-    const gitView = workspace.focus.value === 'git';
+    const gitView = workspace.sidebarView.value === 'git';
     sidebar.backgroundColor = palette.panel;
     sidebar.borderColor = workspace.focus.value === 'files' || gitView ? palette.borderActive : palette.border;
     sidebar.titleColor = workspace.focus.value === 'files' || gitView ? palette.accent : palette.dim;
@@ -700,7 +702,7 @@ export function buildRootView(
   const wheelDelta = (event: { scroll?: { direction?: string } }): number =>
     (event.scroll?.direction === 'up' ? -1 : 1) * WHEEL_STEP;
   sidebar.onMouseScroll = (event) => {
-    if (workspace.focus.value === 'git') {
+    if (workspace.sidebarView.value === 'git') {
       // Route by pointer position: wheel over the changes region scrolls it; over the log, the
       // momentum glide (same gesture, per-region window).
       const row = event.y - sidebar.y;
@@ -877,7 +879,7 @@ export function buildRootView(
     return git ? buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value) : [];
   };
   sidebar.onMouseMove = (event) => {
-    if (workspace.focus.value === 'git') {
+    if (workspace.sidebarView.value === 'git') {
       const hit = gitRowAt(event.y);
       const rows = gitChangeRowsNow();
       workspace.gitPanel.changesHovered.value =
@@ -896,7 +898,7 @@ export function buildRootView(
   };
 
   sidebar.onMouseDown = (event) => {
-    if (workspace.focus.value === 'git') {
+    if (workspace.sidebarView.value === 'git') {
       workspace.focusGit();
       const hit = gitRowAt(event.y);
       if (!hit) return;
@@ -913,13 +915,13 @@ export function buildRootView(
         if (relativeX >= 1 && relativeX <= 3) {
           void workspace.toggleStageAtRow(hit.index); // the CHECKBOX is the staging control
         } else if (buttonsShowing && relativeX >= innerWidth - 8 && relativeX <= innerWidth - 7) {
-          workspace.openChangeAtRow(hit.index); // [o]pen
+          void workspace.openChangeAtRow(hit.index); // [o]pen
         } else if (buttonsShowing && relativeX >= innerWidth - 5 && relativeX <= innerWidth - 4) {
           workspace.requestDiscardAtRow(hit.index); // [d]iscard — arms the y/N confirm
         } else if (buttonsShowing && relativeX >= innerWidth - 2) {
           void workspace.toggleStageAtRow(hit.index); // [+/-] stage/unstage
         } else {
-          workspace.openChangeAtRow(hit.index); // row body = select + OPEN (consistent with tree)
+          void workspace.openChangeAtRow(hit.index); // row body = select + OPEN (consistent with tree)
         }
       } else {
         workspace.gitPanel.region.value = 'log';

@@ -34,6 +34,11 @@ class $Workspace {
   get focus() {
     return ref<Focus>('files');
   }
+  // WHICH panel the sidebar shows — decoupled from keyboard focus, so opening a diff from the git
+  // panel keeps the panel visible while the editor takes focus (VS Code behavior).
+  get sidebarView() {
+    return ref<'files' | 'git'>('files');
+  }
   get name() {
     return ref('');
   }
@@ -67,13 +72,16 @@ class $Workspace {
   }
   focusFiles(): void {
     this.focus.value = 'files';
+    this.sidebarView.value = 'files';
   }
   focusGit(): void {
     this.focus.value = 'git';
   }
   /** Cycle the sidebar between the files tree and the git panel (Ctrl+G style toggle). */
   toggleGit(): void {
-    this.focus.value = this.focus.value === 'git' ? 'files' : 'git';
+    const entering = this.focus.value !== 'git';
+    this.focus.value = entering ? 'git' : 'files';
+    this.sidebarView.value = entering ? 'git' : 'files';
   }
 
   // invariant: Cost tracks the actively observed set (project.invariants.md)
@@ -131,15 +139,18 @@ class $Workspace {
     return isMoving(momentum);
   }
 
-  /** Open the FILE at a changes-row in the editor (row click / 'o'). */
-  openChangeAtRow(rowIndex: number): void {
+  /** Open the DIFF of the file at a changes-row (row click / 'o'): the git panel STAYS in the
+   *  sidebar, the editor shows the change vs its previous state, read-only, diff-colored. */
+  async openChangeAtRow(rowIndex: number): Promise<void> {
     const git = this.git.value;
     if (!git) return;
     const rows = buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
     const row = rows[rowIndex];
     if (row?.kind !== 'file') return;
-    this.editor.openFile(Files.Class.join(this.root, row.path));
-    this.focus.value = 'editor';
+    const result = await GitCommands.Class.diffFile(this.root, row.path, row.bucket);
+    const diffText = result.stdout.trimEnd() || '(no differences)';
+    this.editor.openDiff(row.path, diffText);
+    this.focus.value = 'editor'; // keyboard to the diff; sidebarView stays 'git'
   }
 
   /** Request a discard — DESTRUCTIVE, so it only arms the confirmation overlay (y confirms).

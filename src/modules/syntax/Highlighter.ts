@@ -15,6 +15,8 @@ export type Role =
   | 'type'
   | 'operator'
   | 'variable'
+  | 'added'
+  | 'removed'
   | 'text';
 
 export interface Span {
@@ -22,7 +24,7 @@ export interface Span {
   role: Role;
 }
 
-export type LangId = 'typescript' | 'javascript' | 'json' | 'markdown' | 'plain';
+export type LangId = 'typescript' | 'javascript' | 'json' | 'markdown' | 'diff' | 'plain';
 
 const TYPESCRIPT_KEYWORDS = new Set([
   'abstract', 'any', 'as', 'async', 'await', 'boolean', 'break', 'case', 'catch', 'class',
@@ -155,6 +157,14 @@ function tokenizeMarkdown(line: string): Span[] {
 }
 
 export function highlightLine(line: string, language: LangId): Span[] {
+  if (language === 'diff') {
+    // Line-level diff coloring: whole-line roles keyed by the unified-diff prefix.
+    if (line.startsWith('+')) return [{ text: line, role: 'added' }];
+    if (line.startsWith('-')) return [{ text: line, role: 'removed' }];
+    if (line.startsWith('@@')) return [{ text: line, role: 'func' }];
+    if (line.startsWith('diff ') || line.startsWith('index ')) return [{ text: line, role: 'comment' }];
+    return [{ text: line, role: 'text' }];
+  }
   switch (language) {
     case 'typescript':
     case 'javascript':
