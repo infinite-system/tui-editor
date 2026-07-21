@@ -4,7 +4,7 @@ Live status ledger for the autonomous build. Updated every turn so state survive
 compaction. **If you are resuming: read this, then `HANDOFF.md`, then continue at the first
 unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
-## RESUME HERE (frontier as of commit db0d9a1)
+## RESUME HERE (frontier as of commit e7130ea)
 - **State:** 11 module contracts · 136 tests pass · tsc green · checker 0 problems · smoke ALL-PASS
   (20 assertions incl. caret-cell, no-wrap gutter, drag-select persistence, copy, tree-click, hover).
 - **HUMAN-QA BATCH COMPLETE (all committed):** caret off-by-one (1-based ANSI + layout-anchored,
@@ -12,26 +12,32 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   (one-writer mouse->model, d23dca7) · tree clicks + click-to-focus (966fc8d) · goal-column
   DISPLAY-preservation (e83d89d) · hover highlighting (c0b50b4). De-abbreviation pass landed
   (7254c3c+0a0ea67); naming convention binding (full names, no abbreviations, ALL code).
-- **NEXT (user-QA priority order):**
-  1. **GIT-PANEL TREATMENT (user actively QA-ing; changes render as raw porcelain + clip):**
-     (a) Legibility: 'Staged Changes (n)' / 'Changes (n)' / 'Untracked (n)' section headers; human
-     status glyphs (M/A/D/R/U, theme-colored) instead of raw xy codes; '(no changes)' placeholder.
-     (b) Scroll parity with the log: wheel+momentum on the changes list, VERTICAL and HORIZONTAL
-     (long paths — h-scroll or middle-truncate + full path on h-scroll); THIN DRAGGABLE SCROLLBARS
-     both axes on BOTH git regions (changes + log). Reuse scroll-momentum + the frame tick.
-     (c) Interactions: single-click selects + acts (stage/unstage toggle via git.stage/unstage),
-     hover-bg rows (same StyledText treatment as the tree), then commit->files->diff drill-down.
-  2. **Word-wrap MODE (toggleable; user wants it):** view.toggleWordWrap (palette + Alt+Z). ON:
-     soft-wrap at viewport width on display-column boundaries; gutter numbers LOGICAL lines
-     (continuation rows blank gutter); caret Y via a logical<->visual row mapping layer (build on
-     display-column machinery + grapheme memoization); vertical movement by VISUAL row; selection
-     spans wrapped rows; horizontal scroll disabled while wrapped. OFF: current clip+h-scroll.
-     Record in editor.invariants (caret invariant holds in BOTH modes); FrameProbe-verify both.
-  3. Rest of scroll rollout: editor/tree wheel momentum (reuse pattern) + editor scrollbars.
-  4. Static-capability pass (single owner, AFTER scroll files settle).
-  5. M5 diagnostics/definition + editable diff -> M6 markdown split-preview -> multi-workspace ->
-     search -> piece-table undo -> M7 plugins -> 5-pass gauntlet (fuller Claude panel; codex
-     cautious/cross-model-only) -> isolated blackline acceptance test -> §5.1 gate.
+- **NEXT (queue):**
+  1. **KEYBINDINGS MODULE (user mandate: full mac support, "IBR it hard"):** write
+     `keybindings.invariants.md` FIRST (the reduction), then implement from it.
+     REALITY: terminals deliver ENCODED SEQUENCES not keys (same chord = different bytes per
+     terminal/protocol; some chords intercepted upstream and NEVER arrive — Cmd+C in Terminal.app);
+     modifier fidelity varies (kitty: super/repeat/release; legacy collapses).
+     CHOSEN: intent-addressed bindings (action ids, never byte sequences; ONE decode layer);
+     layered resolution (canonical Ctrl floor <- mac overlay [Option word-jumps, Cmd nav via the
+     sequences mac terminals actually emit, super aliases via kitty protocol] <- user rebinds;
+     later shadows earlier; pure data lookup); deliverability honesty (UI shows EFFECTIVE bindings
+     for the live session; never advertise what can't arrive).
+     IMPOSSIBILITIES: no key handling outside registry dispatch (Bootstrap's if/else chains
+     DISSOLVE into data); no action reachable only by an unlisted binding (palette lists all); no
+     encoding logic outside the decode layer.
+     Module: Keybinding/KeybindingRegistry/keybindings.defaults.ts + mac overlay; enable
+     useKittyKeyboard (KeyEvent.super), degrade gracefully; the Ctrl+X..Ctrl+C chord becomes DATA.
+     Verify: resolver unit tests (precedence/shadowing/chords); tmux alt+arrow + mac Home/End
+     translations + kitty-super sequences; every existing shortcut re-verified via the registry.
+     Then run a FULLER Claude review panel on it. Record the one-set+overlays decision in
+     project.decisions.md.
+  2. Commit->files->diff drill-down (git panel; GitPanel.openCommit stack is ready).
+  3. Word-wrap MODE (spec in git history / earlier PROGRESS; toggleable, logical<->visual row map).
+  4. Editor/tree wheel momentum (reuse pattern; changes-list momentum optional).
+  5. Static-capability pass (single owner) -> M5 diagnostics/definition + editable diff -> M6
+     markdown split-preview -> multi-workspace -> search -> piece-table undo -> M7 plugins ->
+     5-pass gauntlet (fuller Claude panel; codex cautious) -> isolated blackline test -> §5.1 gate.
 
 ## Environment (established)
 - Bun `~/.bun/bin/bun` (v1.3.14). Prefix: `export PATH="$HOME/.bun/bin:$PATH"`. Node also on PATH.
