@@ -17,6 +17,7 @@ import { ContextMenu } from '../ui/ContextMenu';
 import { Tooltip } from '../ui/Tooltip';
 import { Settings } from '../settings/Settings';
 import { SettingsPanel } from '../settings/SettingsPanel';
+import { FindBar } from '../search/FindBar';
 import { StatusChannel } from '../system/StatusChannel';
 import { FrameProbe } from '../system/FrameProbe';
 import { ScrollPhysics } from '../ui/ScrollPhysics';
@@ -80,8 +81,20 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   const contextMenu = new ContextMenu.Class();
   const tooltip = new Tooltip.Class();
   const settingsPanel = new SettingsPanel.Class(settings);
+  const findBar = new FindBar.Class();
 
-  const view = buildRootView(renderer, workspace, theme, commands, app, contextMenu, tooltip, settingsPanel);
+  const view = buildRootView(renderer, workspace, theme, commands, app, contextMenu, tooltip, settingsPanel, findBar);
+
+  // Reveal the find bar's current match in the editor (the ONE writer of the editor selection): select
+  // the match range (anchor=start, cursor=end) and scroll it into view. Called after every find action.
+  const revealFindMatch = (): void => {
+    const match = findBar.engine?.currentMatch;
+    if (!match) return;
+    const editor = workspace.editor;
+    editor.placeCursor(match.line, match.endColumn);
+    editor.cursor.anchor.value = { line: match.line, col: match.startColumn }; // after placeCursor -> selection
+    editor.revealCursor();
+  };
 
   // Theme + glyph mode are settings-driven (single source): the panel edits settings.theme /
   // settings.glyphMode, and these reactive hooks PUSH the change into the Theme so it live-applies with
@@ -426,6 +439,16 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   // for parameters that compose (shift = extend; repeat runs = acceleration).
   const actionHandlers: Record<string, (key: KeyEvent) => void> = {
     'app.quit': () => void shutdown(),
+    'find.open': () => {
+      if (!workspace.editor.hasDocument.value) return;
+      findBar.openFor(workspace.editor.document, 'find');
+      revealFindMatch();
+    },
+    'find.replace': () => {
+      if (!workspace.editor.hasDocument.value) return;
+      findBar.openFor(workspace.editor.document, 'replace');
+      revealFindMatch();
+    },
     'palette.open': () => commands.openPalette(),
     'palette.close': () => commands.closePalette(),
     'palette.run': () => commands.runSelected(),
@@ -612,7 +635,42 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       ? 'settings'
       : commands.open.value
         ? 'palette'
-        : workspace.focus.value;
+        : findBar.open.value
+          ? 'find'
+          : workspace.focus.value;
+
+    // Find/replace bar has keyboard: type edits the focused field (live find), Enter/Shift+Enter cycle
+    // matches, Ctrl+Enter replaces, Tab switches field, Esc closes. Handled inline (not via the registry)
+    // because it composes typed input with the match-reveal, like the palette's query editing.
+    if (context === 'find') {
+      if (key.name === 'escape') {
+        findBar.close();
+        return;
+      }
+      if (key.name === 'return') {
+        if (key.ctrl && key.shift) findBar.replaceAll();
+        else if (key.ctrl) findBar.replaceCurrent();
+        else if (key.shift) findBar.previous();
+        else findBar.next();
+        revealFindMatch();
+        return;
+      }
+      if (key.name === 'tab') {
+        findBar.switchField();
+        return;
+      }
+      if (key.name === 'backspace') {
+        findBar.backspace();
+        revealFindMatch();
+        return;
+      }
+      if (isTypedCharacter(key)) {
+        findBar.append(key.sequence);
+        revealFindMatch();
+        return;
+      }
+      return; // swallow other keys while the bar is open
+    }
 
     // iTerm2 "Natural Text Editing" remaps Cmd+Left → a RAW ^A byte (0x01), which collides with
     // Ctrl+A = Select All. Under the Kitty protocol a PHYSICALLY pressed Ctrl+A arrives as the kitty

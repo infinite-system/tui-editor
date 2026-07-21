@@ -36,6 +36,7 @@ import type { ContextMenu, ContextMenuItem } from './ContextMenu';
 import type { Tooltip } from './Tooltip';
 import type { SettingsPanel } from '../settings/SettingsPanel';
 import type { ScrollModifier } from '../settings/Settings';
+import type { FindBar } from '../search/FindBar';
 import { SplitterModel } from '../layout/SplitterModel';
 import { Logging } from '../system/Logging';
 
@@ -95,6 +96,7 @@ export function buildRootView(
   contextMenu: ContextMenu.Instance,
   tooltip: Tooltip.Instance,
   settingsPanel: SettingsPanel.Instance,
+  findBar: FindBar.Instance,
 ): RootView {
   const root = renderer.root;
   const readPalette = () => theme.palette;
@@ -297,6 +299,26 @@ export function buildRootView(
   commandPalette.add(commandPaletteInput);
   commandPalette.add(commandPaletteList);
   root.add(commandPalette);
+
+  // In-editor find/replace bar (Ctrl+F / Ctrl+H) — a top-right overlay (VS Code placement), shown while
+  // findBar.open. One text block: the query line with the N-of-M counter, plus a replacement line in
+  // replace mode, plus a key hint. Content is projected from the FindBar model each paint.
+  const findBarBox = new BoxRenderable(renderer, {
+    id: 'find-bar',
+    position: 'absolute',
+    top: 1,
+    left: '45%',
+    width: '54%',
+    border: true,
+    borderStyle: 'rounded',
+    title: 'Find',
+    flexDirection: 'column',
+    visible: false,
+    zIndex: 100,
+  });
+  const findBarText = new TextRenderable(renderer, { id: 'find-bar-text', content: '' });
+  findBarBox.add(findBarText);
+  root.add(findBarBox);
 
   // Destructive-action confirmation (discard) — a small modal strip; y confirms, anything else
   // cancels. invariant: Destructive working-tree operations require confirmation (src/modules/git/git.invariants.md)
@@ -1425,6 +1447,27 @@ export function buildRootView(
       commandPaletteList.fg = palette.dim;
     }
 
+    // Find/replace bar overlay.
+    findBarBox.visible = findBar.open.value;
+    if (findBar.open.value) {
+      const engine = findBar.engine;
+      const replaceMode = findBar.mode.value === 'replace';
+      const queryFocused = !(replaceMode && findBar.replaceFocused.value);
+      const count = engine ? engine.matchCount : 0;
+      const position = engine && engine.currentMatchIndex.value >= 0 ? engine.currentMatchIndex.value + 1 : 0;
+      const counter = count > 0 ? `${position} of ${count}` : engine && engine.query.value ? 'no results' : '';
+      findBarBox.title = replaceMode ? 'Find / Replace' : 'Find';
+      findBarBox.borderColor = palette.borderActive;
+      findBarBox.titleColor = palette.accent;
+      findBarBox.backgroundColor = palette.panel;
+      const lines: string[] = [];
+      lines.push(`⌕ ${engine?.query.value ?? ''}${queryFocused ? '▏' : ''}   ${counter}`);
+      if (replaceMode) lines.push(`⇄ ${engine?.replacement.value ?? ''}${queryFocused ? '' : '▏'}`);
+      lines.push(replaceMode ? '↵ next · ⇧↵ prev · ⌃↵ replace · ⌃⇧↵ all · ⇥ field · esc' : '↵ next · ⇧↵ prev · esc close');
+      findBarText.content = lines.join('\n');
+      findBarText.fg = palette.fg;
+    }
+
     const pendingDiscard = workspace.gitPanel.confirmDiscard.value;
     const pendingCloseTabIndex = workspace.pendingCloseTabIndex.value;
     confirmBox.visible = pendingDiscard !== null || pendingCloseTabIndex >= 0;
@@ -1642,17 +1685,17 @@ export function buildRootView(
       // is in visual rows, so the glide is smooth over wrapped rows (not jumpy by logical line).
       const backward = direction === 'left' || direction === 'up';
       workspace.impulseEditorVerticalScroll((backward ? -1 : 1) * step);
-      return;
-    }
-    // The horizontal modifier is configurable (settings.horizontalScrollModifier, default 'alt' = the
-    // Option-wheel path that survives real terminals); native left/right direction is always horizontal.
-    const modifierHorizontal = scrollModifierHeld(event, settings.horizontalScrollModifier.value);
-    const horizontal = direction === 'left' || direction === 'right' || modifierHorizontal;
-    if (horizontal) {
-      const backward = direction === 'left' || direction === 'up';
-      workspace.impulseEditorHorizontalScroll((backward ? -1 : 1) * step);
     } else {
-      workspace.impulseEditorVerticalScroll((direction === 'up' ? -1 : 1) * step);
+      // The horizontal modifier is configurable (settings.horizontalScrollModifier, default 'alt' = the
+      // Option-wheel path that survives real terminals); native left/right direction is always horizontal.
+      const modifierHorizontal = scrollModifierHeld(event, settings.horizontalScrollModifier.value);
+      const horizontal = direction === 'left' || direction === 'right' || modifierHorizontal;
+      if (horizontal) {
+        const backward = direction === 'left' || direction === 'up';
+        workspace.impulseEditorHorizontalScroll((backward ? -1 : 1) * step);
+      } else {
+        workspace.impulseEditorVerticalScroll((direction === 'up' ? -1 : 1) * step);
+      }
     }
   };
 

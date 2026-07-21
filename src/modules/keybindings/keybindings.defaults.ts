@@ -87,6 +87,10 @@ export const canonicalBindings: Keybinding[] = [
   // Editing" Cmd+Right (which sends a raw ^E / 0x05) jump to the line end. (Cmd+Left = raw ^A is
   // disambiguated from Ctrl+A = Select All in the onKey handler, since both resolve the same here.)
   { chord: { key: 'e', ctrl: true }, action: 'editor.lineEnd', context: 'editor' },
+  // --- editor: find / replace (Ctrl+F opens find, Ctrl+H opens find+replace; the 'find' context owns
+  //     the bar's own keys — typing, Enter/Shift+Enter cycle, Ctrl+Enter replace, Tab field, Esc close) ---
+  { chord: { key: 'f', ctrl: true }, action: 'find.open', context: 'editor' },
+  { chord: { key: 'h', ctrl: true }, action: 'find.replace', context: 'editor' },
   // --- editor: editing ---
   { chord: { key: 'return' }, action: 'editor.newline', context: 'editor' },
   { chord: { key: 'backspace' }, action: 'editor.backspace', context: 'editor' },
