@@ -17,6 +17,9 @@ import { FrameProbe } from '../system/FrameProbe';
 import { ScrollPhysics } from '../ui/ScrollPhysics';
 import { Clipboard } from '../system/Clipboard';
 import { buildChangeRows, nextFileRow } from '../git/git.rows';
+import { KeybindingRegistry } from '../keybindings/KeybindingRegistry';
+import { canonicalBindings } from '../keybindings/keybindings.defaults';
+import { macOverlayBindings } from '../keybindings/keybindings.mac';
 import { Environment } from '../system/Environment';
 import { Logging } from '../system/Logging';
 import { dirname, join } from 'node:path';
@@ -44,6 +47,9 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     targetFps: 30,
     useMouse: true,
     enableMouseMovement: true, // hover highlighting (over/out/move)
+    // Kitty keyboard protocol where available: super-modifier fidelity for the mac overlay
+    // (Cmd chords); legacy terminals silently stay at base fidelity.
+    useKittyKeyboard: {},
   });
 
   Kernel.instance.seal();
@@ -260,248 +266,186 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     return code >= 32 && code !== 127;
   };
 
-  const onKey = (key: KeyEvent): void => {
-    // Quit paths: Ctrl+Q (plain terminals), F10 (passes through VS Code's terminal), and the
-    // Ctrl+X..Ctrl+C chord (emacs-style; VS Code intercepts Ctrl+Q). Plain Ctrl+C stays COPY.
-    if (key.name === 'q' && key.ctrl) {
-      void shutdown();
-      return;
-    }
-    if (key.name === 'f10') {
-      void shutdown();
-      return;
-    }
-    if (key.name === 'x' && key.ctrl && !commands.open.value) {
-      // In editor focus WITH a selection Ctrl+X means cut (handled in the editor branch below);
-      // otherwise it arms the quit chord.
-      const cutting = workspace.focus.value === 'editor' && workspace.editor.cursor.hasSelection;
-      if (!cutting) {
-        app.armQuitChord(Date.now());
-        return;
-      }
-    }
-    if (key.name === 'c' && key.ctrl && app.quitChordActive(Date.now())) {
-      void shutdown();
-      return;
-    }
-    if (app.quitChordArmed.value) app.disarmQuitChord(); // any other key breaks the chord
+  // ---------------------------------------------------------------------------------------------
+  // Keyboard: ONE decode layer (OpenTUI) -> registry resolution (pure data lookup) -> action
+  // dispatch. No chord conditionals live here — bindings are data in keybindings.defaults/mac.
+  // invariant: Bindings are intent addressed (src/modules/keybindings/keybindings.invariants.md)
+  const keybindings = new KeybindingRegistry.Class();
+  keybindings.registerGuard('editorHasSelection', () => workspace.editor.cursor.hasSelection);
+  keybindings.registerLayer('canonical', canonicalBindings);
+  keybindings.registerLayer('mac', macOverlayBindings);
 
-    // Palette captures all input while open.
-    if (commands.open.value) {
-      switch (key.name) {
-        case 'escape':
-          commands.closePalette();
-          break;
-        case 'return':
-          commands.runSelected();
-          break;
-        case 'up':
-          commands.moveSelection(-1);
-          break;
-        case 'down':
-          commands.moveSelection(1);
-          break;
-        case 'backspace':
-          commands.backspaceQuery();
-          break;
-        default:
-          if (isTypedCharacter(key)) commands.appendQuery(key.sequence);
-      }
-      return;
+  // Git-panel helpers shared by the git action handlers (region-aware continuous flow).
+  const currentChangeRows = () => {
+    const git = workspace.git.value;
+    return git ? buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value) : [];
+  };
+  const normalizeChangesIndex = (): void => {
+    const rows = currentChangeRows();
+    if (rows[workspace.gitPanel.changesIndex.value]?.kind !== 'file') {
+      const firstFile = nextFileRow(rows, -1, 1);
+      if (firstFile >= 0) workspace.gitPanel.changesIndex.value = firstFile;
     }
+  };
+  const moveLog = (delta: number): void => {
+    const gitPanel = workspace.gitPanel;
+    workspace.haltGitLogScroll(); // keyboard is precise — adopt-and-stop any glide (One-Writer)
+    const end = workspace.commitLog.value?.knownEnd.value ?? Number.POSITIVE_INFINITY;
+    gitPanel.logIndex.value = Math.max(
+      0,
+      Math.min(gitPanel.logIndex.value + delta, Number.isFinite(end) ? (end as number) - 1 : gitPanel.logIndex.value + delta),
+    );
+    const approximateVisible = 12;
+    if (gitPanel.logIndex.value < gitPanel.logScrollTop.value) gitPanel.logScrollTop.value = gitPanel.logIndex.value;
+    else if (gitPanel.logIndex.value >= gitPanel.logScrollTop.value + approximateVisible)
+      gitPanel.logScrollTop.value = gitPanel.logIndex.value - approximateVisible + 1;
+    void workspace.commitLog.value?.ensureRange(gitPanel.logScrollTop.value, 50);
+  };
+  const moveChanges = (direction: 1 | -1): void => {
+    const gitPanel = workspace.gitPanel;
+    const rows = currentChangeRows();
+    const next = nextFileRow(rows, gitPanel.changesIndex.value, direction);
+    if (next >= 0) gitPanel.changesIndex.value = next;
+    else if (direction === 1) gitPanel.region.value = 'log'; // flow into the log
+  };
 
-    // Destructive-confirm overlay is MODAL: y confirms, anything else cancels.
-    if (workspace.gitPanel.confirmDiscard.value) {
-      if (key.name === 'y') void workspace.confirmDiscard();
-      else workspace.cancelDiscard();
-      return;
-    }
-
-    // Ctrl+P opens the palette from anywhere.
-    if (key.name === 'p' && key.ctrl) {
-      commands.openPalette();
-      return;
-    }
-
-    // Ctrl+G toggles the git sidebar; entering it loads the first log window + refreshes status.
-    if (key.name === 'g' && key.ctrl) {
+  // The ACTION TABLE: every binding's action id -> its handler. Handlers receive the raw KeyEvent
+  // for parameters that compose (shift = extend; repeat runs = acceleration).
+  const actionHandlers: Record<string, (key: KeyEvent) => void> = {
+    'app.quit': () => void shutdown(),
+    'palette.open': () => commands.openPalette(),
+    'palette.close': () => commands.closePalette(),
+    'palette.run': () => commands.runSelected(),
+    'palette.previous': () => commands.moveSelection(-1),
+    'palette.next': () => commands.moveSelection(1),
+    'palette.erase': () => commands.backspaceQuery(),
+    'focus.toggle': () => workspace.toggleFocus(),
+    'git.togglePanel': () => {
       workspace.toggleGit();
       if (workspace.focus.value === 'git') {
         workspace.gitPanel.region.value = 'changes';
         void workspace.git.value?.refresh();
         void workspace.commitLog.value?.ensureRange(0, 50);
       }
+    },
+    'git.up': () => {
+      normalizeChangesIndex();
+      if (workspace.gitPanel.region.value === 'changes') moveChanges(-1);
+      else if (workspace.gitPanel.logIndex.value === 0) {
+        workspace.gitPanel.region.value = 'changes'; // flow back up into the changes
+        const rows = currentChangeRows();
+        const last = nextFileRow(rows, rows.length, -1);
+        if (last >= 0) workspace.gitPanel.changesIndex.value = last;
+      } else moveLog(-1);
+    },
+    'git.down': () => {
+      normalizeChangesIndex();
+      if (workspace.gitPanel.region.value === 'changes') moveChanges(1);
+      else moveLog(1);
+    },
+    'git.pageUp': () => {
+      if (workspace.gitPanel.region.value === 'log') moveLog(-10);
+    },
+    'git.pageDown': () => {
+      if (workspace.gitPanel.region.value === 'log') moveLog(10);
+    },
+    'git.stageToggle': () => {
+      normalizeChangesIndex();
+      if (workspace.gitPanel.region.value === 'changes')
+        void workspace.toggleStageAtRow(workspace.gitPanel.changesIndex.value);
+    },
+    'git.openFile': () => {
+      normalizeChangesIndex();
+      workspace.openChangeAtRow(workspace.gitPanel.changesIndex.value);
+    },
+    'git.discard': () => {
+      normalizeChangesIndex();
+      workspace.requestDiscardAtRow(workspace.gitPanel.changesIndex.value);
+    },
+    'git.leave': () => workspace.focusFiles(),
+    'tree.up': () => workspace.tree.moveSelection(-1),
+    'tree.down': () => workspace.tree.moveSelection(1),
+    'tree.activate': () => void workspace.activate(),
+    'tree.rightExpandOrOpen': () => {
+      // Right on a FILE opens it; on a collapsed dir expands; on an expanded dir steps into it.
+      if (workspace.tree.selected?.isDir && workspace.tree.selected.expanded)
+        workspace.tree.moveSelection(1);
+      else workspace.activate();
+    },
+    'tree.leftCollapse': () => {
+      if (workspace.tree.selected?.isDir && workspace.tree.selected.expanded) workspace.activate();
+    },
+    'editor.moveUp': (key) => workspace.editor.moveVertical(-movementAcceleration(key), key.shift),
+    'editor.moveDown': (key) => workspace.editor.moveVertical(movementAcceleration(key), key.shift),
+    'editor.moveLeft': (key) => workspace.editor.moveHorizontal(-movementAcceleration(key), key.shift),
+    'editor.moveRight': (key) => workspace.editor.moveHorizontal(movementAcceleration(key), key.shift),
+    'editor.pageUp': (key) => workspace.editor.pageUp(key.shift),
+    'editor.pageDown': (key) => workspace.editor.pageDown(key.shift),
+    'editor.lineStart': (key) => workspace.editor.moveToLineStart(key.shift),
+    'editor.lineEnd': (key) => workspace.editor.moveToLineEnd(key.shift),
+    'editor.jumpUp': (key) =>
+      workspace.editor.moveVertical(-ScrollPhysics.Class.jumpRows(movementRun(key)), key.shift),
+    'editor.jumpDown': (key) =>
+      workspace.editor.moveVertical(ScrollPhysics.Class.jumpRows(movementRun(key)), key.shift),
+    'editor.wordLeft': (key) => workspace.editor.moveWordHorizontal(-1, key.shift),
+    'editor.wordRight': (key) => workspace.editor.moveWordHorizontal(1, key.shift),
+    'editor.documentStart': (key) => workspace.editor.moveDocumentStart(key.shift),
+    'editor.documentEnd': (key) => workspace.editor.moveDocumentEnd(key.shift),
+    'editor.newline': () => workspace.editor.insertNewline(),
+    'editor.backspace': () => workspace.editor.backspace(),
+    'editor.delete': () => workspace.editor.deleteChar(),
+    'editor.escape': () => {
+      if (workspace.editor.hasSelection) workspace.editor.cursor.clearSelection();
+      else workspace.focusFiles();
+    },
+    'editor.save': () => workspace.editor.save(),
+    'editor.selectAll': () => workspace.editor.selectAll(),
+    'editor.copy': () => {
+      // Publish how many characters landed on the clipboard — the observable proof that copy
+      // actually copied (the human-QA "cannot copy" bug's verification channel).
+      void workspace.editor.copySelection().then((copiedCharacters) => {
+        if (copiedCharacters > 0) {
+          app.copyNotice.value = `Copied ${copiedCharacters} chars (${Clipboard.Class.lastBackend ?? 'no backend'})`;
+        }
+        StatusChannel.Class.update({
+          lastCopyChars: copiedCharacters,
+          clipboardBackend: Clipboard.Class.lastBackend,
+        });
+        StatusChannel.Class.flush();
+      });
+    },
+    'editor.cut': () => void workspace.editor.cutSelection(),
+    'editor.paste': () => void workspace.editor.pasteClipboard(),
+    'editor.undo': () => workspace.editor.performUndo(),
+    'editor.redo': () => workspace.editor.performRedo(),
+  };
+
+  const onKey = (key: KeyEvent): void => {
+    // Destructive-confirm overlay is MODAL: y confirms, anything else cancels — the context's
+    // residual, not a binding.
+    if (workspace.gitPanel.confirmDiscard.value) {
+      if (key.name === 'y') void workspace.confirmDiscard();
+      else workspace.cancelDiscard();
       return;
     }
 
-    const focus = workspace.focus.value;
-
-    if (key.name === 'tab') {
-      workspace.toggleFocus();
-    } else if (focus === 'git') {
-      const gitPanel = workspace.gitPanel;
-      const moveLog = (delta: number): void => {
-        workspace.haltGitLogScroll(); // keyboard is precise — adopt-and-stop any glide (One-Writer)
-        const end = workspace.commitLog.value?.knownEnd.value ?? Number.POSITIVE_INFINITY;
-        gitPanel.logIndex.value = Math.max(0, Math.min(gitPanel.logIndex.value + delta, Number.isFinite(end) ? end - 1 : gitPanel.logIndex.value + delta));
-        const approximateVisible = 12;
-        if (gitPanel.logIndex.value < gitPanel.logScrollTop.value) gitPanel.logScrollTop.value = gitPanel.logIndex.value;
-        else if (gitPanel.logIndex.value >= gitPanel.logScrollTop.value + approximateVisible)
-          gitPanel.logScrollTop.value = gitPanel.logIndex.value - approximateVisible + 1;
-        void workspace.commitLog.value?.ensureRange(gitPanel.logScrollTop.value, 50);
-      };
-      // Region-aware nav with CONTINUOUS flow: Down past the last change row enters the log;
-      // Up from the top of the log returns to the changes. Enter toggles stage/unstage.
-      const changeRows = (() => {
-        const git = workspace.git.value;
-        return git ? buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value) : [];
-      })();
-      // Normalize: the selected changes row must be a FILE row (the index starts on a header on
-      // entry, and rows shift as staging moves files between sections).
-      if (changeRows[gitPanel.changesIndex.value]?.kind !== 'file') {
-        const firstFile = nextFileRow(changeRows, -1, 1);
-        if (firstFile >= 0) gitPanel.changesIndex.value = firstFile;
-      }
-      const moveChanges = (direction: 1 | -1): void => {
-        const next = nextFileRow(changeRows, gitPanel.changesIndex.value, direction);
-        if (next >= 0) {
-          gitPanel.changesIndex.value = next;
-        } else if (direction === 1) {
-          gitPanel.region.value = 'log'; // flow into the log
-        }
-      };
-      if (gitPanel.region.value === 'changes') {
-        switch (key.name) {
-          case 'up': moveChanges(-1); break;
-          case 'down': moveChanges(1); break;
-          case 'return':
-          case 'space':
-            void workspace.toggleStageAtRow(gitPanel.changesIndex.value);
-            break;
-          case 'o': workspace.openChangeAtRow(gitPanel.changesIndex.value); break;
-          case 'd': workspace.requestDiscardAtRow(gitPanel.changesIndex.value); break;
-          case 'escape': workspace.focusFiles(); break;
-          default: break;
-        }
-      } else {
-        switch (key.name) {
-          case 'up':
-            if (gitPanel.logIndex.value === 0) {
-              gitPanel.region.value = 'changes'; // flow back up into the changes
-              const last = nextFileRow(changeRows, changeRows.length, -1);
-              if (last >= 0) gitPanel.changesIndex.value = last;
-            } else moveLog(-1);
-            break;
-          case 'down': moveLog(1); break;
-          case 'pageup': moveLog(-10); break;
-          case 'pagedown': moveLog(10); break;
-          case 'escape': workspace.focusFiles(); break;
-          default: break;
-        }
-      }
-    } else if (focus === 'files') {
-      switch (key.name) {
-        case 'up':
-          workspace.tree.moveSelection(-1);
-          break;
-        case 'down':
-          workspace.tree.moveSelection(1);
-          break;
-        case 'return':
-        case 'space':
-          workspace.activate();
-          break;
-        case 'right':
-          // Right on a FILE opens it (same as Enter — user expectation); on a collapsed dir,
-          // expands it; on an expanded dir, steps into it. Focus switching stays on Tab.
-          if (workspace.tree.selected?.isDir && workspace.tree.selected.expanded)
-            workspace.tree.moveSelection(1);
-          else workspace.activate();
-          break;
-        case 'left':
-          if (workspace.tree.selected?.isDir && workspace.tree.selected.expanded)
-            workspace.activate();
-          break;
-        default:
-          break;
-      }
-    } else {
-      // editor focus. invariant: Selection is an anchor plus the cursor and edits replace it
-      // (src/modules/editor/editor.invariants.md)
-      const editor = workspace.editor;
-      const acceleration = movementAcceleration(key);
-      const extend = key.shift; // shift + movement extends the selection
-      if (key.ctrl) {
-        // Ctrl+arrows: warp movement (Shift still composes to extend the selection).
-        switch (key.name) {
-          case 'up':
-            editor.moveVertical(-ScrollPhysics.Class.jumpRows(accelerationRun), extend);
-            return;
-          case 'down':
-            editor.moveVertical(ScrollPhysics.Class.jumpRows(accelerationRun), extend);
-            return;
-          case 'left':
-            editor.moveWordHorizontal(-1, extend);
-            return;
-          case 'right':
-            editor.moveWordHorizontal(1, extend);
-            return;
-          case 'home':
-            editor.moveDocumentStart(extend);
-            return;
-          case 'end':
-            editor.moveDocumentEnd(extend);
-            return;
-          default:
-            break;
-        }
-        // Ctrl chords: save / select-all / clipboard / undo-redo.
-        switch (key.name) {
-          case 's': editor.save(); break;
-          case 'a': editor.selectAll(); break;
-          case 'c':
-            // Publish how many characters landed on the clipboard — the observable proof that
-            // copy actually copied (the human-QA "cannot copy" bug's verification channel).
-            void editor.copySelection().then((copiedCharacters) => {
-              if (copiedCharacters > 0) {
-                app.copyNotice.value = `Copied ${copiedCharacters} chars (${Clipboard.Class.lastBackend ?? 'no backend'})`;
-              }
-              StatusChannel.Class.update({
-                lastCopyChars: copiedCharacters,
-                clipboardBackend: Clipboard.Class.lastBackend,
-              });
-              StatusChannel.Class.flush();
-            });
-            break;
-          case 'x': void editor.cutSelection(); break;
-          case 'v': void editor.pasteClipboard(); break;
-          case 'z': key.shift ? editor.performRedo() : editor.performUndo(); break;
-          case 'y': editor.performRedo(); break;
-          default: break;
-        }
-      } else {
-        // Plain keys: movement (acceleration + shift-extend), editing, focus.
-        switch (key.name) {
-          case 'up': editor.moveVertical(-acceleration, extend); break;
-          case 'down': editor.moveVertical(acceleration, extend); break;
-          case 'left': editor.moveHorizontal(-acceleration, extend); break;
-          case 'right': editor.moveHorizontal(acceleration, extend); break;
-          case 'pageup': editor.pageUp(extend); break;
-          case 'pagedown': editor.pageDown(extend); break;
-          case 'home': editor.moveToLineStart(extend); break;
-          case 'end': editor.moveToLineEnd(extend); break;
-          case 'return': editor.insertNewline(); break;
-          case 'backspace': editor.backspace(); break;
-          case 'delete': editor.deleteChar(); break;
-          case 'escape':
-            if (editor.hasSelection) editor.cursor.clearSelection();
-            else workspace.focusFiles();
-            break;
-          default:
-            if (isTypedCharacter(key)) editor.insertText(key.sequence);
-        }
-      }
+    const context = commands.open.value ? 'palette' : workspace.focus.value;
+    const resolution = keybindings.resolve(
+      // Alt-family collapse: mac terminals surface Option as `option` OR `meta` (ESC-prefixed
+      // forms); both mean the alt slot of a chord pattern.
+      { name: key.name, ctrl: key.ctrl, shift: key.shift, option: key.option || key.meta, super: key.super },
+      context,
+      Date.now(),
+    );
+    app.quitChordArmed.value = resolution.chordPending; // status-bar hint mirrors the pending chord
+    if (resolution.action) {
+      actionHandlers[resolution.action]?.(key);
+      return;
     }
+    if (resolution.chordPending) return;
+    // Residual defaults: unbound printable keys TYPE in type-accepting contexts.
+    if (context === 'palette' && isTypedCharacter(key)) commands.appendQuery(key.sequence);
+    else if (context === 'editor' && isTypedCharacter(key)) workspace.editor.insertText(key.sequence);
     // No explicit render here — any model mutation above triggers the frame effect.
   };
   renderer.keyInput.on('keypress', onKey);
