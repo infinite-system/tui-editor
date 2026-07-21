@@ -202,12 +202,26 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   feed). The felt gap was wrap-mode direct scroll = folded into bug 2. Gated by momentum-glide contract.
 
 ### REMAINING (coordinator priority order, 2026-07-21)
-1. **DiffView P1 — IN PROGRESS (highest value; closes the audit package).** Fix DiffView.ts:262-278
-   hardcoded VERTICAL_MOMENTUM/DEFAULT_MOMENTUM → settings-driven (Workspace.verticalMomentum pattern).
-   MOUNT: Workspace.openChangeAtRow/openCommitFileDiff → a DiffView tab (synced aligned-row panes,
-   open-full promotes current version to an editor tab, jump next/prev + N-of-M). Then REMOVE DiffView
-   from check-unwired-capabilities.sh allowlist (gate enforces it stays wired). Behavioral contracts:
-   synced-scroll stays aligned under a heavily-additive file (fixtures/data.json); open-full works.
+- ✅ **DiffView P1 — DONE (fae9349), audit package CLOSED (zero unwired capabilities).** Momentum
+  settings-driven; GitCommands.fileAtRef produces the two full-text sides; Workspace.diffRequest →
+  RootView diffContainer swapped in place of editorArea (add/remove — runtime flexGrow/height changes
+  don't re-lay-out in OpenTUI); first full-height paint driven from the FRAME LOOP (reactive paint runs
+  before layout). Keyboard n/p/Enter(open-full)/Esc + scroll; removed from unwired allowlist. Drive-
+  verified aligned panes + N-of-M. TODO follow-through: behavioral contract for synced-scroll alignment
+  + a diff.invariants driving test (currently DiffView has NO test at all — ratchet candidate).
+- ✅ **TIER-0 merge-gate — DONE (a93cbf4 + 69c034b).** scripts/merge-gate.sh runs conventions-gate +
+  bun test + behavioral-contracts + 5 smokes + settings-applied-real, ALL hard-blocking; delegate-packet
+  points workers at it. VERIFIED it blocks (forced contract fail → exit 1). GitWatcher fs.watch tests
+  skip on EMFILE (env inotify exhaustion) so the gate is green here; run on real hardware.
+- **SEARCH-SUITE branches READY to merge+wire (conductor-* worktrees, built by conductor via delegate-
+  packet, tsc+unit green; NEW isolated src/modules/search/* — zero conflict):** (a) conductor-quickopen
+  = QuickOpen.ts (rg --files + CommandScoring.fuzzyScore; WIRE Ctrl+P modal → Workspace open-file);
+  (b) conductor-findbuffer = FindInBuffer.ts (findAll/next/prev/replace over TextDocument; WIRE Ctrl+F/
+  Ctrl+H bar + scroll-match-into-view); (c) conductor-ripgrep = RipgrepSearch.ts (rg --json rows; WIRE
+  the activity-bar Search view, click hit → open at line). MERGE each (`git merge conductor-<name>`) +
+  WIRE + add a DRIVING smoke — they stay on the unwired-gate list until wired (correct). Queued next by
+  conductor: project-replace, ActivityBar renderable, context-menu positioning.
+- **ACTIVITY BAR** (see spec in item 2 below) — do WITH the search wiring (it's the Search view's home).
 2. **SEARCH SUITE (user priority)** — 4 CODEX workers on disjoint modules: fuzzy quick-open (reuse
    CommandScoring.fuzzyScore), in-file find/replace, ripgrep find-in-files (rg 14.1.1), project-wide
    replace. Main loop wires each into RootView.
