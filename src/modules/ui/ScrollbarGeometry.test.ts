@@ -1,7 +1,7 @@
 // Property tests over the ONE scrollbar-geometry source: track within the region, corner free,
 // exact extremes, min-thumb — across region shapes (split positions, tiny panes, huge content).
 import { test, expect, describe } from 'bun:test';
-import { ScrollbarGeometry, MINIMUM_THUMB_CELLS, type RegionRect } from './scrollbar-geometry';
+import { ScrollbarGeometry, MINIMUM_THUMB_CELLS, type RegionRect } from './ScrollbarGeometry';
 
 const shapes: Array<{ name: string; region: RegionRect }> = [
   { name: 'editor pane', region: { top: 0, left: 6, width: 80, height: 37 } },

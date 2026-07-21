@@ -55,7 +55,7 @@ Change a convention → change it HERE (and note the why in decisions.md).
   offset steps on a momentum-managed pane.
 - A mouse event is consumed by exactly ONE handler path; renderer and hit-testers share the SAME
   row/geometry model (never parallel math).
-- Scrollbar placement/visibility comes ONLY from `scrollbar-geometry` (one source; explicit
+- Scrollbar placement/visibility comes ONLY from `ScrollbarGeometry` (one source; explicit
   `visible` predicate; thickness from the explicit map — never layout read-back).
 - Destructive operations (discard, delete, force) execute ONLY behind an explicit confirmation
   distinct from the triggering gesture.

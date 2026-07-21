@@ -27,7 +27,7 @@ import { displayColumn, lineWidth, graphemeAtDisplayColumn, graphemeToU16 } from
 import { SelectableText } from './SelectableText';
 import { GitRows } from '../git/GitRows';
 import { GitLogRows } from '../git/GitLogRows';
-import { ScrollbarGeometry } from './scrollbar-geometry';
+import { ScrollbarGeometry } from './ScrollbarGeometry';
 import { Logging } from '../system/Logging';
 
 function roleColor(role: Role, palette: Palette): string {

@@ -44,7 +44,7 @@ export const MINIMUM_THUMB_CELLS = 2;
  * Geometry for one bar. Returns null when the content fits (bar hidden). The track runs the
  * region's trailing edge minus one corner cell (shared with a perpendicular bar).
  */
-function scrollbarGeometryImplementation(
+function $scrollbarGeometry(
   orientation: 'vertical' | 'horizontal',
   region: RegionRect,
   scroll: ScrollState,
@@ -71,7 +71,7 @@ function scrollbarGeometryImplementation(
 
 class $ScrollbarGeometry {
   /** Geometry for one bar; null when the content fits (bar hidden). */
-  static scrollbarGeometry = scrollbarGeometryImplementation;
+  static scrollbarGeometry = $scrollbarGeometry;
   static readonly MINIMUM_THUMB_CELLS = MINIMUM_THUMB_CELLS;
 }
 
