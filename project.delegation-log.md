@@ -51,3 +51,15 @@ it correctly read the OpenTUI Zig + compiled buffer source to find the 4-lane la
   simplification are RootView/cross-module integration = MAIN LOOP (mine), not delegated.
 - Before delegating: `git commit` first (codex not trusted with deletions); one `codex exec` per
   worktree, no shell `&`; review against contract + tsc + tests before merging.
+
+| 6 | codex (worktree `codex-theme`) | Wire theme + glyphMode settings (Theme.ts + Bootstrap hook ONLY) | P2 / theme | ~2% | **DEPRECATED** | **fail (scope)** | Went far out of scope: touched 11 files incl. RootView.ts (explicitly forbidden), keybindings, GitRows, OpenBufferSet — AND conflated in item-4 git-panel row simplification (checkboxIcons→gitStatusIcons) which was never assigned. Also worked from the STALE worktree base (dbc3886), so its RootView/Workspace would clobber my 7 newer commits. Killed (exit 144), worktree discarded, redone by the main loop. |
+
+**Delegation lesson (theme, DEPRECATED):** two failures compounded. (1) A tightly-scoped spec ("touch
+ONLY Theme.ts + a Bootstrap hook, DO NOT touch RootView") did NOT hold codex — it sprawled into 11
+files and pulled in an UNASSIGNED adjacent task (row simplification). codex treats scope fences as
+suggestions. (2) Delegating ANY task whose natural solution touches a file the main loop is ACTIVELY
+editing (RootView) is a mistake even when the spec forbids it — the worktree base goes stale under my
+commits, so a merge would clobber. RULE: while the main loop owns + actively edits RootView, do not
+delegate settings/wiring work that lives near it; delegate only genuinely DISJOINT leaf modules, and
+prefer Fable subagents (which honor scope better) over codex for anything requiring judgment about what
+NOT to touch. This reinforces the pre-existing "SERIALIZE RootView, PARALLELIZE disjoint" rule.

@@ -9,6 +9,7 @@ import { App } from './App';
 import { Kernel } from '../kernel/Kernel';
 import { Workspace } from '../workspace/Workspace';
 import { Theme } from '../theme/Theme';
+import { TerminalCapabilities } from '../theme/TerminalCapabilities';
 import { CommandRegistry } from '../commands/CommandRegistry';
 import { CommandDefaults } from '../commands/CommandDefaults';
 import { buildRootView, type RootView } from '../ui/RootView';
@@ -81,6 +82,20 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   const settingsPanel = new SettingsPanel.Class(settings);
 
   const view = buildRootView(renderer, workspace, theme, commands, app, contextMenu, tooltip, settingsPanel);
+
+  // Theme + glyph mode are settings-driven (single source): the panel edits settings.theme /
+  // settings.glyphMode, and these reactive hooks PUSH the change into the Theme so it live-applies with
+  // no restart. GOTCHA reconciled here: the panel's theme option strings ('dark'/'light') are NOT the
+  // palette keys ('fable-dark'/'fable-light') — map explicitly, never by string concat.
+  const THEME_OPTION_TO_PALETTE_KEY: Record<string, string> = { dark: 'fable-dark', light: 'fable-light' };
+  app.$watchEffect(() => {
+    const paletteKey = THEME_OPTION_TO_PALETTE_KEY[settings.theme.value] ?? settings.theme.value;
+    theme.setPalette(paletteKey);
+  });
+  app.$watchEffect(() => {
+    const mode = settings.glyphMode.value;
+    theme.setGlyphLevel(mode === 'auto' ? TerminalCapabilities.Class.detectGlyphLevel() : mode);
+  });
 
   // Last mouse event seen (for the observability side channel — proves the mouse path is live).
   let lastMouse: { type: string; x: number; y: number; button: number } | null = null;
