@@ -16,9 +16,8 @@ PROJECT_LATTICE="project.lattice.md"
 #  - kernel (2026-07-21): not yet bootstrapped; the M1 kernel contract remains pending.
 #  - storage (2026-07-21): not yet bootstrapped; the M2 storage contract remains pending.
 #  - syntax (2026-07-21): not yet bootstrapped; the M2 syntax contract remains pending.
-#  - theme (2026-07-21): not yet bootstrapped; the M2 theme contract remains pending.
-#  - commands (2026-07-21): not yet bootstrapped; the M7 commands contract remains pending.
-ALLOWLIST_NAMES="kernel storage syntax theme commands"
+#  BOOTSTRAPPED (removed from allowlist): theme (theme.invariants.md), commands (commands.invariants.md) — both 2026-07-21.
+ALLOWLIST_NAMES="kernel storage syntax"
 
 is_allowlisted() {
   local module_name="$1"

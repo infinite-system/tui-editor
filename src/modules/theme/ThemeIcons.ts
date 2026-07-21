@@ -57,6 +57,7 @@ const ASCII: IconSet = {
   file: ' ',
 };
 
+// invariant: The glyph ladder degrades icons single-cell and legible (src/modules/theme/theme.invariants.md)
 const SETS: Record<GlyphLevel, IconSet> = {
   nerd: NERD,
   unicode: UNICODE,
@@ -92,6 +93,7 @@ function $checkboxIconsFor(level: GlyphLevel): CheckboxIconSet {
 }
 
 /** Resolve an icon for a filename against a set (extension keyed, with folder/file default). */
+// invariant: The glyph ladder degrades icons single-cell and legible (src/modules/theme/theme.invariants.md)
 function $iconFor(set: IconSet, name: string, isDirectory: boolean, open = false): string {
   if (isDirectory) return open ? set.folderOpen : set.folderClosed;
   const dotIndex = name.lastIndexOf('.');

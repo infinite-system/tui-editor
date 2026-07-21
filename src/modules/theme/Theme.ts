@@ -20,6 +20,7 @@ class $Theme {
   }
 
   // Derived (plain getters — re-derive on read, zero per-instance cost).
+  // invariant: Appearance comes only from theme data (src/modules/theme/theme.invariants.md)
   get palette(): Palette {
     const base = PALETTES[this.paletteName.value] ?? DARK;
     return ThemePalettes.Class.quantizePalette(base, this.colorDepth.value);

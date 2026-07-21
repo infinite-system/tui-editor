@@ -1,5 +1,6 @@
 // Detects terminal color depth and glyph support so palettes and icons can degrade.
 // invariant: Terminal color and glyph support varies (project.invariants.md)
+// invariant: Terminal capability can only be inferred from the environment (src/modules/theme/theme.invariants.md)
 import { Environment } from '../system/Environment';
 
 export type ColorDepth = 'truecolor' | '256' | '16';

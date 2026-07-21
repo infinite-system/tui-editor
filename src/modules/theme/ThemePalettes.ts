@@ -110,6 +110,7 @@ function rgbToHex(red: number, green: number, blue: number): string {
 }
 
 /** Return a palette whose colors are quantized to the terminal's depth. */
+// invariant: The palette ladder quantizes color without leaving the palette (src/modules/theme/theme.invariants.md)
 function $quantizePalette(palette: Palette, depth: ColorDepth): Palette {
   if (depth === 'truecolor') return palette;
   const mapColor = depth === '256' ? to256Hex : to16Hex;

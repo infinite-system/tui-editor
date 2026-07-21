@@ -18,6 +18,8 @@ export interface Command {
 }
 
 class $CommandRegistry {
+  // invariant: Every action dispatches through the one registry (src/modules/commands/commands.invariants.md)
+  //   — the single source of truth; both the palette and keybindings resolve actions out of this map.
   private commands = new Map<string, Command>();
 
   // Palette reactive state.
@@ -47,11 +49,16 @@ class $CommandRegistry {
   }
 
   all(): Command[] {
+    // invariant: A command runs only when its guard holds (src/modules/commands/commands.invariants.md)
+    //   — a guarded-off command is never listed, so it cannot be scored or selected.
     return [...this.commands.values()].filter((command) => (command.when ? command.when() : true));
   }
 
   run(id: string): void {
+    // invariant: Every action dispatches through the one registry (src/modules/commands/commands.invariants.md)
+    //   — the keybinding dispatch path: resolve the command by id out of the one map.
     const command = this.commands.get(id);
+    // invariant: A command runs only when its guard holds (src/modules/commands/commands.invariants.md)
     if (command && (!command.when || command.when())) void command.run();
   }
 
@@ -62,6 +69,8 @@ class $CommandRegistry {
 
   private recompute(): void {
     const query = this.query.value;
+    // invariant: Command scoring is a pure ordering (src/modules/commands/commands.invariants.md)
+    //   — the palette ranking derives entirely from fuzzyScore, with title localeCompare as the only tiebreak.
     const scored = this.all()
       .map((command) => ({ command, score: CommandScoring.Class.fuzzyScore(query, command.title) }))
       .filter((entry) => entry.score >= 0)
@@ -110,6 +119,8 @@ class $CommandRegistry {
   runSelected(): void {
     const command = this.filtered[this.selectedIndex.value];
     this.closePalette();
+    // invariant: A command runs only when its guard holds (src/modules/commands/commands.invariants.md)
+    //   — re-checked here so a guard that flipped false since listing still blocks the palette dispatch.
     if (command && (!command.when || command.when())) void command.run();
   }
 }

@@ -1,6 +1,8 @@
 import { Static } from 'ivue/extras';
 
 /** Case-insensitive subsequence match; returns a score (lower = tighter) or -1. */
+// invariant: Command scoring is a pure ordering (src/modules/commands/commands.invariants.md)
+//   — reads only its two string args, no state/clock/randomness; tighter matches score lower.
 function $fuzzyScore(query: string, text: string): number {
   if (!query) return 0;
   const loweredQuery = query.toLowerCase();
