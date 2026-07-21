@@ -116,16 +116,18 @@ class $Workspace {
     const settings = this.settingsSource;
     return settings ? settings.gitSplitRatio.value : this.gitPanel.splitRatio.value;
   }
-  // Clamp + write the split (a divider drag or a keyboard adjust). Writes settings.gitSplitRatio (and
-  // persists) when attached; the panel-local ratio stays mirrored so a no-settings path still works.
+  // Clamp + write the split LIVE (a divider drag tick). Updates the reactive settings.gitSplitRatio in
+  // memory so the split moves smoothly; the panel-local ratio stays mirrored. Does NOT persist — save()
+  // is a synchronous disk write and must never run at mouse-move frequency (frame stall). Call
+  // persistGitSplit() ONCE on drag end.
   setGitSplit(ratio: number): void {
     const clamped = Math.max(0.15, Math.min(0.85, ratio));
     this.gitPanel.setSplit(clamped);
-    const settings = this.settingsSource;
-    if (settings) {
-      settings.gitSplitRatio.value = clamped;
-      settings.save();
-    }
+    if (this.settingsSource) this.settingsSource.gitSplitRatio.value = clamped;
+  }
+  /** Persist the split once, on drag release (never per tick). */
+  persistGitSplit(): void {
+    this.settingsSource?.save();
   }
   protected createCommitExpansion(root: string) { return new CommitExpansion.Class(root); }
 

@@ -10,6 +10,7 @@
 import { Reactive } from 'ivue';
 import { ref, type Ref } from 'vue';
 import { Files } from '../system/Files';
+import { Logging } from '../system/Logging';
 import { Environment } from '../system/Environment';
 
 /** The modifier key that re-routes wheel input, or `none` to leave it unbound. */
@@ -217,6 +218,9 @@ class $Settings {
     } catch {
       // Best-effort persistence — a failed write must never crash the app.
     }
+    // save() is a SYNCHRONOUS disk write and MUST be infrequent (persist-on-settle, never per drag/scroll
+    // tick — that stalls the frame). This trace lets the perf smoke assert exactly one save per drag.
+    Logging.Class.info('settings-save');
   }
 
   /** Set one field and live-apply it; type-checked per key. */

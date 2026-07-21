@@ -116,9 +116,11 @@ export function buildRootView(
     initialSize: settings.sidebarWidth.value,
     minimumSize: 18,
     maximumSize: 70,
+    // LIVE update only — update the reactive value on every drag tick so the resize is smooth, but do
+    // NOT persist here: settings.save() is a SYNCHRONOUS disk write, and calling it at mouse-move
+    // frequency stalls the event loop (app-wide lag). Persist ONCE on drag end (endSidebarDrag).
     onSizeChange: (width) => {
       settings.sidebarWidth.value = Math.round(width);
-      settings.save();
     },
   });
   // settings.sidebarWidth is the SINGLE source of truth: the settings panel AND the drag both write
@@ -208,10 +210,14 @@ export function buildRootView(
     backgroundColor: readPalette().border, // a visible bg also puts it in the mouse hit grid
   });
   let sidebarDividerHover = false;
+  // OpenTUI fires BOTH drag-end AND up on release, so guard the persist with an active-drag flag —
+  // otherwise the release saves twice (still a per-drag write, but the invariant is exactly one).
+  let sidebarDragActive = false;
   sidebarDivider.onMouseDown = (event) => {
     captureDragTarget(sidebarDivider); // capture on down so a 1-cell divider survives the drag
     sidebarSplitter.size.value = settings.sidebarWidth.value; // anchor from the live width
     sidebarSplitter.beginDrag(event.x);
+    sidebarDragActive = true;
     renderer.requestRender();
   };
   sidebarDivider.onMouseDrag = (event) => {
@@ -219,7 +225,10 @@ export function buildRootView(
     renderer.requestRender();
   };
   const endSidebarDrag = (): void => {
+    if (!sidebarDragActive) return;
+    sidebarDragActive = false;
     sidebarSplitter.endDrag();
+    settings.save(); // persist ONCE, on release — never per drag tick (sync disk write = frame stall)
     renderer.requestRender();
   };
   sidebarDivider.onMouseUp = endSidebarDrag;
@@ -466,8 +475,10 @@ export function buildRootView(
     const bodyHeight = Math.max(1, (sidebar.height as number) - 2);
     return (pointerScreenY - bodyTopScreenY) / bodyHeight;
   };
+  let gitSplitDragActive = false;
   gitSplitDivider.onMouseDown = (event) => {
     captureDragTarget(gitSplitDivider);
+    gitSplitDragActive = true;
     workspace.setGitSplit(gitSplitRatioAtPointer(event.y));
     renderer.requestRender();
   };
@@ -475,6 +486,14 @@ export function buildRootView(
     workspace.setGitSplit(gitSplitRatioAtPointer(event.y));
     renderer.requestRender();
   };
+  const endGitSplitDrag = (): void => {
+    if (!gitSplitDragActive) return; // both drag-end + up fire on release; persist exactly once
+    gitSplitDragActive = false;
+    workspace.persistGitSplit(); // persist ONCE on release — setGitSplit only updated memory per tick
+    renderer.requestRender();
+  };
+  gitSplitDivider.onMouseUp = endGitSplitDrag;
+  gitSplitDivider.onMouseDragEnd = endGitSplitDrag;
 
   // Interior height of a bordered box = box height - 2 (top+bottom border).
   // invariant: A scrollable pane height is an input not an output (ui.invariants.md)
