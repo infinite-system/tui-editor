@@ -1,18 +1,28 @@
 {
   "ready": true,
-  "frame": 1,
+  "frame": 36,
   "renderQuiescent": true,
-  "width": 100,
-  "height": 30,
-  "activeWorkspace": null,
-  "workspaces": [],
-  "activeBuffer": null,
-  "bufferRevision": 0,
+  "width": 120,
+  "height": 32,
+  "activeWorkspace": "tui-editor",
+  "workspaces": [
+    "tui-editor"
+  ],
+  "activeBuffer": "/home/parallels/dev/tui-editor/src/main.ts",
+  "bufferRevision": 1,
   "dirty": false,
-  "cursor": null,
-  "openBuffers": [],
+  "cursor": {
+    "line": 23,
+    "col": 0
+  },
+  "openBuffers": [
+    "/home/parallels/dev/tui-editor/src/main.ts"
+  ],
   "diagnosticsCount": 0,
   "subprocessPids": [],
   "lifecycleTier": "active",
-  "overlay": null
+  "overlay": null,
+  "focus": "editor",
+  "treeRows": 24,
+  "treeSelected": 8
 }
