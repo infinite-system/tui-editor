@@ -47,6 +47,8 @@ export interface RootView {
   update(): void;
   editorViewportHeight(): number;
   editorViewportWidth(): number;
+  /** Frame-tick hook: advance drag-edge auto-scroll; true while active (keep frames coming). */
+  tickDragAutoScroll(dtSeconds: number): boolean;
   dispose(): void;
 }
 
@@ -644,6 +646,10 @@ export function buildRootView(
     );
     return { line, column };
   };
+  // Live drag tracking for edge auto-scroll: while a selection drag holds at/past a pane edge,
+  // the frame tick scrolls the viewport and extends the selection to the newly revealed cells.
+  let selectionDrag: { pointerX: number; pointerY: number } | null = null;
+
   codeBody.onMouseDown = (event) => {
     const hit = documentPositionAtCell(event.x, event.y);
     if (process.env.TUI_DEBUG_MOUSE === '1') Logging.Class.info(`mouseDown (${event.x},${event.y}) hit=${JSON.stringify(hit)}`);
@@ -651,17 +657,83 @@ export function buildRootView(
     workspace.focusEditor(); // click-to-focus
     workspace.editor.placeCursor(hit.line, hit.column);
     workspace.editor.cursor.setAnchorHere(); // anchor at the press; dragging extends from here
+    selectionDrag = { pointerX: event.x, pointerY: event.y };
   };
   codeBody.onMouseDrag = (event) => {
     const hit = documentPositionAtCell(event.x, event.y);
     if (process.env.TUI_DEBUG_MOUSE === '1') Logging.Class.info(`mouseDrag (${event.x},${event.y}) hit=${JSON.stringify(hit)}`);
     if (!hit) return;
     workspace.editor.placeCursor(hit.line, hit.column); // anchor stays — selection = anchor -> cursor
+    if (selectionDrag) {
+      selectionDrag.pointerX = event.x;
+      selectionDrag.pointerY = event.y;
+    }
   };
-  codeBody.onMouseUp = () => {
+  const endSelectionDrag = (): void => {
+    selectionDrag = null;
     // A plain click (no drag) leaves anchor == cursor: clear it so no empty selection lingers.
     if (!workspace.editor.cursor.hasSelection) workspace.editor.cursor.clearSelection();
   };
+  codeBody.onMouseUp = endSelectionDrag;
+  codeBody.onMouseDragEnd = endSelectionDrag;
+
+  // Edge auto-scroll: called from the app frame tick with real dt. While the held pointer sits in
+  // the one-cell edge zone (or beyond the pane), scroll that axis — rate grows with overshoot —
+  // and re-extend the selection to the cell now under the pointer. The drag is the ONE scroll
+  // writer while active. Returns whether an auto-scroll is in progress (keeps frames coming).
+  // invariant: One writer per scroll regime per frame (src/modules/ui/ui.invariants.md)
+  let edgeScrollRemainder = { x: 0, y: 0 };
+  function tickDragAutoScroll(dtSeconds: number): boolean {
+    if (!selectionDrag || !workspace.editor.hasDocument.value) return false;
+    const leftEdge = codeBody.x;
+    const rightEdge = codeBody.x + Math.max(1, editorViewportWidth()) - 1;
+    const topEdge = codeBody.y;
+    const bottomEdge = codeBody.y + Math.max(1, editorViewportHeight()) - 1;
+    const overshootX =
+      selectionDrag.pointerX >= rightEdge
+        ? selectionDrag.pointerX - rightEdge + 1
+        : selectionDrag.pointerX <= leftEdge
+          ? selectionDrag.pointerX - leftEdge - 1
+          : 0;
+    const overshootY =
+      selectionDrag.pointerY >= bottomEdge
+        ? selectionDrag.pointerY - bottomEdge + 1
+        : selectionDrag.pointerY <= topEdge
+          ? selectionDrag.pointerY - topEdge - 1
+          : 0;
+    if (overshootX === 0 && overshootY === 0) {
+      edgeScrollRemainder = { x: 0, y: 0 };
+      return false;
+    }
+    // Base 25 cells/sec, growing with how far past the edge the pointer sits (capped).
+    const rate = (overshoot: number): number =>
+      Math.sign(overshoot) * Math.min(120, 25 + 18 * (Math.abs(overshoot) - 1));
+    edgeScrollRemainder.x += overshootX === 0 ? 0 : rate(overshootX) * dtSeconds;
+    edgeScrollRemainder.y += overshootY === 0 ? 0 : rate(overshootY) * dtSeconds;
+    const stepX = Math.trunc(edgeScrollRemainder.x);
+    const stepY = Math.trunc(edgeScrollRemainder.y);
+    edgeScrollRemainder.x -= stepX;
+    edgeScrollRemainder.y -= stepY;
+    if (stepX !== 0) {
+      const top = workspace.editor.viewport.scrollTop.value;
+      let widestVisible = 0;
+      for (const line of workspace.editor.document.slice(top, editorViewportHeight())) {
+        widestVisible = Math.max(widestVisible, lineWidth(line));
+      }
+      workspace.editor.viewport.scrollByColumns(stepX, widestVisible);
+    }
+    if (stepY !== 0) {
+      workspace.editor.viewport.scrollBy(stepY, workspace.editor.document.lineCount);
+    }
+    // Extend the selection to the cell under the (edge-clamped) pointer in the NEW window.
+    const clampedX = Math.max(leftEdge, Math.min(selectionDrag.pointerX, rightEdge));
+    const clampedY = Math.max(topEdge, Math.min(selectionDrag.pointerY, bottomEdge));
+    const hit = documentPositionAtCell(clampedX, clampedY);
+    if (hit) {
+      workspace.editor.cursor.moveToLineKeepingGoal(hit.line, hit.column); // anchor fixed; no rescroll fight
+    }
+    return true;
+  }
 
   // Sidebar clicks: focus follows the click (files or git view), and a click on a tree row SELECTS
   // it — clicking the already-selected row ACTIVATES it (open file / toggle folder). Keyboard
@@ -734,6 +806,7 @@ export function buildRootView(
     update,
     editorViewportHeight,
     editorViewportWidth,
+    tickDragAutoScroll,
     dispose() {
       try {
         root.remove(column);

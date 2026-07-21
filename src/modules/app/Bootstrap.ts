@@ -172,6 +172,9 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     if (workspace.gitPanel.logMomentum.value.velocity !== 0) {
       if (workspace.tickGitLogScroll(dt)) renderer.requestRender();
     }
+    // Drag-edge auto-scroll: while a selection drag holds at a pane edge, keep scrolling +
+    // extending the selection (the view returns true while active so frames keep coming).
+    if (view.tickDragAutoScroll(dt)) renderer.requestRender();
     StatusChannel.Class.settle(frame);
     // Exact per-cell visual snapshot for tests (env-gated; no-op otherwise).
     FrameProbe.Class.dump(renderer, framePath);

@@ -105,6 +105,16 @@ echo "== mouse input path (real SGR click arrives) =="
 mouse="$(f mouse)"
 if [ -n "$mouse" ] && [ "$mouse" != "null" ]; then echo "  PASS  mouse click registered ($mouse)"; else echo "  FAIL  mouse click did not register"; fail=1; fi
 
+echo "== drag-edge auto-scroll: hold at right edge scrolls + extends selection =="
+tmux send-keys -t "$S" -l "$(printf '\033[<0;50;2M')"; sleep 0.1     # press on line 0 (long line)
+tmux send-keys -t "$S" -l "$(printf '\033[<32;118;2M')"; sleep 0.1   # drag to right edge, HOLD
+sleep 0.9; "$H" settle "$S" >/dev/null 2>&1
+edge_scroll="$(f editorScrollLeft)"
+tmux send-keys -t "$S" -l "$(printf '\033[<0;118;2m')"; sleep 0.3    # release
+if [ -n "$edge_scroll" ] && [ "$edge_scroll" -gt 5 ] 2>/dev/null; then echo "  PASS  edge hold auto-scrolled (scrollLeft=$edge_scroll)"; else echo "  FAIL  no edge auto-scroll (scrollLeft=$edge_scroll)"; fail=1; fi
+"$H" send "$S" Escape >/dev/null
+tmux send-keys -t "$S" Home; sleep 0.2   # reset horizontal scroll for later checks
+
 echo "== tree click: select, click-again activates; click-to-focus (human-QA regression) =="
 "$H" send "$S" Escape >/dev/null   # ensure editor focus first (escape w/o selection -> files)... then re-focus editor by clicking
 "$H" click "$S" 5 1 >/dev/null     # click tree row 0 -> select + focus files
