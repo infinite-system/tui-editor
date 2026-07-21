@@ -110,7 +110,7 @@ function rgbToHex(red: number, green: number, blue: number): string {
 }
 
 /** Return a palette whose colors are quantized to the terminal's depth. */
-function quantizePaletteImplementation(palette: Palette, depth: ColorDepth): Palette {
+function $quantizePalette(palette: Palette, depth: ColorDepth): Palette {
   if (depth === 'truecolor') return palette;
   const mapColor = depth === '256' ? to256Hex : to16Hex;
   const result = { ...palette };
@@ -124,7 +124,7 @@ function quantizePaletteImplementation(palette: Palette, depth: ColorDepth): Pal
 }
 
 class $ThemePalettes {
-  static quantizePalette = quantizePaletteImplementation;
+  static quantizePalette = $quantizePalette;
 }
 
 export namespace ThemePalettes {

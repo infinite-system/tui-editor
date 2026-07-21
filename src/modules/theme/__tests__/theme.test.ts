@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { DARK, ThemePalettes } from '../theme.palettes';
+import { DARK, ThemePalettes } from '../ThemePalettes';
 import { ThemeIcons } from '../ThemeIcons';
 
 test('truecolor quantization is identity', () => {

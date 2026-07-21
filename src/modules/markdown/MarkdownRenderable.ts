@@ -14,7 +14,7 @@ import {
 } from '@opentui/core';
 import { InlineStyle, type BlockRecord } from './MarkdownParser';
 import { MarkdownPreview, type PreviewRow } from './MarkdownPreview';
-import type { Palette } from '../theme/theme.palettes';
+import type { Palette } from '../theme/ThemePalettes';
 
 export interface MarkdownRenderableTheme {
   readonly palette: Palette;
