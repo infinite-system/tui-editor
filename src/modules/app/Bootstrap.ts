@@ -8,6 +8,8 @@ import { App } from './App';
 import { Kernel } from '../kernel/Kernel';
 import { Workspace } from '../workspace/Workspace';
 import { Theme } from '../theme/Theme';
+import { CommandRegistry } from '../commands/CommandRegistry';
+import { registerDefaultCommands } from '../commands/commands.defaults';
 import { buildRootView, type RootView } from '../ui/RootView';
 import { StatusChannel } from '../system/StatusChannel';
 import { Environment } from '../system/Environment';
@@ -44,7 +46,9 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   const root = options.root ?? Environment.Class.cwd;
   workspace.open(root);
 
-  const view = buildRootView(renderer, workspace, theme);
+  const commands = new CommandRegistry.Class();
+
+  const view = buildRootView(renderer, workspace, theme, commands);
 
   // Publish model state to the observability side channel.
   const publish = (): void => {
@@ -59,7 +63,9 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
         ? { line: ed.cursor.line.value, col: ed.cursor.col.value }
         : null,
       openBuffers: ed.hasDocument.value ? [ed.document.path] : [],
-      overlay: null,
+      overlay: commands.open.value ? 'palette' : null,
+      paletteQuery: commands.open.value ? commands.query.value : '',
+      paletteMatches: commands.open.value ? commands.filtered.length : 0,
       focus: workspace.focus.value,
       treeRows: workspace.tree.rows.length,
       treeSelected: workspace.tree.selectedIndex.value,
@@ -98,6 +104,13 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     options.onQuit?.();
   };
 
+  registerDefaultCommands(commands, {
+    workspace,
+    theme,
+    quit: () => void shutdown(),
+    requestRender: () => void render(),
+  });
+
   // --- input ---------------------------------------------------------------
   // Accelerated arrows: terminals report key REPEAT (not down/up), so we ramp the step size
   // when the same arrow keeps arriving quickly, and reset when the direction changes or the
@@ -133,6 +146,39 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       void shutdown();
       return;
     }
+
+    // Palette captures all input while open.
+    if (commands.open.value) {
+      switch (key.name) {
+        case 'escape':
+          commands.closePalette();
+          break;
+        case 'return':
+          commands.runSelected();
+          break;
+        case 'up':
+          commands.moveSelection(-1);
+          break;
+        case 'down':
+          commands.moveSelection(1);
+          break;
+        case 'backspace':
+          commands.backspaceQuery();
+          break;
+        default:
+          if (isTypedCharacter(key)) commands.appendQuery(key.sequence);
+      }
+      void render();
+      return;
+    }
+
+    // Ctrl+P opens the palette from anywhere.
+    if (key.name === 'p' && key.ctrl) {
+      commands.openPalette();
+      void render();
+      return;
+    }
+
     let changed = true;
     const focus = workspace.focus.value;
 

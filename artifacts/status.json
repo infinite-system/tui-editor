@@ -1,28 +1,25 @@
 {
   "ready": true,
-  "frame": 11,
+  "frame": 8,
   "renderQuiescent": true,
-  "width": 120,
-  "height": 32,
-  "activeWorkspace": "tui-editor",
+  "width": 110,
+  "height": 28,
+  "activeWorkspace": "fable-edit",
   "workspaces": [
-    "tui-editor"
+    "fable-edit"
   ],
-  "activeBuffer": "/home/parallels/dev/tui-editor/src/main.ts",
-  "bufferRevision": 1,
+  "activeBuffer": null,
+  "bufferRevision": 0,
   "dirty": false,
-  "cursor": {
-    "line": 0,
-    "col": 0
-  },
-  "openBuffers": [
-    "/home/parallels/dev/tui-editor/src/main.ts"
-  ],
+  "cursor": null,
+  "openBuffers": [],
   "diagnosticsCount": 0,
   "subprocessPids": [],
   "lifecycleTier": "active",
   "overlay": null,
-  "focus": "editor",
-  "treeRows": 24,
-  "treeSelected": 8
+  "paletteQuery": "",
+  "paletteMatches": 0,
+  "focus": "files",
+  "treeRows": 2,
+  "treeSelected": 0
 }

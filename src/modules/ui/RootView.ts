@@ -15,6 +15,7 @@ import {
 } from '@opentui/core';
 import type { Workspace } from '../workspace/Workspace';
 import type { Theme } from '../theme/Theme';
+import type { CommandRegistry } from '../commands/CommandRegistry';
 import type { Palette } from '../theme/theme.palettes';
 import { highlightLine, type Role } from '../syntax/Highlighter';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
@@ -45,6 +46,7 @@ export function buildRootView(
   renderer: CliRenderer,
   ws: Workspace.Instance,
   theme: Theme.Instance,
+  commands: CommandRegistry.Instance,
 ): RootView {
   const root = renderer.root;
   const p = () => theme.palette;
@@ -105,6 +107,26 @@ export function buildRootView(
   column.add(mainRow);
   column.add(statusBar);
   root.add(column);
+
+  // Command palette overlay — added last so it renders on top; shown only when open.
+  const palette = new BoxRenderable(renderer, {
+    id: 'palette',
+    position: 'absolute',
+    left: '20%',
+    top: 2,
+    width: '60%',
+    border: true,
+    borderStyle: 'rounded',
+    title: 'Command Palette',
+    flexDirection: 'column',
+    visible: false,
+    zIndex: 100,
+  });
+  const paletteInput = new TextRenderable(renderer, { id: 'palette-input', content: '' });
+  const paletteList = new TextRenderable(renderer, { id: 'palette-list', content: '' });
+  palette.add(paletteInput);
+  palette.add(paletteList);
+  root.add(palette);
 
   // Interior height of a bordered box = box height - 2 (top+bottom border).
   const editorViewportHeight = () => Math.max(1, (editorArea.height as number) - 2);
@@ -205,6 +227,25 @@ export function buildRootView(
     editorBody.fg = pal.fg;
     statusText.content = renderStatus();
     statusText.fg = pal.dim;
+
+    // Palette overlay.
+    const open = commands.open.value;
+    palette.visible = open;
+    if (open) {
+      palette.borderColor = pal.borderActive;
+      palette.titleColor = pal.accent;
+      palette.backgroundColor = pal.panel;
+      paletteInput.content = `> ${commands.query.value}▏`;
+      paletteInput.fg = pal.fg;
+      const items = commands.filtered.slice(0, 12);
+      const sel = commands.selectedIndex.value;
+      paletteList.content = items.length
+        ? items
+            .map((c, i) => `${i === sel ? '›' : ' '} ${c.title}`)
+            .join('\n')
+        : '  (no matching commands)';
+      paletteList.fg = pal.dim;
+    }
   }
 
   update();

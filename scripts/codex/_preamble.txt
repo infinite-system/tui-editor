@@ -1,0 +1,18 @@
+You are implementing ONE module of the Fable TUI code workspace (Bun + ivue + OpenTUI + Tree-sitter + git). Repo root: /home/parallels/dev/tui-editor.
+
+READ FIRST (for context, do not modify): project.invariants.md, project.implementation-plan.md (sections 3 architecture, 4 milestones), project.decisions.md, project.architecture.md, FABLE_TUI_EDITOR_BUILD_BRIEF_FINAL.md (the relevant section), .claude/skills/ivue/SKILL.md, and the already-built modules under src/modules/{system,app,kernel,editor,workspace,theme} to learn existing interfaces (Buffer/editor, system capabilities).
+
+HARD RULES (violating these fails the task):
+- Write ONLY files under YOUR module folder src/modules/<MODULE>/ (including its __tests__/). Do NOT create or modify ANY file outside that folder — not other modules, not main.ts, not package.json, not root configs, not the project.*.md files.
+- Do NOT run ANY git command (no add/commit/checkout/reset/rm). Do NOT delete any file outside your folder. The main orchestrator handles all git and integration/wiring.
+- File convention: a single-class file is PascalCase.ts using the ivue namespace pattern — `class $X {}` + `export namespace X { export const $Class = $X; export let Class = Reactive($Class); export type Model = InstanceType<typeof Class>; export type Instance = typeof Class.Instance }`. A role-collection file is <module>.<role>.ts (e.g. <module>.parsers.ts, <module>.defaults.ts). NO HTTP roles (no controllers/routes/services).
+- ivue: install nothing. Use existing deps (ivue, vue, @opentui/core, web-tree-sitter). Reactive() for observable domain models; plain classes for algorithms/resources; late dependency reads (never top-level `new ImportedClass()` or `const C = X.Class`). Cheap derived state = plain getters, not computed().
+
+DELIVER (all three):
+1. The module code implementing the scope below.
+2. src/modules/<MODULE>/<MODULE>.invariants.md — canonical schema: `## Reality-based invariants` then `## Chosen invariants`; each record has **Invariant** (one if-then), **Scope**, **Mechanism**, **Generates**, **Evidence**, **Impossible if true**, **Verification**, **Status:** provisional, **Last refined:** 2026-07-21. Names are unnumbered plain declarative sentences. These module invariants stand on project.invariants.md.
+3. Tests in src/modules/<MODULE>/__tests__/*.test.ts.
+
+VERIFY before finishing: `bun test src/modules/<MODULE>` passes and `bunx tsc --noEmit` shows no new errors from your files. Report what you built and any interface assumptions you made about other modules.
+
+YOUR MODULE AND SCOPE:

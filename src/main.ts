@@ -3,7 +3,9 @@ import { boot } from './modules/app/Bootstrap';
 import { Logging } from './modules/system/Logging';
 
 async function main(): Promise<void> {
+  const rootArg = process.argv[2];
   const booted = await boot({
+    root: rootArg,
     onQuit: () => {
       // Give the renderer a tick to restore the terminal, then exit.
       setTimeout(() => process.exit(0), 20);
