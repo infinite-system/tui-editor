@@ -180,6 +180,14 @@ and drives `SelectableText.setSelectionRange` → `TextBufferView.setLocalSelect
 Stands on *A cursor position resolves to three distinct coordinates* (editor) and *Selection is an
 anchor plus the cursor* (editor).
 
+The MODEL is the only selection writer (mouse, 2026-07-21). Mouse events on the code renderable drive
+`cursor`+`anchor` (`documentPositionAtCell`: line = scrollTop + rowOffset, column =
+`graphemeAtDisplayColumn` — the display→grapheme inverse, unit-tested for wide glyphs and tabs);
+`applySelection()` then projects the model into the native highlight each paint. OpenTUI's OWN
+mouse-drag selection is DISABLED (`selectable:false`) — it was a second writer the model never saw,
+so the next paint wiped its highlight (the human-QA "selection appears then disappears" bug), and
+Ctrl+C (which copies the model selection) copied nothing.
+
 **Generates:** a visible selection block that tracks the model; multi-line shading without touching
 the gutter.
 
@@ -194,14 +202,6 @@ independently by a scoped codex worker (cross-check).
 
 **Impossible if true:** a shaded range that disagrees with `selectionRange()`; a multi-line selection
 that shades the gutter; a highlight offset from the cursor's content row.
-
-*Mechanism addendum (mouse, 2026-07-21):* the MODEL is the only selection writer. Mouse events on
-the code renderable drive `cursor`+`anchor` (`documentPositionAtCell`: line = scrollTop + rowOffset,
-column = `graphemeAtDisplayColumn` — the display→grapheme inverse, unit-tested for wide glyphs and
-tabs); `applySelection()` then projects the model into the native highlight each paint. OpenTUI's
-OWN mouse-drag selection is DISABLED (`selectable:false`) — it was a second writer the model never
-saw, so the next paint wiped its highlight (the human-QA "selection appears then disappears" bug),
-and Ctrl+C (which copies the model selection) copied nothing.
 
 **Verification:** FrameProbe frame-diff (before/after a selection; the changed `bg` cells land on the
 cursor's content row at the selected display columns — noise-free, proven by a no-action control).
