@@ -106,3 +106,42 @@ local), re-running `bunx tsc --noEmit` + full `bun test` + the checker (`--all -
 breaks. Do not act mid-build.
 
 **Status:** pending · **Logged:** 2026-07-21 (rescoped 2026-07-21)
+
+---
+
+## D — Delegation standard: full-parity context, task-scoped, boss-identity stripped
+
+**Decision:** Every delegation (codex worker OR review subagent) is briefed as onboarding a resumed
+self, not a fresh underling. The prompt =
+**(shared cold-start orientation) + (only the contracts the task touches) + (role-framed task) −
+(conductor identity).**
+
+- **Shared orientation (fixed, reusable — the HANDOFF MUST-RE-READ foundation):** the ivue reference
+  + namespace pattern (`class $X` + `namespace X { const $Class; let Class = Reactive($X)/Static($X);
+  type Instance }`, plain getters not `computed()`, late dependency reads, `createX()` seams, the
+  `$stopEffects` footgun, `Static()` for stateless capabilities); the naming/module conventions; the
+  verify discipline (drive real TUI under tmux, assert STATE from `artifacts/status.json`, NEVER
+  pane-scrape; `bunx tsc --noEmit; echo TSC=$?` — never piped through tail/tee); the
+  coordinate/frame-effect facts; and the codex-integration protocol (files land UNTRACKED in the
+  worktree, the coordinator reviews + commits, codex often skips tests + the contract so demand
+  them). Point the delegate at `HANDOFF.md` + `project.ivue-reference.md` + the OpenTUI/coordinate
+  facts rather than re-inlining — start it where the coordinator stands.
+- **Scope contracts only (tiered):** include the target module's `*.invariants.md` + the specific
+  `project.invariants.md` records the task touches — NOT all contracts. Cloning everything multiplies
+  a large context per agent and defeats the point of delegating (keeping the main loop lean).
+- **Role-framed, conductor identity STRIPPED:** clone the understanding, not the role. The delegate
+  must NOT receive the coordination context / re-wake loop / "spawn your own agents and re-plan"
+  framing, or it will spin up its own sub-agents and re-litigate the plan. Frame it as: "you are a
+  scoped worker — read these docs, do exactly this one thing, return it for review."
+
+Applies to BUILDING delegates AND independent adversarial reviewers (a reviewer gets the same
+orientation + the contract + the code + a "try to REFUTE this against its contract via IBR /
+invariants" framing — cross-model independence, since the author is the worst reviewer of their own
+work). Spin up codex worktrees freely for both, worktree-per-writer isolated; parallelize genuinely
+independent work.
+
+**Why:** under-briefing is why delegated workers drift, skip tests, or violate the pattern — it
+wastes more time than doing it yourself. Full-parity context scoped to the task, minus the
+boss-identity, is what stops drift.
+
+**Status:** adopted · **Logged:** 2026-07-21
