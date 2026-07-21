@@ -14,10 +14,10 @@ function makeClient(fake: FakeLspProcess): LanguageClient.Instance {
   });
 }
 
-function makeDoc(path: string, text = 'const x = 1\n'): TextDocument.Instance {
-  const doc = new TextDocument.Class();
-  doc.loadFromText(text, path);
-  return doc;
+function makeDocument(path: string, text = 'const x = 1\n'): TextDocument.Instance {
+  const document = new TextDocument.Class();
+  document.loadFromText(text, path);
+  return document;
 }
 
 test('the server is not started until a supported document or semantic feature is requested', async () => {
@@ -29,7 +29,7 @@ test('the server is not started until a supported document or semantic feature i
     expect(client.status.value).toBe('idle');
 
     // Opening an UNSUPPORTED file must not start a server either.
-    client.openDocument(makeDoc(`${ROOT}/readme.txt`));
+    client.openDocument(makeDocument(`${ROOT}/readme.txt`));
     await flush();
     expect(fake.startCalled).toBe(false);
     expect(client.status.value).toBe('idle');
@@ -42,14 +42,14 @@ test('opening a supported document lazily starts the server and reaches ready', 
   const fake = new FakeLspProcess(5002);
   const client = makeClient(fake);
   try {
-    client.openDocument(makeDoc(`${ROOT}/a.ts`));
+    client.openDocument(makeDocument(`${ROOT}/a.ts`));
     const ready = await client.whenStarted();
 
     expect(ready).toBe(true);
     expect(fake.startCalled).toBe(true);
     expect(client.status.value).toBe('ready');
     // The server received the initialize handshake and the didOpen sync.
-    const methods = fake.received.map((m) => ('method' in m ? m.method : null));
+    const methods = fake.received.map((message) => ('method' in message ? message.method : null));
     expect(methods).toContain('initialize');
     expect(methods).toContain('initialized');
     expect(methods).toContain('textDocument/didOpen');
@@ -66,8 +66,8 @@ test('a semantic command with no prior openDocument still starts the server lazi
   const client = makeClient(fake);
   try {
     expect(fake.startCalled).toBe(false);
-    const doc = makeDoc(`${ROOT}/b.ts`);
-    const hover = await client.hover(doc, { line: 0, column: 0 });
+    const document = makeDocument(`${ROOT}/b.ts`);
+    const hover = await client.hover(document, { line: 0, column: 0 });
     expect(fake.startCalled).toBe(true);
     expect(hover?.contents).toBe('ok');
   } finally {
@@ -78,7 +78,7 @@ test('a semantic command with no prior openDocument still starts the server lazi
 test('dispose kills the subprocess, stops the transport, and drops the published pid', async () => {
   const fake = new FakeLspProcess(5004);
   const client = makeClient(fake);
-  client.openDocument(makeDoc(`${ROOT}/c.ts`));
+  client.openDocument(makeDocument(`${ROOT}/c.ts`));
   await client.whenStarted();
   expect(fake.running).toBe(true);
   expect(StatusChannel.Class.snapshot.subprocessPids).toContain(5004);
@@ -101,18 +101,18 @@ test('a missing server executable degrades to unavailable without throwing', asy
       {
         id: 'none',
         capabilities: { diagnostics: true, definition: true, hover: true, references: true },
-        supportsPath: (p: string) => p.endsWith('.ts'),
+        supportsPath: (path: string) => path.endsWith('.ts'),
         resolve: async () => null,
       },
     ],
   });
   try {
-    client.openDocument(makeDoc(`${ROOT}/d.ts`));
+    client.openDocument(makeDocument(`${ROOT}/d.ts`));
     const ready = await client.whenStarted();
     expect(ready).toBe(false);
     expect(client.status.value).toBe('unavailable');
     // Semantic requests just return empty — they never throw into the editor.
-    expect(await client.hover(makeDoc(`${ROOT}/d.ts`), { line: 0, column: 0 })).toBeNull();
+    expect(await client.hover(makeDocument(`${ROOT}/d.ts`), { line: 0, column: 0 })).toBeNull();
   } finally {
     await client.dispose();
   }

@@ -19,15 +19,15 @@ test('client positions cross to the server as UTF-16 and server ranges map back 
     providers: [new FakeProvider()],
     processFactory: () => fake,
   });
-  const doc = new TextDocument.Class();
-  doc.loadFromText('😀ab\n', `${ROOT}/emoji.ts`);
+  const document = new TextDocument.Class();
+  document.loadFromText('😀ab\n', `${ROOT}/emoji.ts`);
 
   try {
-    const hover = await client.hover(doc, { line: 0, column: 1 });
+    const hover = await client.hover(document, { line: 0, column: 1 });
     await flush();
 
     const request = fake.received.find(
-      (m) => 'method' in m && m.method === 'textDocument/hover',
+      (message) => 'method' in message && message.method === 'textDocument/hover',
     ) as { params: { position: { character: number } } } | undefined;
     // Grapheme column 1 -> UTF-16 character 2 (past the surrogate pair), not 1.
     expect(request?.params.position.character).toBe(2);

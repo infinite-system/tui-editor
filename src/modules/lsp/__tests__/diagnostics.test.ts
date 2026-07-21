@@ -11,7 +11,7 @@ function uriFor(path: string): string {
   return pathToFileURL(resolvePath(path)).href;
 }
 
-function diag(message: string, line = 0): unknown {
+function makeDiagnostic(message: string, line = 0): unknown {
   return {
     range: { start: { line, character: 0 }, end: { line, character: 1 } },
     message,
@@ -28,34 +28,34 @@ test('diagnostics are stored only for the current document revision and stale ba
   });
   const path = `${ROOT}/main.ts`;
   const uri = uriFor(path);
-  const doc = new TextDocument.Class();
-  doc.loadFromText('const x = 1\n', path);
+  const document = new TextDocument.Class();
+  document.loadFromText('const x = 1\n', path);
 
   try {
-    client.openDocument(doc);
+    client.openDocument(document);
     await client.whenStarted();
     await fake.waitFor('textDocument/didOpen');
     await flush();
 
-    const current = doc.revision.value; // the version stamped onto didOpen
+    const current = document.revision.value; // the version stamped onto didOpen
 
     // A batch older than the current revision is discarded, never applied.
-    fake.pushDiagnostics(uri, current - 1, [diag('stale a'), diag('stale b'), diag('stale c')]);
+    fake.pushDiagnostics(uri, current - 1, [makeDiagnostic('stale a'), makeDiagnostic('stale b'), makeDiagnostic('stale c')]);
     await flush();
     expect(client.diagnosticCountFor(uri)).toBe(0);
 
     // A batch naming the exact current revision is accepted.
-    fake.pushDiagnostics(uri, current, [diag('real 1'), diag('real 2')]);
+    fake.pushDiagnostics(uri, current, [makeDiagnostic('real 1'), makeDiagnostic('real 2')]);
     await flush();
     expect(client.diagnosticCountFor(uri)).toBe(2);
-    expect(client.diagnosticSlice(uri, 0, 10).map((d) => d.message)).toEqual(['real 1', 'real 2']);
-    expect(client.diagnosticSlice(uri, 0, 10).every((d) => d.version === current)).toBe(true);
+    expect(client.diagnosticSlice(uri, 0, 10).map((diagnostic) => diagnostic.message)).toEqual(['real 1', 'real 2']);
+    expect(client.diagnosticSlice(uri, 0, 10).every((diagnostic) => diagnostic.version === current)).toBe(true);
 
     // Edit the document: it advances past `current`. A late batch computed against the old
     // revision must not overwrite the accepted one.
-    doc.insertInline(0, 0, 'y');
-    expect(doc.revision.value).toBeGreaterThan(current);
-    fake.pushDiagnostics(uri, current, [diag('z1'), diag('z2'), diag('z3'), diag('z4'), diag('z5')]);
+    document.insertInline(0, 0, 'y');
+    expect(document.revision.value).toBeGreaterThan(current);
+    fake.pushDiagnostics(uri, current, [makeDiagnostic('z1'), makeDiagnostic('z2'), makeDiagnostic('z3'), makeDiagnostic('z4'), makeDiagnostic('z5')]);
     await flush();
     expect(client.diagnosticCountFor(uri)).toBe(2); // unchanged — the stale batch was dropped
   } finally {
@@ -73,17 +73,17 @@ test('diagnostic storage is capped at maxDiagnosticsPerDocument', async () => {
   });
   const path = `${ROOT}/many.ts`;
   const uri = uriFor(path);
-  const doc = new TextDocument.Class();
-  doc.loadFromText('x\n', path);
+  const document = new TextDocument.Class();
+  document.loadFromText('x\n', path);
 
   try {
-    client.openDocument(doc);
+    client.openDocument(document);
     await client.whenStarted();
     await fake.waitFor('textDocument/didOpen');
     await flush();
 
-    const many = Array.from({ length: 10 }, (_, i) => diag(`d${i}`));
-    fake.pushDiagnostics(uri, doc.revision.value, many);
+    const many = Array.from({ length: 10 }, (_, index) => makeDiagnostic(`d${index}`));
+    fake.pushDiagnostics(uri, document.revision.value, many);
     await flush();
     expect(client.diagnosticCountFor(uri)).toBe(3); // bounded, not 10
   } finally {
@@ -100,20 +100,20 @@ test('closing a document clears its diagnostics', async () => {
   });
   const path = `${ROOT}/two.ts`;
   const uri = uriFor(path);
-  const doc = new TextDocument.Class();
-  doc.loadFromText('let a = 2\n', path);
+  const document = new TextDocument.Class();
+  document.loadFromText('let a = 2\n', path);
 
   try {
-    client.openDocument(doc);
+    client.openDocument(document);
     await client.whenStarted();
     await fake.waitFor('textDocument/didOpen');
     await flush();
 
-    fake.pushDiagnostics(uri, doc.revision.value, [diag('one')]);
+    fake.pushDiagnostics(uri, document.revision.value, [makeDiagnostic('one')]);
     await flush();
     expect(client.diagnosticCountFor(uri)).toBe(1);
 
-    client.closeDocument(doc);
+    client.closeDocument(document);
     expect(client.diagnosticCountFor(uri)).toBe(0);
   } finally {
     await client.dispose();

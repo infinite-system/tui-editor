@@ -2,8 +2,8 @@ import { test, expect } from 'bun:test';
 import { highlightLine } from '../Highlighter';
 import { LanguageRegistry } from '../LanguageRegistry';
 
-const roles = (line: string, lang: any) => highlightLine(line, lang).map((s) => s.role);
-const textOf = (line: string, lang: any) => highlightLine(line, lang).map((s) => s.text).join('');
+const roles = (line: string, language: any) => highlightLine(line, language).map((span) => span.role);
+const textOf = (line: string, language: any) => highlightLine(line, language).map((span) => span.text).join('');
 
 test('language registry maps extensions', () => {
   expect(LanguageRegistry.Class.forPath('a/b.ts')).toBe('typescript');
@@ -19,24 +19,24 @@ test('tokenizer preserves the exact line text (lossless spans)', () => {
 
 test('keywords, strings, numbers, comments get distinct roles', () => {
   const spans = highlightLine("const s = 'hi'; // c", 'typescript');
-  const byText = (t: string) => spans.find((s) => s.text === t)?.role;
+  const byText = (text: string) => spans.find((span) => span.text === text)?.role;
   expect(byText('const')).toBe('keyword');
-  expect(spans.find((s) => s.role === 'string')?.text).toBe("'hi'");
-  expect(spans.some((s) => s.role === 'comment' && s.text.includes('// c'))).toBe(true);
+  expect(spans.find((span) => span.role === 'string')?.text).toBe("'hi'");
+  expect(spans.some((span) => span.role === 'comment' && span.text.includes('// c'))).toBe(true);
 });
 
 test('PascalCase identifiers are typed, call sites are funcs', () => {
   const spans = highlightLine('new Widget(); doThing()', 'typescript');
-  expect(spans.find((s) => s.text === 'Widget')?.role).toBe('type');
-  expect(spans.find((s) => s.text === 'doThing')?.role).toBe('func');
+  expect(spans.find((span) => span.text === 'Widget')?.role).toBe('type');
+  expect(spans.find((span) => span.text === 'doThing')?.role).toBe('func');
 });
 
 test('json keys vs string values differ, numbers and literals colored', () => {
   const spans = highlightLine('"key": "value", "n": 42, "b": true', 'json');
-  expect(spans.some((s) => s.role === 'type' && s.text.includes('"key"'))).toBe(true);
-  expect(spans.some((s) => s.role === 'string' && s.text === '"value"')).toBe(true);
-  expect(spans.some((s) => s.role === 'number' && s.text === '42')).toBe(true);
-  expect(spans.some((s) => s.role === 'keyword' && s.text === 'true')).toBe(true);
+  expect(spans.some((span) => span.role === 'type' && span.text.includes('"key"'))).toBe(true);
+  expect(spans.some((span) => span.role === 'string' && span.text === '"value"')).toBe(true);
+  expect(spans.some((span) => span.role === 'number' && span.text === '42')).toBe(true);
+  expect(spans.some((span) => span.role === 'keyword' && span.text === 'true')).toBe(true);
 });
 
 test('markdown headings and lists are recognized', () => {

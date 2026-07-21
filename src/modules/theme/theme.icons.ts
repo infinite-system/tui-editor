@@ -53,10 +53,10 @@ export function iconSetFor(level: GlyphLevel): IconSet {
 }
 
 /** Resolve an icon for a filename against a set (extension keyed, with folder/file default). */
-export function iconFor(set: IconSet, name: string, isDir: boolean, open = false): string {
-  if (isDir) return open ? set.folderOpen : set.folderClosed;
-  const dot = name.lastIndexOf('.');
-  const ext = dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
+export function iconFor(set: IconSet, name: string, isDirectory: boolean, open = false): string {
+  if (isDirectory) return open ? set.folderOpen : set.folderClosed;
+  const dotIndex = name.lastIndexOf('.');
+  const extension = dotIndex >= 0 ? name.slice(dotIndex + 1).toLowerCase() : '';
   if (name === '.gitignore') return set.ext.git ?? set.file;
-  return set.ext[ext] ?? set.file;
+  return set.ext[extension] ?? set.file;
 }

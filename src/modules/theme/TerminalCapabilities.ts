@@ -7,8 +7,8 @@ export type GlyphLevel = 'nerd' | 'unicode' | 'ascii';
 
 class $TerminalCapabilities {
   static detectColorDepth(): ColorDepth {
-    const ct = Environment.Class.env('COLORTERM') ?? '';
-    if (/truecolor|24bit/i.test(ct)) return 'truecolor';
+    const colorTerm = Environment.Class.env('COLORTERM') ?? '';
+    if (/truecolor|24bit/i.test(colorTerm)) return 'truecolor';
     const term = Environment.Class.env('TERM') ?? '';
     if (/256color/i.test(term)) return '256';
     if (/color/i.test(term)) return '16';
@@ -18,11 +18,11 @@ class $TerminalCapabilities {
 
   static detectGlyphLevel(): GlyphLevel {
     // Nerd fonts announce themselves rarely; use env hints, else unicode (safe default).
-    const tp = Environment.Class.env('TERM_PROGRAM') ?? '';
+    const termProgram = Environment.Class.env('TERM_PROGRAM') ?? '';
     if (Environment.Class.env('NERD_FONT') === '1') return 'nerd';
-    if (/wezterm|kitty|ghostty/i.test(tp)) return 'nerd';
-    const lang = Environment.Class.env('LANG') ?? '';
-    if (/utf-?8/i.test(lang)) return 'unicode';
+    if (/wezterm|kitty|ghostty/i.test(termProgram)) return 'nerd';
+    const language = Environment.Class.env('LANG') ?? '';
+    if (/utf-?8/i.test(language)) return 'unicode';
     return 'ascii';
   }
 }

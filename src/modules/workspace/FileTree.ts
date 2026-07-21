@@ -43,23 +43,23 @@ class $FileTree {
     this.selectedIndex.value = 0;
   }
 
-  private list(dir: string): DirEntry[] {
-    let l = this.listings.get(dir);
-    if (!l) {
-      l = Files.Class.list(dir);
-      this.listings.set(dir, l);
+  private list(directory: string): DirEntry[] {
+    let listing = this.listings.get(directory);
+    if (!listing) {
+      listing = Files.Class.list(directory);
+      this.listings.set(directory, listing);
     }
-    return l;
+    return listing;
   }
 
   /** Flatten expanded directories into visible rows (depth-first, dirs first). */
   private flatten(): TreeRow[] {
     const rows: TreeRow[] = [];
-    const walk = (dir: string, depth: number): void => {
-      for (const e of this.list(dir)) {
-        const expanded = e.isDir && this.expanded.has(e.path);
-        rows.push({ name: e.name, path: e.path, isDir: e.isDir, depth, expanded });
-        if (expanded) walk(e.path, depth + 1);
+    const walk = (directory: string, depth: number): void => {
+      for (const entry of this.list(directory)) {
+        const expanded = entry.isDir && this.expanded.has(entry.path);
+        rows.push({ name: entry.name, path: entry.path, isDir: entry.isDir, depth, expanded });
+        if (expanded) walk(entry.path, depth + 1);
       }
     };
     walk(this.root, 0);
@@ -80,18 +80,18 @@ class $FileTree {
   }
 
   moveSelection(delta: number): void {
-    const n = this.rows.length;
-    if (n === 0) return;
-    let i = this.selectedIndex.value + delta;
-    if (i < 0) i = 0;
-    if (i >= n) i = n - 1;
-    this.selectedIndex.value = i;
+    const rowCount = this.rows.length;
+    if (rowCount === 0) return;
+    let index = this.selectedIndex.value + delta;
+    if (index < 0) index = 0;
+    if (index >= rowCount) index = rowCount - 1;
+    this.selectedIndex.value = index;
   }
 
-  setSelection(i: number): void {
-    const n = this.rows.length;
-    if (n === 0) return;
-    this.selectedIndex.value = Math.max(0, Math.min(i, n - 1));
+  setSelection(index: number): void {
+    const rowCount = this.rows.length;
+    if (rowCount === 0) return;
+    this.selectedIndex.value = Math.max(0, Math.min(index, rowCount - 1));
   }
 
   toggleExpand(path: string): void {

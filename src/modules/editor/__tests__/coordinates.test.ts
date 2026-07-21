@@ -40,32 +40,32 @@ test('display column: wide chars, combining marks, and tabs', () => {
 });
 
 test('backspace deletes a whole emoji, not half a surrogate pair', () => {
-  const doc = new TextDocument.Class() as any;
-  doc.loadFromText('a😀');
-  const r = doc.deleteBackward(0, 2); // cursor after the emoji (grapheme col 2)
-  expect(doc.line(0)).toBe('a'); // emoji fully removed, no lone surrogate
-  expect(r).toEqual({ line: 0, col: 1 });
+  const document = new TextDocument.Class() as any;
+  document.loadFromText('a😀');
+  const result = document.deleteBackward(0, 2); // cursor after the emoji (grapheme col 2)
+  expect(document.line(0)).toBe('a'); // emoji fully removed, no lone surrogate
+  expect(result).toEqual({ line: 0, col: 1 });
 });
 
 test('delete-forward removes a whole combining cluster', () => {
-  const doc = new TextDocument.Class() as any;
-  doc.loadFromText('éx'); // é (one grapheme, two units) + x
-  doc.deleteForward(0, 0);
-  expect(doc.line(0)).toBe('x');
+  const document = new TextDocument.Class() as any;
+  document.loadFromText('éx'); // é (one grapheme, two units) + x
+  document.deleteForward(0, 0);
+  expect(document.line(0)).toBe('x');
 });
 
 test('insert astral char advances the cursor by one grapheme', () => {
-  const doc = new TextDocument.Class() as any;
-  doc.loadFromText('ab');
-  const col = doc.insertInline(0, 1, '😀');
-  expect(doc.line(0)).toBe('a😀b');
-  expect(col).toBe(2); // grapheme col advanced by 1, not 2 (UTF-16)
+  const document = new TextDocument.Class() as any;
+  document.loadFromText('ab');
+  const column = document.insertInline(0, 1, '😀');
+  expect(document.line(0)).toBe('a😀b');
+  expect(column).toBe(2); // grapheme col advanced by 1, not 2 (UTF-16)
 });
 
 test('split line at a grapheme boundary keeps the emoji intact', () => {
-  const doc = new TextDocument.Class() as any;
-  doc.loadFromText('a😀b');
-  doc.splitLine(0, 2); // split after the emoji
-  expect(doc.line(0)).toBe('a😀');
-  expect(doc.line(1)).toBe('b');
+  const document = new TextDocument.Class() as any;
+  document.loadFromText('a😀b');
+  document.splitLine(0, 2); // split after the emoji
+  expect(document.line(0)).toBe('a😀');
+  expect(document.line(1)).toBe('b');
 });

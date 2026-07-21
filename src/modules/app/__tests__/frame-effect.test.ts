@@ -5,7 +5,7 @@ import { test, expect } from 'bun:test';
 import { App } from '../App';
 import { Editor } from '../../editor/Editor';
 
-const flush = () => new Promise((r) => setTimeout(r, 10));
+const flush = () => new Promise((resolve) => setTimeout(resolve, 10));
 
 test('the frame effect re-runs on a document-revision change and stops on $stopEffects', async () => {
   const app = new App.Class() as any;

@@ -3,9 +3,9 @@ import { boot } from './modules/app/Bootstrap';
 import { Logging } from './modules/system/Logging';
 
 async function main(): Promise<void> {
-  const rootArg = process.argv[2];
+  const rootArgument = process.argv[2];
   const booted = await boot({
-    root: rootArg,
+    root: rootArgument,
     onQuit: () => {
       // Give the renderer a tick to restore the terminal, then exit.
       setTimeout(() => process.exit(0), 20);
@@ -17,9 +17,9 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => void booted.shutdown());
 }
 
-main().catch((err) => {
-  Logging.Class.error(`fatal: ${String(err?.stack ?? err)}`);
+main().catch((error) => {
+  Logging.Class.error(`fatal: ${String(error?.stack ?? error)}`);
   // eslint-disable-next-line no-console
-  process.stderr.write(`fatal: ${String(err?.stack ?? err)}\n`);
+  process.stderr.write(`fatal: ${String(error?.stack ?? error)}\n`);
   process.exit(1);
 });

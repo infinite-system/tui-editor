@@ -10,10 +10,10 @@ export interface ClipboardTool {
 
 let detected: ClipboardTool | null | undefined = undefined;
 
-async function which(cmd: string): Promise<boolean> {
+async function which(command: string): Promise<boolean> {
   try {
-    const p = Bun.spawn(['which', cmd], { stdout: 'ignore', stderr: 'ignore' });
-    return (await p.exited) === 0;
+    const subprocess = Bun.spawn(['which', command], { stdout: 'ignore', stderr: 'ignore' });
+    return (await subprocess.exited) === 0;
   } catch {
     return false;
   }
@@ -36,10 +36,10 @@ async function detectTool(): Promise<ClipboardTool | null> {
     },
     { probe: 'pbcopy', tool: { copy: ['pbcopy'], paste: ['pbpaste'] } },
   ];
-  for (const c of candidates) {
-    if (await which(c.probe)) {
-      detected = c.tool;
-      return c.tool;
+  for (const candidate of candidates) {
+    if (await which(candidate.probe)) {
+      detected = candidate.tool;
+      return candidate.tool;
     }
   }
   detected = null;
@@ -52,17 +52,17 @@ class $Clipboard {
     const tool = await detectTool();
     if (tool) {
       try {
-        const p = Bun.spawn(tool.copy, { stdin: 'pipe', stdout: 'ignore', stderr: 'ignore' });
-        p.stdin.write(text);
-        await p.stdin.end();
-        if ((await p.exited) === 0) return true;
+        const subprocess = Bun.spawn(tool.copy, { stdin: 'pipe', stdout: 'ignore', stderr: 'ignore' });
+        subprocess.stdin.write(text);
+        await subprocess.stdin.end();
+        if ((await subprocess.exited) === 0) return true;
       } catch {
         /* fall through to OSC 52 */
       }
     }
     try {
-      const b64 = Buffer.from(text, 'utf-8').toString('base64');
-      process.stdout.write(`\x1b]52;c;${b64}\x07`);
+      const base64 = Buffer.from(text, 'utf-8').toString('base64');
+      process.stdout.write(`\x1b]52;c;${base64}\x07`);
       return true;
     } catch {
       return false;
@@ -74,10 +74,10 @@ class $Clipboard {
     const tool = await detectTool();
     if (!tool) return '';
     try {
-      const p = Bun.spawn(tool.paste, { stdout: 'pipe', stderr: 'ignore' });
-      const out = await new Response(p.stdout).text();
-      await p.exited;
-      return out;
+      const subprocess = Bun.spawn(tool.paste, { stdout: 'pipe', stderr: 'ignore' });
+      const output = await new Response(subprocess.stdout).text();
+      await subprocess.exited;
+      return output;
     } catch {
       return '';
     }

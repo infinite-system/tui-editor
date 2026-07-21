@@ -25,8 +25,8 @@ class $App {
   }
 
   /** Register a disposer to run on shutdown (LIFO). */
-  onDispose(fn: () => void): void {
-    this.disposers.push(fn);
+  onDispose(disposer: () => void): void {
+    this.disposers.push(disposer);
   }
 
   /** Attach the renderer and push initial dimensions to the side channel. */
@@ -66,18 +66,18 @@ class $App {
     } catch {
       /* no effects registered */
     }
-    for (const d of this.disposers.reverse()) {
+    for (const disposer of this.disposers.reverse()) {
       try {
-        d();
-      } catch (e) {
-        Logging.Class.error(`disposer failed: ${String(e)}`);
+        disposer();
+      } catch (error) {
+        Logging.Class.error(`disposer failed: ${String(error)}`);
       }
     }
     this.disposers = [];
     try {
       this.renderer?.destroy();
-    } catch (e) {
-      Logging.Class.error(`renderer destroy failed: ${String(e)}`);
+    } catch (error) {
+      Logging.Class.error(`renderer destroy failed: ${String(error)}`);
     }
     this.renderer = null;
     Logging.Class.info('App disposed');

@@ -43,15 +43,15 @@ class $UndoStore {
    */
   record(state: UndoState, now: number): void {
     this.redoStack = [];
-    const prev = this.undoStack[this.undoStack.length - 1];
+    const previous = this.undoStack[this.undoStack.length - 1];
     if (
-      prev &&
-      prev.kind === state.kind &&
+      previous &&
+      previous.kind === state.kind &&
       (state.kind === 'insert' || state.kind === 'delete') &&
-      now - prev.at < COALESCE_MS
+      now - previous.at < COALESCE_MS
     ) {
       // Keep the earlier pre-edit state; just refresh its timestamp so the run keeps coalescing.
-      prev.at = now;
+      previous.at = now;
       return;
     }
     this.undoStack.push(state);

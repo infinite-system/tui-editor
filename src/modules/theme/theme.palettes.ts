@@ -66,18 +66,18 @@ export const PALETTES: Record<string, Palette> = {
 // --- Down-quantization ---------------------------------------------------------
 
 function hexToRgb(hex: string): [number, number, number] {
-  const h = hex.replace('#', '');
-  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  const hexDigits = hex.replace('#', '');
+  return [parseInt(hexDigits.slice(0, 2), 16), parseInt(hexDigits.slice(2, 4), 16), parseInt(hexDigits.slice(4, 6), 16)];
 }
 
 /** Map an rgb triple to the nearest xterm-256 index, then back to a hex approximation. */
 function to256Hex(hex: string): string {
-  const [r, g, b] = hexToRgb(hex);
+  const [red, green, blue] = hexToRgb(hex);
   // 6x6x6 color cube
-  const q = (v: number) => (v < 48 ? 0 : v < 115 ? 1 : Math.round((v - 35) / 40));
-  const clamp5 = (v: number) => Math.max(0, Math.min(5, v));
+  const quantize = (value: number) => (value < 48 ? 0 : value < 115 ? 1 : Math.round((value - 35) / 40));
+  const clamp5 = (value: number) => Math.max(0, Math.min(5, value));
   const cube = [0, 95, 135, 175, 215, 255];
-  return rgbToHex(cube[clamp5(q(r))]!, cube[clamp5(q(g))]!, cube[clamp5(q(b))]!);
+  return rgbToHex(cube[clamp5(quantize(red))]!, cube[clamp5(quantize(green))]!, cube[clamp5(quantize(blue))]!);
 }
 
 /** Map to the nearest of the 16 ANSI colors (approx hexes). */
@@ -88,36 +88,36 @@ const ANSI16: Array<[number, number, number]> = [
   [0, 0, 255], [255, 0, 255], [0, 255, 255], [255, 255, 255],
 ];
 function to16Hex(hex: string): string {
-  const [r, g, b] = hexToRgb(hex);
+  const [red, green, blue] = hexToRgb(hex);
   let best = 0;
-  let bestD = Infinity;
-  for (let i = 0; i < ANSI16.length; i++) {
-    const [cr, cg, cb] = ANSI16[i]!;
-    const d = (r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2;
-    if (d < bestD) {
-      bestD = d;
-      best = i;
+  let bestDistance = Infinity;
+  for (let index = 0; index < ANSI16.length; index++) {
+    const [candidateRed, candidateGreen, candidateBlue] = ANSI16[index]!;
+    const distance = (red - candidateRed) ** 2 + (green - candidateGreen) ** 2 + (blue - candidateBlue) ** 2;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = index;
     }
   }
-  const [r2, g2, b2] = ANSI16[best]!;
-  return rgbToHex(r2, g2, b2);
+  const [nearestRed, nearestGreen, nearestBlue] = ANSI16[best]!;
+  return rgbToHex(nearestRed, nearestGreen, nearestBlue);
 }
 
-function rgbToHex(r: number, g: number, b: number): string {
-  const h = (v: number) => v.toString(16).padStart(2, '0');
-  return `#${h(r)}${h(g)}${h(b)}`;
+function rgbToHex(red: number, green: number, blue: number): string {
+  const toHexByte = (value: number) => value.toString(16).padStart(2, '0');
+  return `#${toHexByte(red)}${toHexByte(green)}${toHexByte(blue)}`;
 }
 
 /** Return a palette whose colors are quantized to the terminal's depth. */
-export function quantizePalette(p: Palette, depth: ColorDepth): Palette {
-  if (depth === 'truecolor') return p;
-  const map = depth === '256' ? to256Hex : to16Hex;
-  const out = { ...p };
-  for (const key of Object.keys(out) as Array<keyof Palette>) {
-    const v = out[key];
-    if (typeof v === 'string' && v.startsWith('#')) {
-      (out[key] as string) = map(v);
+export function quantizePalette(palette: Palette, depth: ColorDepth): Palette {
+  if (depth === 'truecolor') return palette;
+  const mapColor = depth === '256' ? to256Hex : to16Hex;
+  const result = { ...palette };
+  for (const key of Object.keys(result) as Array<keyof Palette>) {
+    const value = result[key];
+    if (typeof value === 'string' && value.startsWith('#')) {
+      (result[key] as string) = mapColor(value);
     }
   }
-  return out;
+  return result;
 }

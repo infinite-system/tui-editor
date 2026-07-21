@@ -57,27 +57,27 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
 
   // Publish model state to the observability side channel (read-only over model state).
   const publish = (): void => {
-    const ed = workspace.editor;
+    const editor = workspace.editor;
     StatusChannel.Class.update({
       mouse: lastMouse,
       activeWorkspace: workspace.name.value,
       workspaces: [workspace.name.value],
-      activeBuffer: ed.hasDocument.value ? ed.document.path : null,
-      bufferRevision: ed.document.revision.value,
-      dirty: ed.document.dirty.value,
-      cursor: ed.hasDocument.value
-        ? { line: ed.cursor.line.value, col: ed.cursor.col.value }
+      activeBuffer: editor.hasDocument.value ? editor.document.path : null,
+      bufferRevision: editor.document.revision.value,
+      dirty: editor.document.dirty.value,
+      cursor: editor.hasDocument.value
+        ? { line: editor.cursor.line.value, col: editor.cursor.col.value }
         : null,
-      hasSelection: ed.cursor.hasSelection,
-      selection: ed.cursor.selectionRange(),
-      openBuffers: ed.hasDocument.value ? [ed.document.path] : [],
+      hasSelection: editor.cursor.hasSelection,
+      selection: editor.cursor.selectionRange(),
+      openBuffers: editor.hasDocument.value ? [editor.document.path] : [],
       overlay: commands.open.value ? 'palette' : null,
       paletteQuery: commands.open.value ? commands.query.value : '',
       paletteMatches: commands.open.value ? commands.filtered.length : 0,
       focus: workspace.focus.value,
       treeRows: workspace.tree.rows.length,
       treeSelected: workspace.tree.selectedIndex.value,
-      editorScrollTop: ed.viewport.scrollTop.value,
+      editorScrollTop: editor.viewport.scrollTop.value,
       gitLogScrollTop: workspace.gitPanel.logScrollTop.value,
       gitLogIndex: workspace.gitPanel.logIndex.value,
       gitLogLoaded: workspace.commitLog.value?.loadedCount ?? 0,
@@ -105,14 +105,14 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   // or an LSP diagnostic repaint the screen without a keypress.
   // invariant: Rendering is one coarse frame effect (app.invariants.md)
   app.$watchEffect(() => {
-    const ed = workspace.editor;
+    const editor = workspace.editor;
     // Explicit subscriptions to the load-bearing signals (document.revision in particular is only
     // read indirectly by update(), so touch it here to guarantee content changes repaint).
-    void ed.document.revision.value;
-    void ed.cursor.line.value;
-    void ed.cursor.col.value;
-    void ed.cursor.anchor.value;
-    void ed.viewport.scrollTop.value;
+    void editor.document.revision.value;
+    void editor.cursor.line.value;
+    void editor.cursor.col.value;
+    void editor.cursor.anchor.value;
+    void editor.viewport.scrollTop.value;
     void workspace.focus.value;
     void workspace.tree.selectedIndex.value;
     // Git state is produced asynchronously (refresh/log outlive boot); observe it so the sidebar
@@ -125,12 +125,12 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       void git.untracked.value;
       void git.refreshing.value;
     }
-    const gp = workspace.gitPanel;
-    void gp.view.value;
-    void gp.changesIndex.value;
-    void gp.logIndex.value;
-    void gp.logScrollTop.value;
-    void gp.splitRatio.value;
+    const gitPanel = workspace.gitPanel;
+    void gitPanel.view.value;
+    void gitPanel.changesIndex.value;
+    void gitPanel.logIndex.value;
+    void gitPanel.logScrollTop.value;
+    void gitPanel.splitRatio.value;
     void commands.open.value;
     void commands.query.value;
     void commands.selectedIndex.value;
@@ -202,28 +202,28 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   // Accelerated arrows: terminals report key REPEAT (not down/up), so we ramp the step size when
   // the same arrow keeps arriving quickly, and reset on direction change or pause.
   // invariant: Terminals report key repeat not key up (project.invariants.md)
-  let accelDir = '';
-  let accelRun = 0;
-  let accelLast = 0;
-  const ACCEL_WINDOW_MS = 90;
+  let accelerationDirection = '';
+  let accelerationRun = 0;
+  let accelerationLast = 0;
+  const ACCELERATION_WINDOW_MS = 90;
   const movementAcceleration = (key: KeyEvent): number => {
     const now = Date.now();
-    const dir = key.name;
-    if (dir === accelDir && now - accelLast < ACCEL_WINDOW_MS) {
-      accelRun += 1;
+    const direction = key.name;
+    if (direction === accelerationDirection && now - accelerationLast < ACCELERATION_WINDOW_MS) {
+      accelerationRun += 1;
     } else {
-      accelRun = 0;
+      accelerationRun = 0;
     }
-    accelDir = dir;
-    accelLast = now;
-    if (accelRun < 4) return 1;
-    return Math.min(8, 1 + Math.floor((accelRun - 3) / 2));
+    accelerationDirection = direction;
+    accelerationLast = now;
+    if (accelerationRun < 4) return 1;
+    return Math.min(8, 1 + Math.floor((accelerationRun - 3) / 2));
   };
   const isTypedCharacter = (key: KeyEvent): boolean => {
     if (key.ctrl || key.meta || key.option) return false;
-    const s = key.sequence;
-    if (!s || s.length !== 1) return false;
-    const code = s.charCodeAt(0);
+    const sequence = key.sequence;
+    if (!sequence || sequence.length !== 1) return false;
+    const code = sequence.charCodeAt(0);
     return code >= 32 && code !== 127;
   };
 
@@ -279,16 +279,16 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     if (key.name === 'tab') {
       workspace.toggleFocus();
     } else if (focus === 'git') {
-      const gp = workspace.gitPanel;
+      const gitPanel = workspace.gitPanel;
       const moveLog = (delta: number): void => {
         workspace.haltGitLogScroll(); // keyboard is precise — adopt-and-stop any glide (One-Writer)
         const end = workspace.commitLog.value?.knownEnd.value ?? Number.POSITIVE_INFINITY;
-        gp.logIndex.value = Math.max(0, Math.min(gp.logIndex.value + delta, Number.isFinite(end) ? end - 1 : gp.logIndex.value + delta));
-        const approxVisible = 12;
-        if (gp.logIndex.value < gp.logScrollTop.value) gp.logScrollTop.value = gp.logIndex.value;
-        else if (gp.logIndex.value >= gp.logScrollTop.value + approxVisible)
-          gp.logScrollTop.value = gp.logIndex.value - approxVisible + 1;
-        void workspace.commitLog.value?.ensureRange(gp.logScrollTop.value, 50);
+        gitPanel.logIndex.value = Math.max(0, Math.min(gitPanel.logIndex.value + delta, Number.isFinite(end) ? end - 1 : gitPanel.logIndex.value + delta));
+        const approximateVisible = 12;
+        if (gitPanel.logIndex.value < gitPanel.logScrollTop.value) gitPanel.logScrollTop.value = gitPanel.logIndex.value;
+        else if (gitPanel.logIndex.value >= gitPanel.logScrollTop.value + approximateVisible)
+          gitPanel.logScrollTop.value = gitPanel.logIndex.value - approximateVisible + 1;
+        void workspace.commitLog.value?.ensureRange(gitPanel.logScrollTop.value, 50);
       };
       switch (key.name) {
         case 'up': moveLog(-1); break;
@@ -325,41 +325,41 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     } else {
       // editor focus. invariant: Selection is an anchor plus the cursor and edits replace it
       // (src/modules/editor/editor.invariants.md)
-      const ed = workspace.editor;
-      const accel = movementAcceleration(key);
+      const editor = workspace.editor;
+      const acceleration = movementAcceleration(key);
       const extend = key.shift; // shift + movement extends the selection
       if (key.ctrl) {
         // Ctrl chords: save / select-all / clipboard / undo-redo.
         switch (key.name) {
-          case 's': ed.save(); break;
-          case 'a': ed.selectAll(); break;
-          case 'c': void ed.copySelection(); break;
-          case 'x': void ed.cutSelection(); break;
-          case 'v': void ed.pasteClipboard(); break;
-          case 'z': key.shift ? ed.performRedo() : ed.performUndo(); break;
-          case 'y': ed.performRedo(); break;
+          case 's': editor.save(); break;
+          case 'a': editor.selectAll(); break;
+          case 'c': void editor.copySelection(); break;
+          case 'x': void editor.cutSelection(); break;
+          case 'v': void editor.pasteClipboard(); break;
+          case 'z': key.shift ? editor.performRedo() : editor.performUndo(); break;
+          case 'y': editor.performRedo(); break;
           default: break;
         }
       } else {
-        // Plain keys: movement (accel + shift-extend), editing, focus.
+        // Plain keys: movement (acceleration + shift-extend), editing, focus.
         switch (key.name) {
-          case 'up': ed.moveVertical(-accel, extend); break;
-          case 'down': ed.moveVertical(accel, extend); break;
-          case 'left': ed.moveHorizontal(-accel, extend); break;
-          case 'right': ed.moveHorizontal(accel, extend); break;
-          case 'pageup': ed.pageUp(extend); break;
-          case 'pagedown': ed.pageDown(extend); break;
-          case 'home': ed.moveToLineStart(extend); break;
-          case 'end': ed.moveToLineEnd(extend); break;
-          case 'return': ed.insertNewline(); break;
-          case 'backspace': ed.backspace(); break;
-          case 'delete': ed.deleteChar(); break;
+          case 'up': editor.moveVertical(-acceleration, extend); break;
+          case 'down': editor.moveVertical(acceleration, extend); break;
+          case 'left': editor.moveHorizontal(-acceleration, extend); break;
+          case 'right': editor.moveHorizontal(acceleration, extend); break;
+          case 'pageup': editor.pageUp(extend); break;
+          case 'pagedown': editor.pageDown(extend); break;
+          case 'home': editor.moveToLineStart(extend); break;
+          case 'end': editor.moveToLineEnd(extend); break;
+          case 'return': editor.insertNewline(); break;
+          case 'backspace': editor.backspace(); break;
+          case 'delete': editor.deleteChar(); break;
           case 'escape':
-            if (ed.hasSelection) ed.cursor.clearSelection();
+            if (editor.hasSelection) editor.cursor.clearSelection();
             else workspace.focusFiles();
             break;
           default:
-            if (isTypedCharacter(key)) ed.insertText(key.sequence);
+            if (isTypedCharacter(key)) editor.insertText(key.sequence);
         }
       }
     }

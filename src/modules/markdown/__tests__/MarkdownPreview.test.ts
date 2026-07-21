@@ -21,7 +21,7 @@ test('has no document or rows before open', () => {
 
 // invariant: Preview rendering follows visible rows (src/modules/markdown/markdown.invariants.md)
 test('renders only the visible window of rows', async () => {
-  const body = Array.from({ length: 300 }, (_, i) => `Paragraph number ${i}.`).join('\n\n');
+  const body = Array.from({ length: 300 }, (_, index) => `Paragraph number ${index}.`).join('\n\n');
   const preview = new MarkdownPreview.Class();
   preview.open(makeSource(body), null, { debounceMs: 0 });
   await tick();
@@ -32,14 +32,14 @@ test('renders only the visible window of rows', async () => {
   expect(rows.length).toBe(height); // never the full document
   expect(preview.totalRows(80)).toBeGreaterThan(height);
 
-  const texts = rows.filter((r) => r.block).map((r) => r.block!.text.slice(r.textStart, r.textEnd));
+  const texts = rows.filter((row) => row.block).map((row) => row.block!.text.slice(row.textStart, row.textEnd));
   expect(texts[0]).toBe('Paragraph number 0.');
 
   // scrolling shifts the window without materializing more rows than the viewport
   preview.scrollTo(10, 80, height);
   const scrolled = preview.visibleRows(80, height);
   expect(scrolled.length).toBe(height);
-  expect(scrolled.some((r) => r.block?.text.includes('Paragraph number 0.'))).toBe(false);
+  expect(scrolled.some((row) => row.block?.text.includes('Paragraph number 0.'))).toBe(false);
 });
 
 // invariant: Closing releases all preview work (src/modules/markdown/markdown.invariants.md)

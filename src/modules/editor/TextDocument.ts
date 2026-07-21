@@ -59,14 +59,14 @@ class $TextDocument {
     return this._lines.length;
   }
 
-  line(i: number): string {
-    return this._lines[i] ?? '';
+  line(index: number): string {
+    return this._lines[index] ?? '';
   }
 
   /** A window of lines [start, start+count) — the flyweight read the viewport uses. */
   slice(start: number, count: number): string[] {
-    const s = Math.max(0, start);
-    return this._lines.slice(s, s + count);
+    const clampedStart = Math.max(0, start);
+    return this._lines.slice(clampedStart, clampedStart + count);
   }
 
   get lines(): readonly string[] {
@@ -88,24 +88,24 @@ class $TextDocument {
     this.revision.value++;
   }
 
-  setLine(i: number, text: string): void {
-    if (i < 0 || i >= this._lines.length) return;
-    this._lines[i] = text;
+  setLine(index: number, text: string): void {
+    if (index < 0 || index >= this._lines.length) return;
+    this._lines[index] = text;
     this.dirty.value = true;
     this.revision.value++;
   }
 
-  insertLine(i: number, text: string): void {
-    this._lines.splice(Math.max(0, Math.min(i, this._lines.length)), 0, text);
+  insertLine(index: number, text: string): void {
+    this._lines.splice(Math.max(0, Math.min(index, this._lines.length)), 0, text);
     this.dirty.value = true;
     this.revision.value++;
   }
 
-  removeLine(i: number): void {
+  removeLine(index: number): void {
     if (this._lines.length <= 1) {
       this._lines = [''];
-    } else if (i >= 0 && i < this._lines.length) {
-      this._lines.splice(i, 1);
+    } else if (index >= 0 && index < this._lines.length) {
+      this._lines.splice(index, 1);
     }
     this.dirty.value = true;
     this.revision.value++;
@@ -117,23 +117,23 @@ class $TextDocument {
 
   // --- character-level editing (used from M3) ---
 
-  /** Insert `str` (no newlines) at line/grapheme-col. Returns the new grapheme col. */
-  insertInline(line: number, col: number, str: string): number {
-    const cur = this.line(line);
-    const g = clampCol(cur, col);
-    const u16 = graphemeToU16(cur, g);
-    this._lines[line] = cur.slice(0, u16) + str + cur.slice(u16);
+  /** Insert `text` (no newlines) at line/grapheme-col. Returns the new grapheme col. */
+  insertInline(line: number, column: number, text: string): number {
+    const currentLine = this.line(line);
+    const graphemeColumn = clampCol(currentLine, column);
+    const utf16Offset = graphemeToU16(currentLine, graphemeColumn);
+    this._lines[line] = currentLine.slice(0, utf16Offset) + text + currentLine.slice(utf16Offset);
     this.dirty.value = true;
     this.revision.value++;
-    return g + graphemeCount(str);
+    return graphemeColumn + graphemeCount(text);
   }
 
   /** Split a line at grapheme-col into two lines (Enter). Returns new cursor {line, col}. */
-  splitLine(line: number, col: number): { line: number; col: number } {
-    const cur = this.line(line);
-    const u16 = graphemeToU16(cur, clampCol(cur, col));
-    const before = cur.slice(0, u16);
-    const after = cur.slice(u16);
+  splitLine(line: number, column: number): { line: number; col: number } {
+    const currentLine = this.line(line);
+    const utf16Offset = graphemeToU16(currentLine, clampCol(currentLine, column));
+    const before = currentLine.slice(0, utf16Offset);
+    const after = currentLine.slice(utf16Offset);
     this._lines[line] = before;
     this._lines.splice(line + 1, 0, after);
     this.dirty.value = true;
@@ -142,46 +142,46 @@ class $TextDocument {
   }
 
   /** Delete the grapheme before line/col (Backspace). Returns new cursor. */
-  deleteBackward(line: number, col: number): { line: number; col: number } {
-    const cur = this.line(line);
-    if (col > 0) {
-      const g = clampCol(cur, col);
-      const start = graphemeToU16(cur, g - 1);
-      const end = graphemeToU16(cur, g);
-      this._lines[line] = cur.slice(0, start) + cur.slice(end);
+  deleteBackward(line: number, column: number): { line: number; col: number } {
+    const currentLine = this.line(line);
+    if (column > 0) {
+      const graphemeColumn = clampCol(currentLine, column);
+      const start = graphemeToU16(currentLine, graphemeColumn - 1);
+      const end = graphemeToU16(currentLine, graphemeColumn);
+      this._lines[line] = currentLine.slice(0, start) + currentLine.slice(end);
       this.dirty.value = true;
       this.revision.value++;
-      return { line, col: g - 1 };
+      return { line, col: graphemeColumn - 1 };
     }
     if (line > 0) {
-      const prev = this.line(line - 1);
-      const newCol = graphemeCount(prev);
-      this._lines[line - 1] = prev + cur;
+      const previousLine = this.line(line - 1);
+      const newColumn = graphemeCount(previousLine);
+      this._lines[line - 1] = previousLine + currentLine;
       this._lines.splice(line, 1);
       this.dirty.value = true;
       this.revision.value++;
-      return { line: line - 1, col: newCol };
+      return { line: line - 1, col: newColumn };
     }
-    return { line, col };
+    return { line, col: column };
   }
 
   /** Delete the grapheme at line/col (Delete). Returns cursor unchanged. */
-  deleteForward(line: number, col: number): { line: number; col: number } {
-    const cur = this.line(line);
-    const g = clampCol(cur, col);
-    if (g < graphemeCount(cur)) {
-      const start = graphemeToU16(cur, g);
-      const end = graphemeToU16(cur, g + 1);
-      this._lines[line] = cur.slice(0, start) + cur.slice(end);
+  deleteForward(line: number, column: number): { line: number; col: number } {
+    const currentLine = this.line(line);
+    const graphemeColumn = clampCol(currentLine, column);
+    if (graphemeColumn < graphemeCount(currentLine)) {
+      const start = graphemeToU16(currentLine, graphemeColumn);
+      const end = graphemeToU16(currentLine, graphemeColumn + 1);
+      this._lines[line] = currentLine.slice(0, start) + currentLine.slice(end);
       this.dirty.value = true;
       this.revision.value++;
     } else if (line < this._lines.length - 1) {
-      this._lines[line] = cur + this.line(line + 1);
+      this._lines[line] = currentLine + this.line(line + 1);
       this._lines.splice(line + 1, 1);
       this.dirty.value = true;
       this.revision.value++;
     }
-    return { line, col };
+    return { line, col: column };
   }
 
   // --- multi-line range ops (positions are {line, grapheme-col}; start <= end) ---
@@ -189,13 +189,13 @@ class $TextDocument {
   /** Text of the [start, end) range, joined by EOL across lines. */
   sliceRange(start: { line: number; col: number }, end: { line: number; col: number }): string {
     if (start.line === end.line) {
-      const cur = this.line(start.line);
-      return cur.slice(graphemeToU16(cur, start.col), graphemeToU16(cur, end.col));
+      const currentLine = this.line(start.line);
+      return currentLine.slice(graphemeToU16(currentLine, start.col), graphemeToU16(currentLine, end.col));
     }
     const first = this.line(start.line);
     const last = this.line(end.line);
     const parts: string[] = [first.slice(graphemeToU16(first, start.col))];
-    for (let i = start.line + 1; i < end.line; i++) parts.push(this.line(i));
+    for (let index = start.line + 1; index < end.line; index++) parts.push(this.line(index));
     parts.push(last.slice(0, graphemeToU16(last, end.col)));
     return parts.join(this._eol);
   }
@@ -206,9 +206,9 @@ class $TextDocument {
     end: { line: number; col: number },
   ): { line: number; col: number } {
     if (start.line === end.line) {
-      const cur = this.line(start.line);
+      const currentLine = this.line(start.line);
       this._lines[start.line] =
-        cur.slice(0, graphemeToU16(cur, start.col)) + cur.slice(graphemeToU16(cur, end.col));
+        currentLine.slice(0, graphemeToU16(currentLine, start.col)) + currentLine.slice(graphemeToU16(currentLine, end.col));
     } else {
       const head = this.line(start.line).slice(
         0,
@@ -223,15 +223,15 @@ class $TextDocument {
   }
 
   /** Insert possibly-multiline text at line/grapheme-col. Returns the end position. */
-  insertMultiline(line: number, col: number, text: string): { line: number; col: number } {
+  insertMultiline(line: number, column: number, text: string): { line: number; col: number } {
     const parts = text.split(/\r?\n/);
     if (parts.length === 1) {
-      return { line, col: this.insertInline(line, col, parts[0] ?? '') };
+      return { line, col: this.insertInline(line, column, parts[0] ?? '') };
     }
-    const cur = this.line(line);
-    const u16 = graphemeToU16(cur, clampCol(cur, col));
-    const before = cur.slice(0, u16);
-    const after = cur.slice(u16);
+    const currentLine = this.line(line);
+    const utf16Offset = graphemeToU16(currentLine, clampCol(currentLine, column));
+    const before = currentLine.slice(0, utf16Offset);
+    const after = currentLine.slice(utf16Offset);
     const firstPart = parts[0] ?? '';
     const lastPart = parts[parts.length - 1] ?? '';
     const middle = parts.slice(1, -1);

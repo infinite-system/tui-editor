@@ -25,22 +25,22 @@ class $Viewport {
     this.height.value = Math.max(1, height);
   }
 
-  /** Ensure line `n` is visible within [scrollTop, scrollTop+height). */
-  scrollToLine(n: number, totalLines: number): void {
-    const h = this.height.value;
-    if (n < this.scrollTop.value) {
-      this.scrollTop.value = n;
-    } else if (n >= this.scrollTop.value + h) {
-      this.scrollTop.value = n - h + 1;
+  /** Ensure line `line` is visible within [scrollTop, scrollTop+height). */
+  scrollToLine(line: number, totalLines: number): void {
+    const viewportHeight = this.height.value;
+    if (line < this.scrollTop.value) {
+      this.scrollTop.value = line;
+    } else if (line >= this.scrollTop.value + viewportHeight) {
+      this.scrollTop.value = line - viewportHeight + 1;
     }
-    const maxTop = Math.max(0, totalLines - h);
-    if (this.scrollTop.value > maxTop) this.scrollTop.value = maxTop;
+    const maxScrollTop = Math.max(0, totalLines - viewportHeight);
+    if (this.scrollTop.value > maxScrollTop) this.scrollTop.value = maxScrollTop;
     if (this.scrollTop.value < 0) this.scrollTop.value = 0;
   }
 
   scrollBy(delta: number, totalLines: number): void {
-    const maxTop = Math.max(0, totalLines - this.height.value);
-    this.scrollTop.value = Math.max(0, Math.min(this.scrollTop.value + delta, maxTop));
+    const maxScrollTop = Math.max(0, totalLines - this.height.value);
+    this.scrollTop.value = Math.max(0, Math.min(this.scrollTop.value + delta, maxScrollTop));
   }
 
   get firstVisible(): number {

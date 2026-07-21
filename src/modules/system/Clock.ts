@@ -9,8 +9,8 @@ class $Clock {
   }
 
   /** Test hook: force `now()` to return a fixed/scripted value. */
-  static freeze(fn: (() => number) | null): void {
-    override = fn;
+  static freeze(timeSource: (() => number) | null): void {
+    override = timeSource;
   }
 }
 

@@ -18,7 +18,7 @@ class $Cursor {
     return ref(0);
   }
   // Preferred column for up/down movement across short lines.
-  get goalCol() {
+  get goalColumn() {
     return ref(0);
   }
   // Selection anchor (the fixed end); null when there is no selection.
@@ -26,15 +26,15 @@ class $Cursor {
     return shallowRef<Position | null>(null);
   }
 
-  set(line: number, col: number): void {
+  set(line: number, column: number): void {
     this.line.value = Math.max(0, line);
-    this.col.value = Math.max(0, col);
-    this.goalCol.value = this.col.value;
+    this.col.value = Math.max(0, column);
+    this.goalColumn.value = this.col.value;
   }
 
   setLinePreserveGoal(line: number, lineLength: number): void {
     this.line.value = Math.max(0, line);
-    this.col.value = Math.min(this.goalCol.value, lineLength);
+    this.col.value = Math.min(this.goalColumn.value, lineLength);
   }
 
   setAnchorHere(): void {
@@ -46,18 +46,22 @@ class $Cursor {
   }
 
   get hasSelection(): boolean {
-    const a = this.anchor.value;
-    return a !== null && (a.line !== this.line.value || a.col !== this.col.value);
+    const anchorPosition = this.anchor.value;
+    return anchorPosition !== null && (anchorPosition.line !== this.line.value || anchorPosition.col !== this.col.value);
   }
 
   /** Normalized selection {start <= end}, or null if there is no non-empty selection. */
   selectionRange(): { start: Position; end: Position } | null {
-    const a = this.anchor.value;
-    if (!a) return null;
-    const c: Position = { line: this.line.value, col: this.col.value };
-    if (a.line === c.line && a.col === c.col) return null;
-    const aFirst = a.line < c.line || (a.line === c.line && a.col < c.col);
-    return aFirst ? { start: a, end: c } : { start: c, end: a };
+    const anchorPosition = this.anchor.value;
+    if (!anchorPosition) return null;
+    const cursorPosition: Position = { line: this.line.value, col: this.col.value };
+    if (anchorPosition.line === cursorPosition.line && anchorPosition.col === cursorPosition.col) return null;
+    const anchorFirst =
+      anchorPosition.line < cursorPosition.line ||
+      (anchorPosition.line === cursorPosition.line && anchorPosition.col < cursorPosition.col);
+    return anchorFirst
+      ? { start: anchorPosition, end: cursorPosition }
+      : { start: cursorPosition, end: anchorPosition };
   }
 }
 

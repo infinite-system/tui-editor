@@ -1,10 +1,10 @@
 import { test, expect } from 'bun:test';
 import { MarkdownParser, InlineStyle, type BlockRecord } from '../MarkdownParser';
 
-const parse = (src: string, revision = 0): readonly BlockRecord[] =>
-  new MarkdownParser.Class().parse(src, revision).blocks;
+const parse = (source: string, revision = 0): readonly BlockRecord[] =>
+  new MarkdownParser.Class().parse(source, revision).blocks;
 
-const kinds = (src: string) => parse(src).map((b) => b.kind);
+const kinds = (source: string) => parse(source).map((block) => block.kind);
 
 test('parses a heading with level', () => {
   const [atx] = parse('## Title here');
@@ -30,13 +30,13 @@ test('parses ordered and unordered list items with markers', () => {
   const bullets = parse('- first\n- second\n  - nested');
   // a container 'list' block plus one 'listitem' per row
   expect(bullets[0]!.kind).toBe('list');
-  const items = bullets.filter((b) => b.kind === 'listitem');
-  expect(items.map((i) => i.text)).toEqual(['first', 'second', 'nested']);
+  const items = bullets.filter((block) => block.kind === 'listitem');
+  expect(items.map((item) => item.text)).toEqual(['first', 'second', 'nested']);
   expect(items[0]!.marker).toBe('•');
   expect(items[2]!.level).toBe(2); // two-space indent → depth 2
 
-  const ordered = parse('1. one\n2. two').filter((b) => b.kind === 'listitem');
-  expect(ordered.map((i) => i.marker)).toEqual(['1.', '2.']);
+  const ordered = parse('1. one\n2. two').filter((block) => block.kind === 'listitem');
+  expect(ordered.map((item) => item.marker)).toEqual(['1.', '2.']);
 });
 
 test('parses a fenced code block with language', () => {
@@ -66,18 +66,18 @@ test('parses a horizontal rule', () => {
 });
 
 test('packs inline emphasis strong code and link into flat spans', () => {
-  const [p] = parse('A **bold**, *em*, `code` and a [link](https://x.y).');
-  expect(p!.kind).toBe('paragraph');
+  const [paragraph] = parse('A **bold**, *em*, `code` and a [link](https://x.y).');
+  expect(paragraph!.kind).toBe('paragraph');
   // markup is stripped from the rendered text
-  expect(p!.text).toBe('A bold, em, code and a link.');
+  expect(paragraph!.text).toBe('A bold, em, code and a link.');
   // spans are packed 4 ints per run: [start, end, style, linkIndexPlusOne] — never token objects
-  expect(p!.spans.length % 4).toBe(0);
+  expect(paragraph!.spans.length % 4).toBe(0);
   const runs = [];
-  for (let i = 0; i < p!.spans.length; i += 4) {
+  for (let spanIndex = 0; spanIndex < paragraph!.spans.length; spanIndex += 4) {
     runs.push({
-      text: p!.text.slice(p!.spans[i]!, p!.spans[i + 1]!),
-      style: p!.spans[i + 2]!,
-      link: p!.spans[i + 3]!,
+      text: paragraph!.text.slice(paragraph!.spans[spanIndex]!, paragraph!.spans[spanIndex + 1]!),
+      style: paragraph!.spans[spanIndex + 2]!,
+      link: paragraph!.spans[spanIndex + 3]!,
     });
   }
   expect(runs).toEqual([
@@ -86,17 +86,17 @@ test('packs inline emphasis strong code and link into flat spans', () => {
     { text: 'code', style: InlineStyle.Code, link: 0 },
     { text: 'link', style: InlineStyle.Link, link: 1 },
   ]);
-  expect(p!.links).toEqual(['https://x.y']);
+  expect(paragraph!.links).toEqual(['https://x.y']);
 });
 
 test('a block record is a plain object with no reactive members', () => {
-  const p = parse('plain text')[0]!;
+  const paragraph = parse('plain text')[0]!;
   // every own value is a primitive, a plain array, or a plain range object — no Ref (.value getter)
-  const rec = p as unknown as Record<string, unknown>;
-  for (const key of Object.keys(rec)) {
-    const v = rec[key];
-    if (v && typeof v === 'object') {
-      expect('value' in (v as object)).toBe(false); // not a Vue Ref
+  const record = paragraph as unknown as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    const value = record[key];
+    if (value && typeof value === 'object') {
+      expect('value' in (value as object)).toBe(false); // not a Vue Ref
     }
   }
 });
@@ -104,10 +104,10 @@ test('a block record is a plain object with no reactive members', () => {
 test('stamps block source ranges and preserves the revision', () => {
   const result = new MarkdownParser.Class().parse('# H\n\npara', 42);
   expect(result.revision).toBe(42);
-  const [h, para] = result.blocks;
-  expect(h!.range.startLine).toBe(0);
-  expect(h!.range.startOffset).toBe(0);
+  const [heading, paragraph] = result.blocks;
+  expect(heading!.range.startLine).toBe(0);
+  expect(heading!.range.startOffset).toBe(0);
   // paragraph begins after '# H\n\n' → offset 5, line 2
-  expect(para!.range.startLine).toBe(2);
-  expect(para!.range.startOffset).toBe(5);
+  expect(paragraph!.range.startLine).toBe(2);
+  expect(paragraph!.range.startOffset).toBe(5);
 });

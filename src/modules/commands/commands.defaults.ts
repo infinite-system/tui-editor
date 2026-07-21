@@ -15,79 +15,79 @@ export interface CommandContext {
 
 export function registerDefaultCommands(
   registry: CommandRegistry.Instance,
-  ctx: CommandContext,
+  context: CommandContext,
 ): void {
-  const ed = () => ctx.workspace.editor;
-  const hasDoc = () => ctx.workspace.editor.hasDocument.value;
+  const getEditor = () => context.workspace.editor;
+  const hasDocument = () => context.workspace.editor.hasDocument.value;
 
   registry.registerAll([
     {
       id: 'file.save',
       title: 'File: Save',
       category: 'File',
-      when: hasDoc,
+      when: hasDocument,
       run: () => {
-        ed().save();
+        getEditor().save();
       },
     },
     {
       id: 'edit.undo',
       title: 'Edit: Undo',
       category: 'Edit',
-      when: hasDoc,
-      run: () => ed().performUndo(),
+      when: hasDocument,
+      run: () => getEditor().performUndo(),
     },
     {
       id: 'edit.redo',
       title: 'Edit: Redo',
       category: 'Edit',
-      when: hasDoc,
-      run: () => ed().performRedo(),
+      when: hasDocument,
+      run: () => getEditor().performRedo(),
     },
     {
       id: 'view.focusFiles',
       title: 'View: Focus File Explorer',
       category: 'View',
-      run: () => ctx.workspace.focusFiles(),
+      run: () => context.workspace.focusFiles(),
     },
     {
       id: 'view.focusEditor',
       title: 'View: Focus Editor',
       category: 'View',
-      when: hasDoc,
-      run: () => ctx.workspace.focusEditor(),
+      when: hasDocument,
+      run: () => context.workspace.focusEditor(),
     },
     {
       id: 'view.toggleTheme',
       title: 'View: Toggle Light/Dark Theme',
       category: 'View',
-      run: () => ctx.theme.toggleDark(),
+      run: () => context.theme.toggleDark(),
     },
     {
       id: 'go.top',
       title: 'Go: Top of File',
       category: 'Go',
-      when: hasDoc,
-      run: () => ed().gotoTop(),
+      when: hasDocument,
+      run: () => getEditor().gotoTop(),
     },
     {
       id: 'go.bottom',
       title: 'Go: Bottom of File',
       category: 'Go',
-      when: hasDoc,
-      run: () => ed().gotoBottom(),
+      when: hasDocument,
+      run: () => getEditor().gotoBottom(),
     },
     {
       id: 'files.refresh',
       title: 'Files: Refresh Tree',
       category: 'Files',
-      run: () => ctx.workspace.tree.refresh(),
+      run: () => context.workspace.tree.refresh(),
     },
     {
       id: 'app.quit',
       title: 'Application: Quit',
       category: 'Application',
-      run: () => ctx.quit(),
+      run: () => context.quit(),
     },
   ]);
 }

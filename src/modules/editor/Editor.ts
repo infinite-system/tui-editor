@@ -50,8 +50,8 @@ class $Editor {
   }
 
   selectionText(): string {
-    const r = this.cursor.selectionRange();
-    return r ? this.document.sliceRange(r.start, r.end) : '';
+    const range = this.cursor.selectionRange();
+    return range ? this.document.sliceRange(range.start, range.end) : '';
   }
 
   selectAll(): void {
@@ -64,10 +64,10 @@ class $Editor {
 
   /** Delete the active selection (no undo capture — caller captures). Returns whether it removed. */
   private removeSelection(): boolean {
-    const r = this.cursor.selectionRange();
-    if (!r) return false;
-    const pos = this.document.deleteRange(r.start, r.end);
-    this.cursor.set(pos.line, pos.col);
+    const range = this.cursor.selectionRange();
+    if (!range) return false;
+    const position = this.document.deleteRange(range.start, range.end);
+    this.cursor.set(position.line, position.col);
     this.cursor.clearSelection();
     return true;
   }
@@ -95,12 +95,12 @@ class $Editor {
     );
   }
 
-  insertText(str: string): void {
+  insertText(text: string): void {
     if (this.readOnly.value || !this.hasDocument.value) return;
     this.captureBefore('insert');
     this.removeSelection();
-    const col = this.document.insertInline(this.cursor.line.value, this.cursor.col.value, str);
-    this.cursor.set(this.cursor.line.value, col);
+    const column = this.document.insertInline(this.cursor.line.value, this.cursor.col.value, text);
+    this.cursor.set(this.cursor.line.value, column);
     this.viewport.scrollToLine(this.cursor.line.value, this.document.lineCount);
   }
 
@@ -109,14 +109,14 @@ class $Editor {
     this.captureBefore('newline');
     this.removeSelection();
     // Auto-indent: copy leading whitespace of the current line.
-    const cur = this.document.line(this.cursor.line.value);
-    const indent = cur.match(/^\s*/)?.[0] ?? '';
-    const pos = this.document.splitLine(this.cursor.line.value, this.cursor.col.value);
+    const currentLine = this.document.line(this.cursor.line.value);
+    const indent = currentLine.match(/^\s*/)?.[0] ?? '';
+    const position = this.document.splitLine(this.cursor.line.value, this.cursor.col.value);
     if (indent) {
-      const col = this.document.insertInline(pos.line, 0, indent);
-      this.cursor.set(pos.line, col);
+      const column = this.document.insertInline(position.line, 0, indent);
+      this.cursor.set(position.line, column);
     } else {
-      this.cursor.set(pos.line, pos.col);
+      this.cursor.set(position.line, position.col);
     }
     this.viewport.scrollToLine(this.cursor.line.value, this.document.lineCount);
   }
@@ -128,9 +128,9 @@ class $Editor {
       this.viewport.scrollToLine(this.cursor.line.value, this.document.lineCount);
       return;
     }
-    const pos = this.document.deleteBackward(this.cursor.line.value, this.cursor.col.value);
-    this.cursor.set(pos.line, pos.col);
-    this.viewport.scrollToLine(pos.line, this.document.lineCount);
+    const position = this.document.deleteBackward(this.cursor.line.value, this.cursor.col.value);
+    this.cursor.set(position.line, position.col);
+    this.viewport.scrollToLine(position.line, this.document.lineCount);
   }
 
   deleteChar(): void {
@@ -163,9 +163,9 @@ class $Editor {
     if (!text) return;
     this.captureBefore('insert');
     this.removeSelection();
-    const pos = this.document.insertMultiline(this.cursor.line.value, this.cursor.col.value, text);
-    this.cursor.set(pos.line, pos.col);
-    this.viewport.scrollToLine(pos.line, this.document.lineCount);
+    const position = this.document.insertMultiline(this.cursor.line.value, this.cursor.col.value, text);
+    this.cursor.set(position.line, position.col);
+    this.viewport.scrollToLine(position.line, this.document.lineCount);
   }
 
   // --- undo/redo ------------------------------------------------------------
@@ -217,15 +217,15 @@ class $Editor {
 
   // --- movement (extend = shift-select) -------------------------------------
 
-  private curLineLen(): number {
+  private currentLineLength(): number {
     return graphemeCount(this.document.line(this.cursor.line.value));
   }
 
   moveVertical(delta: number, extend = false): void {
     this.beginMove(extend);
     const target = this.cursor.line.value + delta;
-    const max = this.document.lineCount - 1;
-    const clamped = Math.max(0, Math.min(target, max));
+    const maxLine = this.document.lineCount - 1;
+    const clamped = Math.max(0, Math.min(target, maxLine));
     this.cursor.setLinePreserveGoal(clamped, graphemeCount(this.document.line(clamped)));
     this.viewport.scrollToLine(clamped, this.document.lineCount);
   }
@@ -233,23 +233,23 @@ class $Editor {
   moveHorizontal(delta: number, extend = false): void {
     this.beginMove(extend);
     let line = this.cursor.line.value;
-    let col = this.cursor.col.value + delta;
-    if (col < 0) {
+    let column = this.cursor.col.value + delta;
+    if (column < 0) {
       if (line > 0) {
         line -= 1;
-        col = graphemeCount(this.document.line(line));
+        column = graphemeCount(this.document.line(line));
       } else {
-        col = 0;
+        column = 0;
       }
-    } else if (col > this.curLineLen()) {
+    } else if (column > this.currentLineLength()) {
       if (line < this.document.lineCount - 1) {
         line += 1;
-        col = 0;
+        column = 0;
       } else {
-        col = this.curLineLen();
+        column = this.currentLineLength();
       }
     }
-    this.cursor.set(line, col);
+    this.cursor.set(line, column);
     this.viewport.scrollToLine(line, this.document.lineCount);
   }
 
@@ -259,7 +259,7 @@ class $Editor {
   }
   moveToLineEnd(extend = false): void {
     this.beginMove(extend);
-    this.cursor.set(this.cursor.line.value, this.curLineLen());
+    this.cursor.set(this.cursor.line.value, this.currentLineLength());
   }
   pageDown(extend = false): void {
     this.moveVertical(this.viewport.height.value - 1, extend);

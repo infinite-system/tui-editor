@@ -82,12 +82,12 @@ class $Workspace {
    * a huge log never materializes more than the observed window.
    */
   scrollGitLog(delta: number): void {
-    const gp = this.gitPanel;
-    const cl = this.commitLog.value;
-    const end = cl?.knownEnd.value ?? Number.POSITIVE_INFINITY;
-    const cap = Number.isFinite(end) ? Math.max(0, (end as number) - 1) : gp.logScrollTop.value + Math.max(0, delta);
-    gp.logScrollTop.value = Math.max(0, Math.min(gp.logScrollTop.value + delta, cap));
-    void cl?.ensureRange(gp.logScrollTop.value, 50);
+    const gitPanel = this.gitPanel;
+    const commitLog = this.commitLog.value;
+    const end = commitLog?.knownEnd.value ?? Number.POSITIVE_INFINITY;
+    const maxScrollTop = Number.isFinite(end) ? Math.max(0, (end as number) - 1) : gitPanel.logScrollTop.value + Math.max(0, delta);
+    gitPanel.logScrollTop.value = Math.max(0, Math.min(gitPanel.logScrollTop.value + delta, maxScrollTop));
+    void commitLog?.ensureRange(gitPanel.logScrollTop.value, 50);
   }
 
   /** A wheel notch: add a momentum impulse (the frame loop then glides the log). */
@@ -107,20 +107,20 @@ class $Workspace {
    * moving (the frame loop keeps requesting frames while true). Cost stays O(window).
    */
   tickGitLogScroll(dtSec: number): boolean {
-    const gp = this.gitPanel;
-    const { momentum, rows } = stepMomentum(gp.logMomentum.value, dtSec);
-    gp.logMomentum.value = momentum;
+    const gitPanel = this.gitPanel;
+    const { momentum, rows } = stepMomentum(gitPanel.logMomentum.value, dtSec);
+    gitPanel.logMomentum.value = momentum;
     if (rows !== 0) this.scrollGitLog(rows);
     return isMoving(momentum);
   }
 
   /** Activate the current tree selection: open a file (and focus editor) or toggle a dir. */
   activate(): { opened?: string } {
-    const res = this.tree.activateSelected();
-    if (res && 'openFile' in res) {
-      this.editor.openFile(res.openFile);
+    const result = this.tree.activateSelected();
+    if (result && 'openFile' in result) {
+      this.editor.openFile(result.openFile);
       this.focus.value = 'editor';
-      return { opened: res.openFile };
+      return { opened: result.openFile };
     }
     return {};
   }

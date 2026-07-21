@@ -3,28 +3,28 @@ import { DARK, quantizePalette } from '../theme.palettes';
 import { iconSetFor, iconFor } from '../theme.icons';
 
 test('truecolor quantization is identity', () => {
-  const p = quantizePalette(DARK, 'truecolor');
-  expect(p.bg).toBe(DARK.bg);
+  const palette = quantizePalette(DARK, 'truecolor');
+  expect(palette.bg).toBe(DARK.bg);
 });
 
 test('16-color quantization maps every color into the ANSI-16 set', () => {
-  const p = quantizePalette(DARK, '16');
+  const palette = quantizePalette(DARK, '16');
   const ansi = new Set([
     '#000000', '#800000', '#008000', '#808000', '#000080', '#800080',
     '#008080', '#c0c0c0', '#808080', '#ff0000', '#00ff00', '#ffff00',
     '#0000ff', '#ff00ff', '#00ffff', '#ffffff',
   ]);
-  for (const key of Object.keys(p) as Array<keyof typeof p>) {
-    const v = p[key];
-    if (typeof v === 'string' && v.startsWith('#')) {
-      expect(ansi.has(v)).toBe(true);
+  for (const key of Object.keys(palette) as Array<keyof typeof palette>) {
+    const value = palette[key];
+    if (typeof value === 'string' && value.startsWith('#')) {
+      expect(ansi.has(value)).toBe(true);
     }
   }
 });
 
 test('256 quantization keeps hex shape', () => {
-  const p = quantizePalette(DARK, '256');
-  expect(p.accent).toMatch(/^#[0-9a-f]{6}$/);
+  const palette = quantizePalette(DARK, '256');
+  expect(palette.accent).toMatch(/^#[0-9a-f]{6}$/);
 });
 
 test('icon fallback ladder: nerd has glyphs, ascii uses markers', () => {
@@ -36,7 +36,7 @@ test('icon fallback ladder: nerd has glyphs, ascii uses markers', () => {
 });
 
 test('unicode icon set resolves known extension and falls back for unknown', () => {
-  const u = iconSetFor('unicode');
-  expect(iconFor(u, 'main.ts', false)).toBe('◆');
-  expect(iconFor(u, 'weird.zzz', false)).toBe(u.file);
+  const unicodeSet = iconSetFor('unicode');
+  expect(iconFor(unicodeSet, 'main.ts', false)).toBe('◆');
+  expect(iconFor(unicodeSet, 'weird.zzz', false)).toBe(unicodeSet.file);
 });

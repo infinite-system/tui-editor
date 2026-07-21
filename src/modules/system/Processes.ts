@@ -18,24 +18,24 @@ class $Processes {
    */
   static async run(argv: string[], cwd?: string, input?: string): Promise<RunResult> {
     try {
-      const proc = Bun.spawn(argv, {
+      const subprocess = Bun.spawn(argv, {
         cwd,
         stdin: input ? 'pipe' : 'ignore',
         stdout: 'pipe',
         stderr: 'pipe',
       });
-      if (input && proc.stdin) {
-        proc.stdin.write(input);
-        await proc.stdin.end();
+      if (input && subprocess.stdin) {
+        subprocess.stdin.write(input);
+        await subprocess.stdin.end();
       }
       const [stdout, stderr, code] = await Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
+        new Response(subprocess.stdout).text(),
+        new Response(subprocess.stderr).text(),
+        subprocess.exited,
       ]);
       return { code, stdout, stderr, ok: code === 0 };
-    } catch (e) {
-      return { code: -1, stdout: '', stderr: String(e), ok: false };
+    } catch (error) {
+      return { code: -1, stdout: '', stderr: String(error), ok: false };
     }
   }
 }

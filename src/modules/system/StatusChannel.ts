@@ -8,7 +8,7 @@ import { Static } from './Static';
 import { writeFileSync, renameSync, mkdirSync } from 'node:fs';
 
 const STATUS_PATH = 'artifacts/status.json';
-const TMP_PATH = 'artifacts/.status.json.tmp';
+const TEMP_PATH = 'artifacts/.status.json.tmp';
 let prepared = false;
 
 export interface StatusSnapshot {
@@ -75,8 +75,8 @@ class $StatusChannel {
       prepared = true;
     }
     try {
-      writeFileSync(TMP_PATH, JSON.stringify(state, null, 2));
-      renameSync(TMP_PATH, STATUS_PATH);
+      writeFileSync(TEMP_PATH, JSON.stringify(state, null, 2));
+      renameSync(TEMP_PATH, STATUS_PATH);
     } catch {
       /* never crash the app over observability */
     }

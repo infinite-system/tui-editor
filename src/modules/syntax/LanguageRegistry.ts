@@ -4,7 +4,7 @@
 // invariant: Construction goes through overridable seams (project.invariants.md)
 import type { LangId } from './Highlighter';
 
-const BY_EXT: Record<string, LangId> = {
+const BY_EXTENSION: Record<string, LangId> = {
   ts: 'typescript', tsx: 'typescript', mts: 'typescript', cts: 'typescript',
   js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
   json: 'json', jsonc: 'json',
@@ -13,10 +13,10 @@ const BY_EXT: Record<string, LangId> = {
 
 class $LanguageRegistry {
   static forPath(path: string): LangId {
-    const dot = path.lastIndexOf('.');
-    if (dot < 0) return 'plain';
-    const ext = path.slice(dot + 1).toLowerCase();
-    return BY_EXT[ext] ?? 'plain';
+    const dotIndex = path.lastIndexOf('.');
+    if (dotIndex < 0) return 'plain';
+    const extension = path.slice(dotIndex + 1).toLowerCase();
+    return BY_EXTENSION[extension] ?? 'plain';
   }
 }
 

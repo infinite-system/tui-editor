@@ -28,9 +28,9 @@ export const DEFAULT_MOMENTUM: MomentumOptions = {
 export const AT_REST: ScrollMomentum = { velocity: 0, residual: 0 };
 
 /** Add a wheel/flick impulse in the direction of `deltaRows`; same-direction impulses accumulate. */
-export function addImpulse(m: ScrollMomentum, deltaRows: number, opts: MomentumOptions = DEFAULT_MOMENTUM): ScrollMomentum {
-  const v = m.velocity + deltaRows * opts.impulse;
-  return { velocity: Math.max(-opts.max, Math.min(opts.max, v)), residual: m.residual };
+export function addImpulse(momentum: ScrollMomentum, deltaRows: number, options: MomentumOptions = DEFAULT_MOMENTUM): ScrollMomentum {
+  const velocity = momentum.velocity + deltaRows * options.impulse;
+  return { velocity: Math.max(-options.max, Math.min(options.max, velocity)), residual: momentum.residual };
 }
 
 /**
@@ -40,16 +40,16 @@ export function addImpulse(m: ScrollMomentum, deltaRows: number, opts: MomentumO
  * drop the residual so there is no slow sub-row tail.
  */
 export function stepMomentum(
-  m: ScrollMomentum,
+  momentum: ScrollMomentum,
   dtSec: number,
-  opts: MomentumOptions = DEFAULT_MOMENTUM,
+  options: MomentumOptions = DEFAULT_MOMENTUM,
 ): { momentum: ScrollMomentum; rows: number } {
-  if (m.velocity === 0 || dtSec <= 0) return { momentum: m, rows: 0 };
-  const advanced = m.residual + m.velocity * dtSec;
+  if (momentum.velocity === 0 || dtSec <= 0) return { momentum, rows: 0 };
+  const advanced = momentum.residual + momentum.velocity * dtSec;
   const rows = Math.trunc(advanced);
   let residual = advanced - rows;
-  let velocity = m.velocity * Math.pow(opts.decayPerSec, dtSec);
-  if (Math.abs(velocity) < opts.stopVelocity) {
+  let velocity = momentum.velocity * Math.pow(options.decayPerSec, dtSec);
+  if (Math.abs(velocity) < options.stopVelocity) {
     velocity = 0;
     residual = 0;
   }
@@ -61,6 +61,6 @@ export function halt(): ScrollMomentum {
   return AT_REST;
 }
 
-export function isMoving(m: ScrollMomentum): boolean {
-  return m.velocity !== 0;
+export function isMoving(momentum: ScrollMomentum): boolean {
+  return momentum.velocity !== 0;
 }

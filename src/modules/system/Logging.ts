@@ -12,7 +12,7 @@ class $Logging {
     return LOG_PATH;
   }
 
-  static write(level: string, msg: string): void {
+  static write(level: string, message: string): void {
     if (!prepared) {
       try {
         mkdirSync(dirname(LOG_PATH), { recursive: true });
@@ -21,7 +21,7 @@ class $Logging {
       }
       prepared = true;
     }
-    const line = `${new Date().toISOString()} [${level}] ${msg}\n`;
+    const line = `${new Date().toISOString()} [${level}] ${message}\n`;
     try {
       appendFileSync(LOG_PATH, line);
     } catch {
@@ -29,12 +29,12 @@ class $Logging {
     }
   }
 
-  static info(msg: string): void {
-    this.write('info', msg);
+  static info(message: string): void {
+    this.write('info', message);
   }
 
-  static error(msg: string): void {
-    this.write('error', msg);
+  static error(message: string): void {
+    this.write('error', message);
   }
 }
 

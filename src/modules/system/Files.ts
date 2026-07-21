@@ -53,20 +53,20 @@ class $Files {
   }
 
   /** List a directory, directories first then files, both alphabetical. */
-  static list(dir: string): DirEntry[] {
+  static list(directory: string): DirEntry[] {
     let names: string[];
     try {
-      names = readdirSync(dir);
+      names = readdirSync(directory);
     } catch {
       return [];
     }
     const entries: DirEntry[] = names.map((name) => {
-      const path = join(dir, name);
+      const path = join(directory, name);
       return { name, path, isDir: this.isDir(path) };
     });
-    entries.sort((a, b) => {
-      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-      return a.name.localeCompare(b.name);
+    entries.sort((first, second) => {
+      if (first.isDir !== second.isDir) return first.isDir ? -1 : 1;
+      return first.name.localeCompare(second.name);
     });
     return entries;
   }
@@ -90,20 +90,20 @@ class $Files {
    * invariant: file operations stay within the workspace root (path traversal) — see L9.
    */
   static confineToRoot(root: string, child: string): string | null {
-    const absRoot = resolve(root);
-    const abs = resolve(absRoot, child);
-    if (abs === absRoot) return abs;
-    if (abs.startsWith(absRoot + sep)) return abs;
+    const absoluteRoot = resolve(root);
+    const absolutePath = resolve(absoluteRoot, child);
+    if (absolutePath === absoluteRoot) return absolutePath;
+    if (absolutePath.startsWith(absoluteRoot + sep)) return absolutePath;
     return null;
   }
 
   /** Heuristic binary sniff: a NUL byte in the first 8 KB. */
   static looksBinary(path: string): boolean {
     try {
-      const buf = readFileSync(path);
-      const n = Math.min(buf.length, 8192);
-      for (let i = 0; i < n; i++) {
-        if (buf[i] === 0) return true;
+      const buffer = readFileSync(path);
+      const scanLimit = Math.min(buffer.length, 8192);
+      for (let index = 0; index < scanLimit; index++) {
+        if (buffer[index] === 0) return true;
       }
       return false;
     } catch {

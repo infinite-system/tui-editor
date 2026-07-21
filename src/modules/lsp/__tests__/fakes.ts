@@ -173,5 +173,5 @@ export class FakeProvider implements LanguageProvider {
 
 /** Flush pending micro/macrotasks so in-flight notify chains settle deterministically. */
 export async function flush(times = 6): Promise<void> {
-  for (let i = 0; i < times; i++) await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  for (let index = 0; index < times; index++) await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }

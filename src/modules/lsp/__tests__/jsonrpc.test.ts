@@ -18,35 +18,35 @@ test('encode produces a Content-Length header and a JSON body', () => {
 });
 
 test('a full frame decodes to exactly one message', () => {
-  const enc = new JsonRpc.Class();
-  const dec = new JsonRpc.Class();
-  const messages = dec.push(frame(enc, { jsonrpc: '2.0', method: 'notify', params: 42 }));
+  const encoder = new JsonRpc.Class();
+  const decoder = new JsonRpc.Class();
+  const messages = decoder.push(frame(encoder, { jsonrpc: '2.0', method: 'notify', params: 42 }));
   expect(messages).toHaveLength(1);
   expect(messages[0]).toEqual({ jsonrpc: '2.0', method: 'notify', params: 42 });
 });
 
 test('a message split across two chunks is buffered until complete', () => {
-  const enc = new JsonRpc.Class();
-  const dec = new JsonRpc.Class();
-  const bytes = frame(enc, { jsonrpc: '2.0', method: 'split', params: { text: 'hello world' } });
-  const mid = Math.floor(bytes.byteLength / 2);
+  const encoder = new JsonRpc.Class();
+  const decoder = new JsonRpc.Class();
+  const bytes = frame(encoder, { jsonrpc: '2.0', method: 'split', params: { text: 'hello world' } });
+  const midpoint = Math.floor(bytes.byteLength / 2);
 
-  expect(dec.push(bytes.slice(0, mid))).toHaveLength(0); // header/body incomplete
-  const rest = dec.push(bytes.slice(mid));
+  expect(decoder.push(bytes.slice(0, midpoint))).toHaveLength(0); // header/body incomplete
+  const rest = decoder.push(bytes.slice(midpoint));
   expect(rest).toHaveLength(1);
   expect(rest[0]).toEqual({ jsonrpc: '2.0', method: 'split', params: { text: 'hello world' } });
 });
 
 test('two messages in one chunk decode in wire order', () => {
-  const enc = new JsonRpc.Class();
-  const dec = new JsonRpc.Class();
-  const a = frame(enc, { jsonrpc: '2.0', method: 'first' });
-  const b = frame(enc, { jsonrpc: '2.0', method: 'second' });
-  const both = new Uint8Array(a.byteLength + b.byteLength);
-  both.set(a, 0);
-  both.set(b, a.byteLength);
+  const encoder = new JsonRpc.Class();
+  const decoder = new JsonRpc.Class();
+  const firstFrame = frame(encoder, { jsonrpc: '2.0', method: 'first' });
+  const secondFrame = frame(encoder, { jsonrpc: '2.0', method: 'second' });
+  const both = new Uint8Array(firstFrame.byteLength + secondFrame.byteLength);
+  both.set(firstFrame, 0);
+  both.set(secondFrame, firstFrame.byteLength);
 
-  const messages = dec.push(both);
+  const messages = decoder.push(both);
   expect(messages).toHaveLength(2);
   expect((messages[0] as { method: string }).method).toBe('first');
   expect((messages[1] as { method: string }).method).toBe('second');
@@ -77,11 +77,11 @@ test('an error response rejects its pending request', async () => {
 });
 
 test('a malformed JSON body throws rather than emitting a message', () => {
-  const dec = new JsonRpc.Class();
+  const decoder = new JsonRpc.Class();
   const body = new TextEncoder().encode('{ not json');
   const header = new TextEncoder().encode(`Content-Length: ${body.byteLength}\r\n\r\n`);
   const bytes = new Uint8Array(header.byteLength + body.byteLength);
   bytes.set(header, 0);
   bytes.set(body, header.byteLength);
-  expect(() => dec.push(bytes)).toThrow();
+  expect(() => decoder.push(bytes)).toThrow();
 });

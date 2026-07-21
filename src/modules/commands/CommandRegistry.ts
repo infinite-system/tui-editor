@@ -19,21 +19,21 @@ export interface Command {
 /** Case-insensitive subsequence match; returns a score (lower = tighter) or -1. */
 export function fuzzyScore(query: string, text: string): number {
   if (!query) return 0;
-  const q = query.toLowerCase();
-  const t = text.toLowerCase();
-  let qi = 0;
-  let ti = 0;
+  const loweredQuery = query.toLowerCase();
+  const loweredText = text.toLowerCase();
+  let queryIndex = 0;
+  let textIndex = 0;
   let score = 0;
   let lastMatch = -1;
-  while (qi < q.length && ti < t.length) {
-    if (q[qi] === t[ti]) {
-      if (lastMatch >= 0) score += ti - lastMatch; // reward adjacency
-      lastMatch = ti;
-      qi++;
+  while (queryIndex < loweredQuery.length && textIndex < loweredText.length) {
+    if (loweredQuery[queryIndex] === loweredText[textIndex]) {
+      if (lastMatch >= 0) score += textIndex - lastMatch; // reward adjacency
+      lastMatch = textIndex;
+      queryIndex++;
     }
-    ti++;
+    textIndex++;
   }
-  return qi === q.length ? score : -1;
+  return queryIndex === loweredQuery.length ? score : -1;
 }
 
 class $CommandRegistry {
@@ -53,12 +53,12 @@ class $CommandRegistry {
     return shallowRef<Command[]>([]);
   }
 
-  register(cmd: Command): void {
-    this.commands.set(cmd.id, cmd);
+  register(command: Command): void {
+    this.commands.set(command.id, command);
   }
 
-  registerAll(cmds: Command[]): void {
-    for (const c of cmds) this.register(c);
+  registerAll(commands: Command[]): void {
+    for (const command of commands) this.register(command);
   }
 
   get(id: string): Command | undefined {
@@ -66,12 +66,12 @@ class $CommandRegistry {
   }
 
   all(): Command[] {
-    return [...this.commands.values()].filter((c) => (c.when ? c.when() : true));
+    return [...this.commands.values()].filter((command) => (command.when ? command.when() : true));
   }
 
   run(id: string): void {
-    const cmd = this.commands.get(id);
-    if (cmd && (!cmd.when || cmd.when())) void cmd.run();
+    const command = this.commands.get(id);
+    if (command && (!command.when || command.when())) void command.run();
   }
 
   // --- palette control ---
@@ -80,12 +80,12 @@ class $CommandRegistry {
   }
 
   private recompute(): void {
-    const q = this.query.value;
+    const query = this.query.value;
     const scored = this.all()
-      .map((c) => ({ c, s: fuzzyScore(q, c.title) }))
-      .filter((x) => x.s >= 0)
-      .sort((a, b) => a.s - b.s || a.c.title.localeCompare(b.c.title));
-    this.filteredRef.value = scored.map((x) => x.c);
+      .map((command) => ({ command, score: fuzzyScore(query, command.title) }))
+      .filter((entry) => entry.score >= 0)
+      .sort((left, right) => left.score - right.score || left.command.title.localeCompare(right.command.title));
+    this.filteredRef.value = scored.map((entry) => entry.command);
     if (this.selectedIndex.value >= this.filteredRef.value.length) {
       this.selectedIndex.value = Math.max(0, this.filteredRef.value.length - 1);
     }
@@ -103,14 +103,14 @@ class $CommandRegistry {
     this.query.value = '';
   }
 
-  setQuery(q: string): void {
-    this.query.value = q;
+  setQuery(query: string): void {
+    this.query.value = query;
     this.selectedIndex.value = 0;
     this.recompute();
   }
 
-  appendQuery(ch: string): void {
-    this.setQuery(this.query.value + ch);
+  appendQuery(character: string): void {
+    this.setQuery(this.query.value + character);
   }
 
   backspaceQuery(): void {
@@ -118,18 +118,18 @@ class $CommandRegistry {
   }
 
   moveSelection(delta: number): void {
-    const n = this.filtered.length;
-    if (n === 0) return;
-    let i = this.selectedIndex.value + delta;
-    if (i < 0) i = n - 1;
-    if (i >= n) i = 0;
-    this.selectedIndex.value = i;
+    const count = this.filtered.length;
+    if (count === 0) return;
+    let index = this.selectedIndex.value + delta;
+    if (index < 0) index = count - 1;
+    if (index >= count) index = 0;
+    this.selectedIndex.value = index;
   }
 
   runSelected(): void {
-    const cmd = this.filtered[this.selectedIndex.value];
+    const command = this.filtered[this.selectedIndex.value];
     this.closePalette();
-    if (cmd && (!cmd.when || cmd.when())) void cmd.run();
+    if (command && (!command.when || command.when())) void command.run();
   }
 }
 

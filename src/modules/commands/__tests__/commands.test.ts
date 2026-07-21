@@ -15,43 +15,43 @@ test('tighter (adjacent) matches score lower than spread-out ones', () => {
 });
 
 test('registry filters by query and runs the selected command', () => {
-  const r = new CommandRegistry.Class();
+  const registry = new CommandRegistry.Class();
   let ran = '';
-  r.registerAll([
+  registry.registerAll([
     { id: 'a', title: 'File: Save', run: () => { ran = 'save'; } },
     { id: 'b', title: 'Edit: Undo', run: () => { ran = 'undo'; } },
     { id: 'c', title: 'View: Toggle Theme', run: () => { ran = 'theme'; } },
   ]);
-  r.openPalette();
-  expect(r.filtered.length).toBe(3);
-  r.setQuery('undo');
-  expect(r.filtered.map((c) => c.id)).toEqual(['b']);
-  r.runSelected();
+  registry.openPalette();
+  expect(registry.filtered.length).toBe(3);
+  registry.setQuery('undo');
+  expect(registry.filtered.map((command) => command.id)).toEqual(['b']);
+  registry.runSelected();
   expect(ran).toBe('undo');
-  expect(r.open.value).toBe(false);
+  expect(registry.open.value).toBe(false);
 });
 
 test('when() gates command availability', () => {
-  const r = new CommandRegistry.Class();
+  const registry = new CommandRegistry.Class();
   let enabled = false;
-  r.register({ id: 'x', title: 'Gated', when: () => enabled, run: () => {} });
-  r.openPalette();
-  expect(r.filtered.length).toBe(0);
+  registry.register({ id: 'x', title: 'Gated', when: () => enabled, run: () => {} });
+  registry.openPalette();
+  expect(registry.filtered.length).toBe(0);
   enabled = true;
-  r.setQuery('');
-  expect(r.filtered.length).toBe(1);
+  registry.setQuery('');
+  expect(registry.filtered.length).toBe(1);
 });
 
 test('selection wraps around the filtered list', () => {
-  const r = new CommandRegistry.Class();
-  r.registerAll([
+  const registry = new CommandRegistry.Class();
+  registry.registerAll([
     { id: 'a', title: 'Aaa', run: () => {} },
     { id: 'b', title: 'Bbb', run: () => {} },
   ]);
-  r.openPalette();
-  expect(r.selectedIndex.value).toBe(0);
-  r.moveSelection(-1);
-  expect(r.selectedIndex.value).toBe(1); // wrapped
-  r.moveSelection(1);
-  expect(r.selectedIndex.value).toBe(0);
+  registry.openPalette();
+  expect(registry.selectedIndex.value).toBe(0);
+  registry.moveSelection(-1);
+  expect(registry.selectedIndex.value).toBe(1); // wrapped
+  registry.moveSelection(1);
+  expect(registry.selectedIndex.value).toBe(0);
 });

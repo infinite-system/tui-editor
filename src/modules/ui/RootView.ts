@@ -22,20 +22,20 @@ import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { displayColumn, lineWidth } from '../editor/editor.coordinates';
 import { SelectableText } from './SelectableText';
 
-function roleColor(role: Role, pal: Palette): string {
+function roleColor(role: Role, palette: Palette): string {
   switch (role) {
-    case 'keyword': return pal.keyword;
-    case 'string': return pal.string;
-    case 'number': return pal.number;
-    case 'comment': return pal.comment;
-    case 'func': return pal.func;
-    case 'type': return pal.type;
-    case 'operator': return pal.operator;
-    default: return pal.fg;
+    case 'keyword': return palette.keyword;
+    case 'string': return palette.string;
+    case 'number': return palette.number;
+    case 'comment': return palette.comment;
+    case 'func': return palette.func;
+    case 'type': return palette.type;
+    case 'operator': return palette.operator;
+    default: return palette.fg;
   }
 }
 
-const SIDEBAR_W = 32;
+const SIDEBAR_WIDTH = 32;
 
 export interface RootView {
   update(): void;
@@ -46,19 +46,19 @@ export interface RootView {
 
 export function buildRootView(
   renderer: CliRenderer,
-  ws: Workspace.Instance,
+  workspace: Workspace.Instance,
   theme: Theme.Instance,
   commands: CommandRegistry.Instance,
 ): RootView {
   const root = renderer.root;
-  const p = () => theme.palette;
+  const readPalette = () => theme.palette;
 
   const column = new BoxRenderable(renderer, {
     id: 'root-column',
     flexDirection: 'column',
     width: '100%',
     height: '100%',
-    backgroundColor: p().bg,
+    backgroundColor: readPalette().bg,
   });
 
   const mainRow = new BoxRenderable(renderer, {
@@ -70,12 +70,12 @@ export function buildRootView(
 
   const sidebar = new BoxRenderable(renderer, {
     id: 'sidebar',
-    width: SIDEBAR_W,
+    width: SIDEBAR_WIDTH,
     height: '100%',
     border: true,
     borderStyle: 'rounded',
     title: 'Files',
-    backgroundColor: p().panel,
+    backgroundColor: readPalette().panel,
   });
   const sidebarBody = new TextRenderable(renderer, { id: 'sidebar-body', content: '' });
   sidebar.add(sidebarBody);
@@ -110,7 +110,7 @@ export function buildRootView(
     width: '100%',
     height: 1,
     flexDirection: 'row',
-    backgroundColor: p().statusBg,
+    backgroundColor: readPalette().statusBg,
   });
   const statusText = new TextRenderable(renderer, { id: 'status-text', content: '' });
   statusBar.add(statusText);
@@ -120,7 +120,7 @@ export function buildRootView(
   root.add(column);
 
   // Command palette overlay — added last so it renders on top; shown only when open.
-  const palette = new BoxRenderable(renderer, {
+  const commandPalette = new BoxRenderable(renderer, {
     id: 'palette',
     position: 'absolute',
     left: '20%',
@@ -133,32 +133,32 @@ export function buildRootView(
     visible: false,
     zIndex: 100,
   });
-  const paletteInput = new TextRenderable(renderer, { id: 'palette-input', content: '' });
-  const paletteList = new TextRenderable(renderer, { id: 'palette-list', content: '' });
-  palette.add(paletteInput);
-  palette.add(paletteList);
-  root.add(palette);
+  const commandPaletteInput = new TextRenderable(renderer, { id: 'palette-input', content: '' });
+  const commandPaletteList = new TextRenderable(renderer, { id: 'palette-list', content: '' });
+  commandPalette.add(commandPaletteInput);
+  commandPalette.add(commandPaletteList);
+  root.add(commandPalette);
 
   // Interior height of a bordered box = box height - 2 (top+bottom border).
   const editorViewportHeight = () => Math.max(1, (editorArea.height as number) - 2);
   const editorViewportWidth = () => Math.max(1, (editorArea.width as number) - 2 - 6); // gutter
 
   function renderTree(): string {
-    const pal = p();
-    const rows = ws.tree.rows;
-    const sel = ws.tree.selectedIndex.value;
+    const palette = readPalette();
+    const rows = workspace.tree.rows;
+    const selectedIndex = workspace.tree.selectedIndex.value;
     const height = Math.max(1, (sidebar.height as number) - 2);
     // Flyweight: only render the visible window around the selection.
     let top = 0;
-    if (sel >= height) top = sel - height + 1;
+    if (selectedIndex >= height) top = selectedIndex - height + 1;
     const visible = rows.slice(top, top + height);
-    const lines = visible.map((r, i) => {
-      const idx = top + i;
-      const indent = '  '.repeat(r.depth);
-      const icon = theme.icon(r.name, r.isDir, r.expanded);
-      const marker = idx === sel && ws.focus.value === 'files' ? '›' : ' ';
-      let label = `${marker}${indent}${icon} ${r.name}`;
-      if (label.length > SIDEBAR_W - 2) label = label.slice(0, SIDEBAR_W - 2);
+    const lines = visible.map((row, visibleIndex) => {
+      const rowIndex = top + visibleIndex;
+      const indent = '  '.repeat(row.depth);
+      const icon = theme.icon(row.name, row.isDir, row.expanded);
+      const marker = rowIndex === selectedIndex && workspace.focus.value === 'files' ? '›' : ' ';
+      let label = `${marker}${indent}${icon} ${row.name}`;
+      if (label.length > SIDEBAR_WIDTH - 2) label = label.slice(0, SIDEBAR_WIDTH - 2);
       return label;
     });
     return lines.join('\n');
@@ -175,40 +175,40 @@ export function buildRootView(
   ].join('\n');
 
   // Gutter width in cells for the current document: "NN " (line number + space) + 1 marker cell.
-  const gutterWidth = () => String(ws.editor.document.lineCount).length + 1 + 2;
+  const gutterWidth = () => String(workspace.editor.document.lineCount).length + 1 + 2;
 
   // Builds the visible window as two aligned StyledTexts — the gutter (line numbers + current-line
   // marker) and the code (syntax colors only, NO gutter). Only the visible lines are tokenized
   // (flyweight). Returns null for the empty state.
   function renderEditor(): { gutter: StyledText; code: StyledText } | null {
-    const ed = ws.editor;
-    if (!ed.hasDocument.value) return null;
-    const pal = p();
-    const lang = LanguageRegistry.Class.forPath(ed.document.path);
+    const editor = workspace.editor;
+    if (!editor.hasDocument.value) return null;
+    const palette = readPalette();
+    const language = LanguageRegistry.Class.forPath(editor.document.path);
     const height = editorViewportHeight();
-    const top = ed.viewport.scrollTop.value;
-    const win = ed.document.slice(top, height);
-    const gw = String(ed.document.lineCount).length + 1;
-    const curLine = ed.cursor.line.value;
-    const focused = ws.focus.value === 'editor';
+    const top = editor.viewport.scrollTop.value;
+    const visibleLines = editor.document.slice(top, height);
+    const lineNumberWidth = String(editor.document.lineCount).length + 1;
+    const currentLineIndex = editor.cursor.line.value;
+    const focused = workspace.focus.value === 'editor';
     const gutterChunks: TextChunk[] = [];
     const codeChunks: TextChunk[] = [];
-    win.forEach((text, i) => {
-      const lineNo = top + i;
-      const isCur = lineNo === curLine;
-      const num = String(lineNo + 1).padStart(gw, ' ');
-      gutterChunks.push(fg(isCur ? pal.accent : pal.dim)(`${num} `));
-      gutterChunks.push(fg(pal.accent)(isCur && focused ? '▏' : ' '));
-      if (ed.document.binary.value || lang === 'plain') {
-        codeChunks.push(fg(pal.fg)(text));
+    visibleLines.forEach((text, visibleIndex) => {
+      const lineNumber = top + visibleIndex;
+      const isCurrentLine = lineNumber === currentLineIndex;
+      const lineNumberText = String(lineNumber + 1).padStart(lineNumberWidth, ' ');
+      gutterChunks.push(fg(isCurrentLine ? palette.accent : palette.dim)(`${lineNumberText} `));
+      gutterChunks.push(fg(palette.accent)(isCurrentLine && focused ? '▏' : ' '));
+      if (editor.document.binary.value || language === 'plain') {
+        codeChunks.push(fg(palette.fg)(text));
       } else {
-        for (const span of highlightLine(text, lang)) {
-          codeChunks.push(fg(roleColor(span.role, pal))(span.text));
+        for (const span of highlightLine(text, language)) {
+          codeChunks.push(fg(roleColor(span.role, palette))(span.text));
         }
       }
-      if (i < win.length - 1) {
-        gutterChunks.push(fg(pal.fg)('\n'));
-        codeChunks.push(fg(pal.fg)('\n'));
+      if (visibleIndex < visibleLines.length - 1) {
+        gutterChunks.push(fg(palette.fg)('\n'));
+        codeChunks.push(fg(palette.fg)('\n'));
       }
     });
     return { gutter: new StyledText(gutterChunks), code: new StyledText(codeChunks) };
@@ -218,21 +218,21 @@ export function buildRootView(
   // code-local coords (x = display column, y = visible-line index). Clamps to the visible window.
   // invariant: The selected range renders with a background (ui.invariants.md)
   function applySelection(): void {
-    const ed = ws.editor;
-    const sel = ed.hasDocument.value ? ed.cursor.selectionRange() : null;
-    const top = ed.viewport.scrollTop.value;
-    const vh = editorViewportHeight();
-    if (!sel || sel.end.line < top || sel.start.line >= top + vh) {
+    const editor = workspace.editor;
+    const selection = editor.hasDocument.value ? editor.cursor.selectionRange() : null;
+    const top = editor.viewport.scrollTop.value;
+    const viewportHeight = editorViewportHeight();
+    if (!selection || selection.end.line < top || selection.start.line >= top + viewportHeight) {
       codeBody.clearSelectionRange();
       return;
     }
-    const anchorY = Math.max(0, sel.start.line - top);
-    const anchorX = sel.start.line >= top ? displayColumn(ed.document.line(sel.start.line), sel.start.col) : 0;
-    const focusY = Math.min(vh - 1, sel.end.line - top);
+    const anchorY = Math.max(0, selection.start.line - top);
+    const anchorX = selection.start.line >= top ? displayColumn(editor.document.line(selection.start.line), selection.start.col) : 0;
+    const focusY = Math.min(viewportHeight - 1, selection.end.line - top);
     const focusX =
-      sel.end.line < top + vh
-        ? displayColumn(ed.document.line(sel.end.line), sel.end.col)
-        : lineWidth(ed.document.line(Math.min(top + vh - 1, ed.document.lineCount - 1)));
+      selection.end.line < top + viewportHeight
+        ? displayColumn(editor.document.line(selection.end.line), selection.end.col)
+        : lineWidth(editor.document.line(Math.min(top + viewportHeight - 1, editor.document.lineCount - 1)));
     codeBody.setSelectionRange(anchorX, anchorY, focusX, focusY);
   }
 
@@ -241,85 +241,85 @@ export function buildRootView(
   // gitPanel.splitRatio. Keyboard-driven for now; mouse + drill-down + drag layer on next.
   // invariant: Cost tracks the actively observed set (project.invariants.md)
   function renderGitPanel(): StyledText {
-    const pal = p();
-    const clip = (s: string) => (s.length > SIDEBAR_W - 2 ? s.slice(0, SIDEBAR_W - 2) : s);
+    const palette = readPalette();
+    const clip = (text: string) => (text.length > SIDEBAR_WIDTH - 2 ? text.slice(0, SIDEBAR_WIDTH - 2) : text);
     const chunks: TextChunk[] = [];
-    const push = (text: string, color: string, nl = true) => {
+    const push = (text: string, color: string, newline = true) => {
       chunks.push(fg(color)(clip(text)));
-      if (nl) chunks.push(fg(pal.fg)('\n'));
+      if (newline) chunks.push(fg(palette.fg)('\n'));
     };
-    const git = ws.git.value;
-    const gp = ws.gitPanel;
-    const active = ws.focus.value === 'git';
-    if (!git) return new StyledText([fg(pal.dim)('  no repository')]);
+    const git = workspace.git.value;
+    const gitPanel = workspace.gitPanel;
+    const active = workspace.focus.value === 'git';
+    if (!git) return new StyledText([fg(palette.dim)('  no repository')]);
 
-    const bodyH = Math.max(1, (sidebar.height as number) - 2);
-    push(` ${git.branch.value || '(no branch)'}  ${git.head.value.slice(0, 7)}`, pal.accent);
+    const bodyHeight = Math.max(1, (sidebar.height as number) - 2);
+    push(` ${git.branch.value || '(no branch)'}  ${git.head.value.slice(0, 7)}`, palette.accent);
     if (git.error.value) {
-      push(`  ${git.error.value}`, pal.number);
+      push(`  ${git.error.value}`, palette.number);
       return new StyledText(chunks);
     }
 
     // Changes region (top). Rows: staged (green), unstaged (yellow), untracked (dim).
     const rows: { label: string; color: string }[] = [];
-    for (const f of git.staged.value) rows.push({ label: `+ ${f.xy.trim() || 'M'} ${f.path}`, color: pal.string });
-    for (const f of git.unstaged.value) rows.push({ label: `  ${f.xy.trim() || 'M'} ${f.path}`, color: pal.number });
-    for (const f of git.untracked.value) rows.push({ label: `? ${f.path}`, color: pal.dim });
-    const topH = Math.max(2, Math.floor(bodyH * gp.splitRatio.value));
-    if (rows.length === 0) push('  (working tree clean)', pal.dim);
+    for (const file of git.staged.value) rows.push({ label: `+ ${file.xy.trim() || 'M'} ${file.path}`, color: palette.string });
+    for (const file of git.unstaged.value) rows.push({ label: `  ${file.xy.trim() || 'M'} ${file.path}`, color: palette.number });
+    for (const file of git.untracked.value) rows.push({ label: `? ${file.path}`, color: palette.dim });
+    const topHeight = Math.max(2, Math.floor(bodyHeight * gitPanel.splitRatio.value));
+    if (rows.length === 0) push('  (working tree clean)', palette.dim);
     else
-      rows.slice(0, topH - 1).forEach((r, i) => {
-        const marker = active && gp.region.value === 'changes' && i === gp.changesIndex.value ? '›' : ' ';
-        push(`${marker}${r.label}`, r.color);
+      rows.slice(0, topHeight - 1).forEach((row, index) => {
+        const marker = active && gitPanel.region.value === 'changes' && index === gitPanel.changesIndex.value ? '›' : ' ';
+        push(`${marker}${row.label}`, row.color);
       });
 
-    push('─'.repeat(SIDEBAR_W - 2), pal.border);
+    push('─'.repeat(SIDEBAR_WIDTH - 2), palette.border);
 
     // Commit log region (bottom) — virtualized: only the visible window is read from the cache.
-    const logH = Math.max(1, bodyH - topH - 1);
-    const cl = ws.commitLog.value;
-    if (cl) {
-      const top = gp.logScrollTop.value;
-      const win = cl.rows(top, logH);
-      win.forEach((rec, i) => {
-        const idx = top + i;
-        const marker = active && gp.region.value === 'log' && idx === gp.logIndex.value ? '›' : ' ';
-        if (rec) push(`${marker}${rec.shortSha} ${rec.subject}`, pal.fg, i < win.length - 1);
-        else push(`${marker}…`, pal.dim, i < win.length - 1);
+    const logHeight = Math.max(1, bodyHeight - topHeight - 1);
+    const commitLog = workspace.commitLog.value;
+    if (commitLog) {
+      const top = gitPanel.logScrollTop.value;
+      const visibleCommits = commitLog.rows(top, logHeight);
+      visibleCommits.forEach((record, index) => {
+        const commitIndex = top + index;
+        const marker = active && gitPanel.region.value === 'log' && commitIndex === gitPanel.logIndex.value ? '›' : ' ';
+        if (record) push(`${marker}${record.shortSha} ${record.subject}`, palette.fg, index < visibleCommits.length - 1);
+        else push(`${marker}…`, palette.dim, index < visibleCommits.length - 1);
       });
     }
     return new StyledText(chunks);
   }
 
   function renderStatus(): string {
-    const ed = ws.editor;
-    const parts: string[] = [` ${ws.name.value || '—'}`];
-    if (ed.hasDocument.value) {
-      parts.push(ed.title);
-      parts.push(`Ln ${ed.cursor.line.value + 1}, Col ${ed.cursor.col.value + 1}`);
-      parts.push(`${ed.document.lineCount} lines`);
+    const editor = workspace.editor;
+    const parts: string[] = [` ${workspace.name.value || '—'}`];
+    if (editor.hasDocument.value) {
+      parts.push(editor.title);
+      parts.push(`Ln ${editor.cursor.line.value + 1}, Col ${editor.cursor.col.value + 1}`);
+      parts.push(`${editor.document.lineCount} lines`);
     }
-    parts.push(ws.focus.value === 'files' ? '[Files]' : '[Editor]');
+    parts.push(workspace.focus.value === 'files' ? '[Files]' : '[Editor]');
     parts.push('Ctrl+Q quit');
     return parts.join('  ·  ');
   }
 
   function update(): void {
-    const pal = p();
-    column.backgroundColor = pal.bg;
-    const gitView = ws.focus.value === 'git';
-    sidebar.backgroundColor = pal.panel;
-    sidebar.borderColor = ws.focus.value === 'files' || gitView ? pal.borderActive : pal.border;
-    sidebar.titleColor = ws.focus.value === 'files' || gitView ? pal.accent : pal.dim;
+    const palette = readPalette();
+    column.backgroundColor = palette.bg;
+    const gitView = workspace.focus.value === 'git';
+    sidebar.backgroundColor = palette.panel;
+    sidebar.borderColor = workspace.focus.value === 'files' || gitView ? palette.borderActive : palette.border;
+    sidebar.titleColor = workspace.focus.value === 'files' || gitView ? palette.accent : palette.dim;
     sidebar.title = gitView ? 'Git' : 'Files';
-    editorArea.backgroundColor = pal.bg;
-    editorArea.borderColor = ws.focus.value === 'editor' ? pal.borderActive : pal.border;
-    editorArea.title = ws.editor.hasDocument.value ? ws.editor.title : 'Editor';
-    editorArea.titleColor = ws.focus.value === 'editor' ? pal.accent : pal.dim;
-    statusBar.backgroundColor = pal.statusBg;
+    editorArea.backgroundColor = palette.bg;
+    editorArea.borderColor = workspace.focus.value === 'editor' ? palette.borderActive : palette.border;
+    editorArea.title = workspace.editor.hasDocument.value ? workspace.editor.title : 'Editor';
+    editorArea.titleColor = workspace.focus.value === 'editor' ? palette.accent : palette.dim;
+    statusBar.backgroundColor = palette.statusBg;
 
     sidebarBody.content = gitView ? renderGitPanel() : renderTree();
-    sidebarBody.fg = pal.fg;
+    sidebarBody.fg = palette.fg;
     const rendered = renderEditor();
     if (rendered) {
       gutterBody.width = gutterWidth();
@@ -330,44 +330,44 @@ export function buildRootView(
       gutterBody.content = '';
       codeBody.content = EMPTY_STATE;
     }
-    codeBody.fg = pal.fg;
-    codeBody.selectionBg = pal.selection;
+    codeBody.fg = palette.fg;
+    codeBody.selectionBg = palette.selection;
     applySelection(); // after content is set, so selection maps onto the current buffer
     statusText.content = renderStatus();
-    statusText.fg = pal.dim;
+    statusText.fg = palette.dim;
 
     // Palette overlay.
     const open = commands.open.value;
-    palette.visible = open;
+    commandPalette.visible = open;
     if (open) {
-      palette.borderColor = pal.borderActive;
-      palette.titleColor = pal.accent;
-      palette.backgroundColor = pal.panel;
-      paletteInput.content = `> ${commands.query.value}▏`;
-      paletteInput.fg = pal.fg;
+      commandPalette.borderColor = palette.borderActive;
+      commandPalette.titleColor = palette.accent;
+      commandPalette.backgroundColor = palette.panel;
+      commandPaletteInput.content = `> ${commands.query.value}▏`;
+      commandPaletteInput.fg = palette.fg;
       const items = commands.filtered.slice(0, 12);
-      const sel = commands.selectedIndex.value;
-      paletteList.content = items.length
+      const selectedIndex = commands.selectedIndex.value;
+      commandPaletteList.content = items.length
         ? items
-            .map((c, i) => `${i === sel ? '›' : ' '} ${c.title}`)
+            .map((command, index) => `${index === selectedIndex ? '›' : ' '} ${command.title}`)
             .join('\n')
         : '  (no matching commands)';
-      paletteList.fg = pal.dim;
+      commandPaletteList.fg = palette.dim;
     }
 
     // Native terminal caret at the cursor's DISPLAY column (tab/wide aware). Shown only when the
     // editor is focused, has a document, no palette overlay, and the cursor line is on screen.
     // invariant: The caret renders at the cursor display column (ui.invariants.md)
-    const ed = ws.editor;
-    const scrollTop = ed.viewport.scrollTop.value;
-    const vh = editorViewportHeight();
-    const cl = ed.cursor.line.value;
-    if (ed.hasDocument.value && ws.focus.value === 'editor' && !open && cl >= scrollTop && cl < scrollTop + vh) {
-      const dc = displayColumn(ed.document.line(cl), ed.cursor.col.value);
-      const gutterW = String(ed.document.lineCount).length + 1;
+    const editor = workspace.editor;
+    const scrollTop = editor.viewport.scrollTop.value;
+    const viewportHeight = editorViewportHeight();
+    const cursorLine = editor.cursor.line.value;
+    if (editor.hasDocument.value && workspace.focus.value === 'editor' && !open && cursorLine >= scrollTop && cursorLine < scrollTop + viewportHeight) {
+      const cursorDisplayColumn = displayColumn(editor.document.line(cursorLine), editor.cursor.col.value);
+      const lineNumberWidth = String(editor.document.lineCount).length + 1;
       // x: sidebar + editorArea left border + gutter("NN ") + the current-line marker cell + display col.
-      const x = SIDEBAR_W + 1 + gutterW + 2 + dc;
-      const y = 1 + (cl - scrollTop); // mainRow top + editorArea top border
+      const x = SIDEBAR_WIDTH + 1 + lineNumberWidth + 2 + cursorDisplayColumn;
+      const y = 1 + (cursorLine - scrollTop); // mainRow top + editorArea top border
       renderer.setCursorPosition(x, y, true);
     } else {
       renderer.setCursorPosition(0, 0, false);
@@ -379,15 +379,15 @@ export function buildRootView(
   // (scrollTop / selection), never materializing the whole list — the frame effect observes those
   // signals and repaints. invariant: Cost tracks the actively observed set (project.invariants.md)
   const WHEEL_STEP = 3;
-  const wheelDelta = (e: { scroll?: { direction?: string } }): number =>
-    (e.scroll?.direction === 'up' ? -1 : 1) * WHEEL_STEP;
-  sidebar.onMouseScroll = (e) => {
-    if (ws.focus.value === 'git') ws.impulseGitLog(e.scroll?.direction === 'up' ? -1 : 1); // momentum glide
-    else ws.tree.moveSelection(wheelDelta(e));
+  const wheelDelta = (event: { scroll?: { direction?: string } }): number =>
+    (event.scroll?.direction === 'up' ? -1 : 1) * WHEEL_STEP;
+  sidebar.onMouseScroll = (event) => {
+    if (workspace.focus.value === 'git') workspace.impulseGitLog(event.scroll?.direction === 'up' ? -1 : 1); // momentum glide
+    else workspace.tree.moveSelection(wheelDelta(event));
   };
-  editorArea.onMouseScroll = (e) => {
-    const ed = ws.editor;
-    if (ed.hasDocument.value) ed.viewport.scrollBy(wheelDelta(e), ed.document.lineCount);
+  editorArea.onMouseScroll = (event) => {
+    const editor = workspace.editor;
+    if (editor.hasDocument.value) editor.viewport.scrollBy(wheelDelta(event), editor.document.lineCount);
   };
 
   update();
