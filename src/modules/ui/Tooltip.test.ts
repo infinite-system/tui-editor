@@ -73,6 +73,19 @@ describe('Tooltip', () => {
     expect(tooltip.anchorY.value).toBe(7);
   });
 
+  test('placement defaults to auto and carries an explicit choice through the dwell', () => {
+    const auto = new Tooltip.Class();
+    auto.point('Open', 10, 5);
+    auto.tick(TOOLTIP_DWELL_SECONDS);
+    expect(auto.placement.value).toBe('auto'); // default
+
+    const below = new Tooltip.Class();
+    below.point('Discard…', 10, 5, 'below');
+    below.tick(TOOLTIP_DWELL_SECONDS);
+    expect(below.visible.value).toBe(true);
+    expect(below.placement.value).toBe('below'); // explicit choice survives to the shown tooltip
+  });
+
   test('clear disarms a pending dwell', () => {
     const tooltip = new Tooltip.Class();
     tooltip.point('Stage', 10, 5);

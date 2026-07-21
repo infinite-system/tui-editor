@@ -12,10 +12,14 @@ import { ref } from 'vue';
 
 export const TOOLTIP_DWELL_SECONDS = 0.4;
 
+/** Where the tooltip sits relative to its anchor row. 'auto' = above, flipping below near the top. */
+export type TooltipPlacement = 'above' | 'below' | 'auto';
+
 interface PendingTooltip {
   text: string;
   anchorX: number;
   anchorY: number;
+  placement: TooltipPlacement;
 }
 
 class $Tooltip {
@@ -25,12 +29,16 @@ class $Tooltip {
   get text() {
     return ref('');
   }
-  /** Desired top-left cell (the view clamps to the screen when rendering). */
+  /** The anchor CELL the tooltip points at (the view places above/below + clamps to the screen). */
   get anchorX() {
     return ref(0);
   }
   get anchorY() {
     return ref(0);
+  }
+  /** Placement relative to the anchor row; the view honours it (default 'auto' = above-then-flip). */
+  get placement() {
+    return ref<TooltipPlacement>('auto');
   }
 
   private pending: PendingTooltip | null = null;
@@ -42,19 +50,21 @@ class $Tooltip {
    * DIFFERENT text hides any visible tooltip and restarts the dwell for the new target.
    * Identity is the text itself — two targets with equal labels behave as one, which is harmless.
    */
-  point(text: string, anchorX: number, anchorY: number): void {
+  point(text: string, anchorX: number, anchorY: number, placement: TooltipPlacement = 'auto'): void {
     if (this.visible.value && this.text.value === text) {
       this.anchorX.value = anchorX;
       this.anchorY.value = anchorY;
+      this.placement.value = placement;
       return;
     }
     if (this.pending?.text === text) {
       this.pending.anchorX = anchorX;
       this.pending.anchorY = anchorY;
+      this.pending.placement = placement;
       return;
     }
     this.clear();
-    this.pending = { text, anchorX, anchorY };
+    this.pending = { text, anchorX, anchorY, placement };
     this.dwellSeconds = 0;
   }
 
@@ -80,6 +90,7 @@ class $Tooltip {
     this.text.value = this.pending.text;
     this.anchorX.value = this.pending.anchorX;
     this.anchorY.value = this.pending.anchorY;
+    this.placement.value = this.pending.placement;
     this.visible.value = true;
     this.pending = null;
     return false;

@@ -1028,8 +1028,15 @@ export function buildRootView(
     tooltipText.visible = tooltip.visible.value;
     if (tooltip.visible.value) {
       const tooltipLabel = ` ${tooltip.text.value} `;
-      tooltipText.left = Math.max(0, Math.min(tooltip.anchorX.value, renderer.width - tooltipLabel.length));
-      tooltipText.top = Math.max(0, Math.min(tooltip.anchorY.value, renderer.height - 1));
+      // Horizontal clamp so the tooltip never overflows the canvas (the scrollbar-geometry lesson).
+      tooltipText.left = Math.max(0, Math.min(tooltip.anchorX.value, renderer.width - lineWidth(tooltipLabel)));
+      // Vertical: default ABOVE the anchor row (so it does not cover the pointed-at row); flip BELOW
+      // only when there is no room above (near the top edge). Explicit 'below' forces below.
+      const anchorY = tooltip.anchorY.value;
+      const roomAbove = anchorY - 1 >= 0;
+      const placeAbove = tooltip.placement.value === 'above' || (tooltip.placement.value === 'auto' && roomAbove);
+      const desiredTop = placeAbove ? anchorY - 1 : anchorY + 1;
+      tooltipText.top = Math.max(0, Math.min(desiredTop, renderer.height - 1));
       tooltipText.content = new StyledText([bg(palette.selection)(fg(palette.fg)(tooltipLabel))]);
     }
 
@@ -1341,7 +1348,7 @@ export function buildRootView(
               : hoveredRow.bucket === 'staged'
                 ? 'Unstage'
                 : 'Stage';
-        tooltip.point(label, event.x + 1, event.y + 1); // below-right: never under the pointer
+        tooltip.point(label, event.x, event.y); // anchor the pointed cell; view places above (auto-flip)
       } else {
         tooltip.clear();
       }
