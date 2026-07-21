@@ -30,7 +30,7 @@ Consequences held throughout:
   brief mandates for performance. A candidate that fails its probe is a bug finding, not a
   record.
 - `project.invariants.md` + `project.lattice.md` are written **now** (pre-code) because
-  they can be grounded in the brief, the iVue docs, and the reality of terminals/git/LSP.
+  they can be grounded in the brief, the ivue docs, and the reality of terminals/git/LSP.
   Module contracts are bootstrapped **per milestone**, hardest subsystem first — never all
   up front (that produces vacuous records with no evidence).
 
@@ -76,7 +76,7 @@ are the identifiers — referenced by name everywhere, matching code annotations
   methods; no dependency decision is hidden in a constructor.
 - **The app is built only after the kernel is sealed** — plugin composition completes before
   any application instance is constructed.
-- **iVue owns state, OpenTUI owns projection** — one state system; the editor viewport is a
+- **ivue owns state, OpenTUI owns projection** — one state system; the editor viewport is a
   custom OpenTUI renderable, never a template renderer.
 - **Data flows one way** — input event → model method → mutation → reactive invalidation →
   `requestRender()` → frame. Forbids a render path that mutates model state.
@@ -96,7 +96,7 @@ are the identifiers — referenced by name everywhere, matching code annotations
   projection of the previous version (a git blob, disposed on close) with the **same live
   editable `Buffer`** the normal editor uses; the right pane is never a separate "current"
   copy. Editing recomputes the diff live (debounced, revision-stamped, stale discarded).
-  Stands on *iVue owns state, OpenTUI owns projection* and *Cost tracks the actively observed
+  Stands on *ivue owns state, OpenTUI owns projection* and *Cost tracks the actively observed
   set*. Forbids: a second buffer/state for the current side; a read-only "current" pane; a
   diff that goes stale against the edited text.
 - **Completion is proven, not declared** — a milestone or the project is "done" only when a
@@ -210,7 +210,7 @@ when it works, has tests, disposes resources, has a recorded benchmark, its larg
 removed, and its architecture reads cleanly.
 
 - **M0 — Setup & foundations.** Install Bun + toolchain; `bun init`; pin versions; read the
-  iVue guide + examples (record conclusions in `ARCHITECTURE.md`/`DECISIONS.md`); write
+  ivue guide + examples (record conclusions in `ARCHITECTURE.md`/`DECISIONS.md`); write
   `project.invariants.md` + `project.lattice.md`; scaffold the module tree; stand up the
   tmux harness skeleton and the benchmark runner. Contracts: project-level.
 - **M1 — Boot & Frame.** `app`, `kernel`, `system`. OpenTUI root renderer, clean start/stop,
@@ -325,7 +325,7 @@ busy-detection, and bounded reads — so the harness never hand-rolls `sleep`-th
   adversarial`, benchmarks recorded, lifecycle cycles run, matrix rows for that milestone
   turned green with evidence. A milestone is complete only when it works, has tests, disposes
   cleanly, has a recorded benchmark, its largest waste is removed, and it reads cleanly.
-- **End of build (M7 → gauntlet):** five whole-repo refinement passes (architecture & iVue
+- **End of build (M7 → gauntlet):** five whole-repo refinement passes (architecture & ivue
   compliance · correctness & failure modes · performance & scalability · UX & discoverability ·
   independent adversarial), then the subagent panel below.
 
@@ -334,7 +334,7 @@ busy-detection, and bounded reads — so the harness never hand-rolls `sleep`-th
 The final sign-off does not come from me. It comes from a panel of independent subagents,
 because the author of a bug is the worst reviewer of it. Protocol:
 
-- **Diverse orthogonal lenses**, one subagent each: architecture/iVue-compliance ·
+- **Diverse orthogonal lenses**, one subagent each: architecture/ivue-compliance ·
   correctness/failure-modes · performance/scalability · UX/discoverability ·
   resource-lifecycle/leak · security/robustness · one pure adversarial reviewer told to
   assume the other six missed something. Where possible these run as **independent
@@ -378,8 +378,10 @@ Contracts: `project.invariants.md`, `project.lattice.md`, per-module `*.invarian
 (+ `*.lattice.md` where composition is real). Build docs (per the brief): `ARCHITECTURE.md`,
 `DECISIONS.md`, `BENCHMARKS.md`, `KNOWN_LIMITATIONS.md`, `TODO.md`, `VERIFICATION_PLAN.md`,
 `VERIFICATION_RESULTS.md`, `PERFORMANCE_BASELINES.md`, `RESOURCE_LIFECYCLE_AUDIT.md`,
-`ARCHITECTURE_COMPLIANCE.md`, `UX_REVIEW.md`. `ARCHITECTURE.md`/`DECISIONS.md` link the iVue
-guide/example pages that informed each choice.
+`ARCHITECTURE_COMPLIANCE.md`, `UX_REVIEW.md`, and `DELEGATION_LOG.md` (the ledger of work
+delegated to subagents/codex — tally and per-agent build share reported at each check-in,
+sub-par agents deprecated). `ARCHITECTURE.md`/`DECISIONS.md` link the ivue guide/example pages
+that informed each choice.
 
 ---
 
@@ -391,7 +393,7 @@ guide/example pages that informed each choice.
   `typescript-language-server@5.3.0`.
 - **Harness:** tmux 3.4 present. `asciinema`/`agg` absent → text capture for most assertions;
   visual screens captured via raw-ANSI rendering rather than a recorder.
-- **iVue reading (mandated before architecting):** `../ivue/docs_v2/guide/*` +
+- **ivue reading (mandated before architecting):** `../ivue/docs_v2/guide/*` +
   `../ivue/docs_v2/examples/*`, cross-checked against ivue.dev and the published package.
 - **Repo:** `../tui-editor` is greenfield and not yet a git repository.
 
