@@ -128,6 +128,16 @@ class $GitCommands {
     return this.run(cwd, ['show', '--no-ext-diff', '--no-color', '--format=', sha, '--', filePath]);
   }
 
+  /**
+   * The FULL text of a file as of a git ref (`HEAD:path`, `<sha>:path`, `<sha>^:path`, `:path` for the
+   * index) — the two SIDES a side-by-side DiffView needs, not a unified patch. A path absent at that ref
+   * (an added/untracked/root-commit file) exits nonzero; callers treat that as the empty side (no
+   * previous/next version). `--textconv` off keeps it byte-exact.
+   */
+  static fileAtRef(cwd: string, ref: string, filePath: string): Promise<GitCommandResult> {
+    return this.run(cwd, ['show', `${ref}:${filePath}`]);
+  }
+
   static branchShowCurrent(cwd: string): Promise<GitCommandResult> {
     return this.run(cwd, ['branch', '--show-current']);
   }

@@ -25,6 +25,15 @@ import { Logging } from '../system/Logging';
 
 export type Focus = 'files' | 'editor' | 'git';
 
+/** The two full-text SIDES of a side-by-side diff shown by the DiffView (token forces a rebuild). */
+export interface DiffRequest {
+  token: number;
+  previousVersionText: string;
+  currentVersionText: string;
+  previousVersionPath: string;
+  currentVersionPath: string;
+}
+
 class $Workspace {
   root = '';
   // invariant: Construction goes through overridable seams (project.invariants.md)
@@ -63,9 +72,31 @@ class $Workspace {
     });
   }
 
-  /** True while a read-only git diff is displayed in the editor pane (over the tabs). */
+  /** True while a git diff is displayed over the tabs (transient view). */
   get showingDiff() {
     return ref(false);
+  }
+  // The two SIDES of the currently-shown side-by-side diff (the rich DiffView), or null. Set by
+  // openChangeAtRow / openCommitFileDiff, cleared when a real tab replaces it. The token forces the
+  // view host to rebuild (DiffView has no re-open — it reconstructs per file).
+  get diffRequest() {
+    return shallowRef<DiffRequest | null>(null);
+  }
+  private diffRequestToken = 0;
+  // Full text of a file at a git ref ('HEAD', '<sha>', '<sha>^', '' = index) — empty when absent at that
+  // ref (added/untracked/root-commit file = the empty diff side).
+  private async gitFileText(ref: string, filePath: string): Promise<string> {
+    const result = await GitCommands.Class.fileAtRef(this.root, ref, filePath);
+    return result.code === 0 ? result.stdout : '';
+  }
+  private workingFileText(filePath: string): string {
+    const absolute = Files.Class.join(this.root, filePath);
+    return Files.Class.exists(absolute) ? Files.Class.read(absolute) : '';
+  }
+  private openDiffView(request: Omit<DiffRequest, 'token'>): void {
+    this.diffRequest.value = { token: ++this.diffRequestToken, ...request };
+    this.showingDiff.value = true; // the DiffView shows OVER the tabs (transient view)
+    this.focus.value = 'editor'; // keyboard to the diff; sidebarView stays 'git'
   }
 
   /** The editor currently VISIBLE in the pane — a git diff while drilling, else the active tab's
@@ -284,12 +315,15 @@ class $Workspace {
    *  no parent — fall back to the commit's own patch). Read-only diff document in the editor; the
    *  sidebar stays on the git panel (mirrors openChangeAtRow). */
   async openCommitFileDiff(sha: string, filePath: string): Promise<void> {
-    let result = await GitCommands.Class.diffCommitFile(this.root, sha, filePath);
-    if (result.code !== 0) result = await GitCommands.Class.showCommitFile(this.root, sha, filePath);
-    const diffText = result.stdout.trimEnd() || '(no differences)';
-    this.diffEditor.openDiff(`${filePath} @ ${sha.slice(0, 7)}`, diffText);
-    this.showingDiff.value = true; // the pane shows the diff OVER the tabs (transient view)
-    this.focus.value = 'editor'; // keyboard to the diff; sidebarView stays 'git'
+    // The two SIDES as of the commit: parent (empty on a root commit) vs the commit itself.
+    const previousVersionText = await this.gitFileText(`${sha}^`, filePath);
+    const currentVersionText = await this.gitFileText(sha, filePath);
+    this.openDiffView({
+      previousVersionText,
+      currentVersionText,
+      previousVersionPath: `${filePath} @ ${sha.slice(0, 7)}^`,
+      currentVersionPath: filePath,
+    });
   }
 
   /** A wheel notch: add a momentum impulse (the frame loop then glides the log). VERTICAL regimes use
@@ -416,11 +450,24 @@ class $Workspace {
     const rows = GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
     const row = rows[rowIndex];
     if (row?.kind !== 'file') return;
-    const result = await GitCommands.Class.diffFile(this.root, row.path, row.bucket);
-    const diffText = result.stdout.trimEnd() || '(no differences)';
-    this.diffEditor.openDiff(row.path, diffText);
-    this.showingDiff.value = true; // the pane shows the diff OVER the tabs (transient view)
-    this.focus.value = 'editor'; // keyboard to the diff; sidebarView stays 'git'
+    // The two SIDES per bucket: staged = HEAD vs index; unstaged = index vs worktree; untracked = ∅ vs worktree.
+    let previousVersionText = '';
+    let currentVersionText = '';
+    if (row.bucket === 'staged') {
+      previousVersionText = await this.gitFileText('HEAD', row.path);
+      currentVersionText = await this.gitFileText('', row.path); // ':path' = the index version
+    } else if (row.bucket === 'unstaged') {
+      previousVersionText = await this.gitFileText('', row.path);
+      currentVersionText = this.workingFileText(row.path);
+    } else {
+      currentVersionText = this.workingFileText(row.path); // untracked: no previous side
+    }
+    this.openDiffView({
+      previousVersionText,
+      currentVersionText,
+      previousVersionPath: row.path,
+      currentVersionPath: row.path,
+    });
   }
 
   /** Request a discard — DESTRUCTIVE, so it only arms the confirmation overlay (y confirms).
@@ -508,12 +555,14 @@ class $Workspace {
   /** Open `path` as a tab: focus its tab if already open, else add a new active one. */
   openFileInTab(path: string): void {
     this.showingDiff.value = false; // a real file replaces the transient diff view
+    this.diffRequest.value = null;
     this.buffers.open(path);
   }
 
   /** Activate an already-open tab by index (tab click / cycle). */
   activateTab(index: number): void {
     this.showingDiff.value = false;
+    this.diffRequest.value = null;
     this.buffers.activate(index);
     this.focus.value = 'editor';
   }
@@ -522,6 +571,7 @@ class $Workspace {
   cycleTab(delta: number): void {
     if (this.buffers.count === 0) return;
     this.showingDiff.value = false;
+    this.diffRequest.value = null;
     this.buffers.cycle(delta);
     this.focus.value = 'editor';
   }
