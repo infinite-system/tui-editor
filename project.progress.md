@@ -189,6 +189,47 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   keybindings · destructive ops need confirmation · authoritative-channel verification · delegation
   = full-parity packet, worktree/disjoint isolation, IBR+invariants embedded.
 
+## PANE SUBSTRATE — the structural fix for the DiffView scroll regression (user's IBR reduction)
+
+**Regression:** DiffView mount (fae9349) swapped the editorArea SINGLETON in/out via add/remove; that
+mutation globally corrupted the editor viewport height → editor couldn't scroll to the bottom in ANY
+file. **REVERTED d01873f** (editor scroll restored on main, verified scrollTop 565/600; DiffView back
+on the unwired allowlist, to be rebuilt on panes). The hack is GONE.
+
+**The reduction (user-called):** panes are the IRREDUCIBLE unit; sync is the composition. New invariant
+**"A pane is a self-contained scrollable viewport"** added to project.invariants.md + woven into
+project.lattice.md ("Panes compose without corrupting each other").
+
+**PHASE A (next, priority) — extract the Pane substrate; make panes work INDEPENDENTLY first:**
+- A Pane = self-contained scrollable viewport: extent + momentum = f(own content, own LIVE post-layout
+  height), independent of siblings; no pane reads/mutates another's geometry. Kill the editorArea
+  mutable-singleton pattern.
+- Editor BECOMES one Pane (this alone fixes scroll structurally — editor owns its live-height extent).
+- Two panes side by side, each scrolling SEPARATELY + correctly (the reusable SPLIT-PANE; a queued user
+  want). VERIFY independence BEFORE any sync: scroll A ≠ move B; each reaches its own true bottom;
+  open/close a sibling pane leaves the other's max-scroll + offset UNCHANGED.
+- GATED CONTRACT: "each pane's extent+offset are independent of siblings; open/close a sibling leaves a
+  pane's max-scroll and offset unchanged" (add to behavioral-contracts.sh; now merge-gate-enforced).
+- → bump demo (scroll fixed + raw 2-pane split shown).
+
+**PHASE B (after A verified) — sync as a SEPARABLE layer ON TOP:**
+- Aligned-row synced coordinate (reuse DiffAlignment) drives BOTH panes from one coordinate; strip it →
+  two working independent panes remain (separability = proof Phase A was done right).
+- DiffView = 2 Panes + sync layer (rebuild on the substrate; editorArea-swap hack stays gone). Reuse the
+  reverted good parts: GitCommands.fileAtRef, Workspace.diffRequest, DiffView.attachSettings momentum.
+- GATED CONTRACT: "under scroll both diff panes stay aligned (synced) AND each underlying pane stays
+  independently valid (sync is additive, not corrupting)." → bump demo again.
+
+**ADOPTION QUEUE (coordinator holding worktrees; adopt when surfacing from pane work, no rush, each =
+merge+wire+driving-test as ONE integration):**
+- conductor-mapgate → scripts/check-map-coherence.sh (NEW) — map-coherence gate (mirrors
+  check-unwired-capabilities.sh, shrinking allowlist of 5 governed modules). WIRE into merge-gate.sh
+  hard-blocking; shrink allowlist as each of the 5 module invariants.md is bootstrapped.
+- conductor-findbuffer → search/FindInBuffer.ts (Ctrl+F/H) · conductor-quickopen → search/QuickOpen.ts
+  (Ctrl+P) · conductor-ripgrep → search/RipgrepSearch.ts (Search view, needs activity bar).
+- Next worker waves available: project-replace, ActivityBar renderable, context-menu positioning, 5
+  invariants.md bootstraps.
+
 ## LIVE QUEUE (user QA during audit work — priority-ordered)
 - ✅ **DONE — Invariant-contract system + behavioral suite** (c7b7cff): scripts/behavioral-contracts.sh
   (essence-based, ratcheted) + scripts/smoke-settings-applied.sh (all 13 settings driven) + meta-gate in

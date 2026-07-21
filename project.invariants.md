@@ -634,3 +634,44 @@ the checker passes; `--refs` resolves its annotations.
 **Status:** provisional
 
 **Last refined:** 2026-07-21
+
+### A pane is a self-contained scrollable viewport
+
+**Invariant:** A pane is a scrollable viewport whose scroll extent (max-scroll) and offset are a
+function of ITS OWN content and ITS OWN live rendered height ALONE — independent of any sibling pane.
+No pane reads or mutates another pane's geometry (height, width, scroll). Composing panes — a split, a
+diff, a preview beside an editor — adds panes; it NEVER alters an existing pane's geometry.
+
+**Scope:** The editor, the side-by-side diff (two panes), and any future split-pane / preview layout.
+Every region a user scrolls independently is a pane.
+
+**Components:**
+- *Own live height* — a pane derives max-scroll = max(0, totalRows − liveHeight) from its OWN
+  rendered height, read post-layout each frame (never a stale, captured, or sibling height).
+- *Own content extent* — totalRows is the pane's own content: document.lineCount (wrap off) or
+  EditorWrap.totalVisualRows (wrap on). Never a sibling's or a pre-wrap count.
+- *No sibling mutation* — mounting/unmounting a pane must not remove, resize, or reparent another
+  pane's container. Panes sit side by side (or stacked) as peers; none is a mutable singleton others swap.
+
+**Mechanism:** Each pane owns its container renderable + its Viewport (scrollTop/height/width →
+extent + momentum). The editor is ONE pane; the diff is TWO panes plus a SEPARABLE aligned-row sync
+layer (DiffAlignment) driving both from one coordinate — strip the sync and two independent working
+panes remain. Layout composition (flex/split) gives each pane its own live box; no pane's code touches
+another's box.
+
+**Generates:** The editor viewport; the split-pane substrate; the side-by-side diff (2 panes + sync);
+future preview/outline-beside-editor layouts.
+
+**Impossible if true:** Opening or closing a sibling pane changing another pane's max-scroll or offset;
+a pane that can't reach its true last row because a sibling's mount corrupted its height (the DiffView
+editorArea-swap regression, fae9349 — reverted d01873f); one pane reading another's height for its own
+scroll math; a shared mutable container that panes swap in and out.
+
+**Verification:** A gated behavioral contract — open a second pane (diff/split) and assert the first
+pane's max-scroll and offset are UNCHANGED; close it and the first pane still reaches its true last line
+(wrap on AND off); scroll pane A and pane B does not move (independence before sync); with sync on, both
+diff panes track one aligned-row index while each underlying pane stays independently valid.
+
+**Status:** provisional
+
+**Last refined:** 2026-07-21
