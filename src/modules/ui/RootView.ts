@@ -615,13 +615,19 @@ export function buildRootView(
   };
   editorArea.onMouseScroll = (event) => {
     if (!workspace.editor.hasDocument.value) return;
-    if (event.modifiers.shift) {
-      // Horizontal: clamp to the widest VISIBLE line (O(window), never the whole file).
+    // Horizontal arrives TWO ways (terminal-dependent): native horizontal wheel events
+    // (direction left/right — many terminals translate shift+wheel or trackpad swipes into
+    // these), or a vertical wheel with the shift modifier bit. Route BOTH to columns.
+    const direction = event.scroll?.direction;
+    const horizontal = direction === 'left' || direction === 'right' || event.modifiers.shift;
+    if (horizontal) {
+      // Clamp to the widest VISIBLE line (O(window), never the whole file).
       const top = workspace.editor.viewport.scrollTop.value;
       const visible = workspace.editor.document.slice(top, editorViewportHeight());
       let widestVisible = 0;
       for (const line of visible) widestVisible = Math.max(widestVisible, lineWidth(line));
-      workspace.editor.viewport.scrollByColumns(wheelDelta(event), widestVisible);
+      const backward = direction === 'left' || direction === 'up';
+      workspace.editor.viewport.scrollByColumns((backward ? -1 : 1) * WHEEL_STEP, widestVisible);
     } else {
       workspace.editor.viewport.scrollBy(wheelDelta(event), workspace.editor.document.lineCount);
     }
@@ -663,7 +669,14 @@ export function buildRootView(
     const hit = documentPositionAtCell(event.x, event.y);
     if (process.env.TUI_DEBUG_MOUSE === '1') Logging.Class.info(`mouseDrag (${event.x},${event.y}) hit=${JSON.stringify(hit)}`);
     if (!hit) return;
-    workspace.editor.placeCursor(hit.line, hit.column); // anchor stays — selection = anchor -> cursor
+    // The drag version of goal-column: the drag tracks the POINTER's display column. The cursor
+    // clamps to each line's length (selection end = min(pointer, lineLength)), but the GOAL stays
+    // at the pointer, and scrollLeft NEVER follows an intermediate short line's clamp — no
+    // backward yank while sweeping diagonally across mixed-length lines (placeCursor's
+    // auto-hscroll is exactly what must NOT run here).
+    const pointerDisplayColumn =
+      workspace.editor.viewport.scrollLeft.value + (event.x - codeBody.x);
+    workspace.editor.cursor.set(hit.line, hit.column, Math.max(0, pointerDisplayColumn));
     if (selectionDrag) {
       selectionDrag.pointerX = event.x;
       selectionDrag.pointerY = event.y;
@@ -730,7 +743,11 @@ export function buildRootView(
     const clampedY = Math.max(topEdge, Math.min(selectionDrag.pointerY, bottomEdge));
     const hit = documentPositionAtCell(clampedX, clampedY);
     if (hit) {
-      workspace.editor.cursor.moveToLineKeepingGoal(hit.line, hit.column); // anchor fixed; no rescroll fight
+      // Anchor fixed; goal = the pointer's display column in the ADVANCED window, so short lines
+      // under the sweep never pull the goal (or the window) back.
+      const pointerDisplayColumn =
+        workspace.editor.viewport.scrollLeft.value + (clampedX - codeBody.x);
+      workspace.editor.cursor.set(hit.line, hit.column, Math.max(0, pointerDisplayColumn));
     }
     return true;
   }

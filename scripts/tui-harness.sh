@@ -77,10 +77,14 @@ case "$cmd" in
     sleep 0.2
     ;;
   scroll)
-    # scroll <session> <x> <y> up|down [amount]  — SGR wheel at 0-based (x,y); button 64=up, 65=down.
-    # Wheel events are press-only (no release); repeat `amount` times (default 1).
+    # scroll <session> <x> <y> up|down|left|right|shift-up|shift-down [amount] — SGR wheel at (x,y).
+    # Buttons: 64=up 65=down 66=left 67=right; +4 = shift bit. Press-only; repeats `amount` times.
     session="$1"; x="$2"; y="$3"; dir="$4"; amount="${5:-1}"
-    button=65; [ "$dir" = "up" ] && button=64
+    case "$dir" in
+      up) button=64;; down) button=65;; left) button=66;; right) button=67;;
+      shift-up) button=68;; shift-down) button=69;;
+      *) button=65;;
+    esac
     for _ in $(seq 1 "$amount"); do
       tmux send-keys -t "$session" -l "$(printf '\033[<%d;%d;%dM' "$button" "$((x+1))" "$((y+1))")"
       sleep 0.05
