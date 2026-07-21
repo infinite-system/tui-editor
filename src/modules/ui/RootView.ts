@@ -591,7 +591,13 @@ export function buildRootView(
       height: viewportHeight,
     };
     applyBarGeometry(editorVerticalBar, 'vertical', editorRegion, {
-      scrollSize: editorVisible ? editor.document.lineCount : 0,
+      // Wrap mode: the extent is the WRAPPED visual-row count (a logical line count under-reports it —
+      // the "scrollbar wrong" bug); scrollTop is already a visual-row offset, so it maps 1:1.
+      scrollSize: editorVisible
+        ? editor.wordWrap.value
+          ? EditorWrap.Class.totalVisualRows(editor.document, editor.wrapWidth())
+          : editor.document.lineCount
+        : 0,
       viewportSize: viewportHeight,
       scrollPosition: editor.viewport.scrollTop.value,
     });
@@ -1016,7 +1022,9 @@ export function buildRootView(
       // blank, VS Code-style); each row's code is the segment's grapheme-safe slice. The window
       // walk is O(window) — the file is never materialized.
       // invariant: Word wrap is a pure view mapping (src/modules/editor/editor.invariants.md)
-      wrapRowsWindow = EditorWrap.Class.visualRowsForWindow(editor.document, top, editor.wrapWidth(), height);
+      // `top` is a VISUAL-row offset in wrap mode (shares the momentum engine + visual scrollbar), so
+      // the window can start MID-LINE — a tall last line's lower segments are reachable.
+      wrapRowsWindow = EditorWrap.Class.visualRowsFromOffset(editor.document, top, editor.wrapWidth(), height);
       wrapRowsWindow.forEach((row, rowIndex) => {
         const isCurrentLine = row.lineIndex === currentLineIndex;
         if (row.firstOfLine) {
@@ -1543,15 +1551,14 @@ export function buildRootView(
     return notch * fast;
   };
   const scrollEditorVertically = (delta: number): void => {
-    const editorViewport = workspace.editor.viewport;
-    if (workspace.editor.wordWrap.value) {
-      const maxTop = Math.max(0, workspace.editor.document.lineCount - 1);
-      editorViewport.scrollTop.value = Math.max(
-        0,
-        Math.min(editorViewport.scrollTop.value + delta, maxTop),
-      );
+    const editor = workspace.editor;
+    const editorViewport = editor.viewport;
+    if (editor.wordWrap.value) {
+      // scrollTop is a VISUAL-row offset; clamp to the wrapped extent so the last visual row is reachable.
+      const maxTop = Math.max(0, EditorWrap.Class.totalVisualRows(editor.document, editor.wrapWidth()) - editorViewport.height.value);
+      editorViewport.scrollTop.value = Math.max(0, Math.min(editorViewport.scrollTop.value + delta, maxTop));
     } else {
-      editorViewport.scrollBy(delta, workspace.editor.document.lineCount);
+      editorViewport.scrollBy(delta, editor.document.lineCount);
     }
   };
   editorArea.onMouseScroll = (event) => {
@@ -1565,10 +1572,11 @@ export function buildRootView(
     const direction = event.scroll?.direction;
     const step = wheelStep(event);
     if (workspace.editor.wordWrap.value) {
-      // Wrap mode: ONE scroll axis — horizontal gestures route to the vertical window and
-      // scrollLeft stays 0 (inert).
+      // Wrap mode: ONE scroll axis (horizontal gestures route to the vertical window, scrollLeft inert),
+      // fed through the SAME momentum engine as non-wrap so a wheel notch GLIDES then decays — scrollTop
+      // is in visual rows, so the glide is smooth over wrapped rows (not jumpy by logical line).
       const backward = direction === 'left' || direction === 'up';
-      scrollEditorVertically((backward ? -1 : 1) * step);
+      workspace.impulseEditorVerticalScroll((backward ? -1 : 1) * step);
       return;
     }
     // The horizontal modifier is configurable (settings.horizontalScrollModifier, default 'alt' = the

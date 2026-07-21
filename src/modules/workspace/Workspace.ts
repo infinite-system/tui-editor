@@ -20,6 +20,7 @@ import { GitRows } from '../git/GitRows';
 import { GitLogRows, type CommitLogRow } from '../git/GitLogRows';
 import { GitCommands } from '../git/GitCommands';
 import { lineWidth } from '../editor/editor.coordinates';
+import { EditorWrap } from '../editor/EditorWrap';
 import { Logging } from '../system/Logging';
 
 export type Focus = 'files' | 'editor' | 'git';
@@ -357,7 +358,13 @@ class $Workspace {
     const editorVerticalStep = stepMomentum(editorViewport.verticalScrollMomentum.value, dtSeconds, this.verticalMomentum);
     editorViewport.verticalScrollMomentum.value = editorVerticalStep.momentum;
     if (editorVerticalStep.rows !== 0) {
-      editorViewport.scrollBy(editorVerticalStep.rows, this.editor.document.lineCount);
+      // In wrap mode scrollTop is a VISUAL-row offset, so the momentum glide clamps to the wrapped
+      // extent (totalVisualRows) — reaching the true last visual row, same engine as non-wrap.
+      const editor = this.editor;
+      const totalRows = editor.wordWrap.value
+        ? EditorWrap.Class.totalVisualRows(editor.document, editor.wrapWidth())
+        : editor.document.lineCount;
+      editorViewport.scrollBy(editorVerticalStep.rows, totalRows);
     }
 
     const editorHorizontalStep = stepMomentum(editorViewport.horizontalScrollMomentum.value, dtSeconds);

@@ -69,25 +69,39 @@ class $Editor {
     }
   }
 
-  /** Wrap-mode reveal: the smallest logical-scrollTop change that shows the cursor's VISUAL row. */
+  // Wrap-mode reveal: scrollTop is a VISUAL-row index in wrap mode (so it shares the momentum engine +
+  // the scrollbar reads visual extent), so the reveal is the plain min/max on the cursor's ABSOLUTE
+  // visual row = (first visual row of its line) + (its segment within the line). This is what makes the
+  // scroll reach the true last visual row: no logical-line quantization.
   private revealCursorWrapped(): void {
     const width = this.wrapWidth();
     const segments = EditorWrap.Class.wrapLine(this.document.line(this.cursor.line.value), width);
     const segmentIndex = EditorWrap.Class.segmentIndexForCursor(segments, this.cursor.col.value);
-    this.viewport.scrollTop.value = EditorWrap.Class.scrollTopToRevealCursor(
-      this.document,
-      this.viewport.scrollTop.value,
-      this.cursor.line.value,
-      segmentIndex,
-      width,
-      this.viewport.height.value,
-    );
+    const cursorVisualRow = EditorWrap.Class.firstVisualRowOfLine(this.document, this.cursor.line.value, width) + segmentIndex;
+    const height = this.viewport.height.value;
+    const top = this.viewport.scrollTop.value;
+    const maximumTop = Math.max(0, EditorWrap.Class.totalVisualRows(this.document, width) - height);
+    let next = top;
+    if (cursorVisualRow < top) next = cursorVisualRow;
+    else if (cursorVisualRow >= top + height) next = cursorVisualRow - height + 1;
+    this.viewport.scrollTop.value = Math.max(0, Math.min(next, maximumTop));
   }
 
   /** Mode-aware vertical reveal: wrapped visual-row walk when wrap is on, logical otherwise. */
   private scrollLineIntoView(line: number): void {
     if (this.wordWrap.value) this.revealCursorWrapped();
     else this.viewport.scrollToLine(line, this.document.lineCount);
+  }
+
+  /**
+   * Re-anchor the scroll on the cursor for the CURRENT wrap mode — called when word wrap is toggled (by
+   * the command OR the settings panel), where viewport.scrollTop switches units (logical lines ↔ visual
+   * rows). Revealing the cursor sets a valid scrollTop in the new units without a fragile unit
+   * conversion, so the cursor stays on screen across the toggle.
+   */
+  revealCursor(): void {
+    if (!this.hasDocument.value) return;
+    this.scrollLineIntoView(this.cursor.line.value);
   }
 
   openFile(path: string): void {

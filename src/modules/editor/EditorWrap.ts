@@ -269,6 +269,85 @@ function $scrollTopToRevealCursor(
   return top;
 }
 
+/**
+ * Total visual rows the whole document occupies at `wrapWidth` — the wrapped scroll EXTENT. This is the
+ * scrollbar's scrollSize and the max-scroll basis in wrap mode (a logical line count under-reports it,
+ * which is the "scrollbar wrong / can't reach the bottom" bug). O(lines) but every wrapLine is memoized
+ * (content-keyed), so after the first pass it is O(lines) memo lookups.
+ */
+function $totalVisualRows(document: WrappableDocument, wrapWidth: number): number {
+  let total = 0;
+  for (let lineIndex = 0; lineIndex < document.lineCount; lineIndex++) {
+    total += $visualRowCount(document.line(lineIndex), wrapWidth);
+  }
+  return Math.max(1, total);
+}
+
+/**
+ * The visual-row index of a logical line's FIRST visual row (sum of the visual-row counts of all lines
+ * before it). The logical↔visual scroll bridge: maps the cursor's line to its visual offset (scroll-into-
+ * view) and a logical scrollTop to its visual position (scrollbar thumb). O(lineIndex) memoized.
+ */
+function $firstVisualRowOfLine(document: WrappableDocument, lineIndex: number, wrapWidth: number): number {
+  const clamped = Math.max(0, Math.min(lineIndex, document.lineCount));
+  let visualRow = 0;
+  for (let index = 0; index < clamped; index++) {
+    visualRow += $visualRowCount(document.line(index), wrapWidth);
+  }
+  return visualRow;
+}
+
+/**
+ * The (line, segment) at an absolute VISUAL-row offset — the inverse of $firstVisualRowOfLine. Walks
+ * lines accumulating their visual-row counts until the offset falls inside a line, then the segment is
+ * the remainder. Clamps to the last visual row. O(offset-line) memoized. This is what lets the window
+ * start MID-LINE (a tall final line's lower segments become reachable — the true-last-visual-row fix).
+ */
+function $lineSegmentAtVisualRow(
+  document: WrappableDocument,
+  visualOffset: number,
+  wrapWidth: number,
+): { lineIndex: number; segmentIndex: number } {
+  const target = Math.max(0, visualOffset);
+  let consumed = 0;
+  for (let lineIndex = 0; lineIndex < document.lineCount; lineIndex++) {
+    const count = $visualRowCount(document.line(lineIndex), wrapWidth);
+    if (consumed + count > target) {
+      return { lineIndex, segmentIndex: target - consumed };
+    }
+    consumed += count;
+  }
+  // Past the end: clamp to the last visual row of the last line.
+  const lastLine = Math.max(0, document.lineCount - 1);
+  const lastCount = $visualRowCount(document.line(lastLine), wrapWidth);
+  return { lineIndex: lastLine, segmentIndex: Math.max(0, lastCount - 1) };
+}
+
+/**
+ * The flyweight window walk from an absolute VISUAL-row offset (not a logical line). The window may
+ * start MID-LINE — at any segment — so every visual row, including a tall last line's lower segments, is
+ * reachable. O(window) once the start line is located ($lineSegmentAtVisualRow).
+ */
+function $visualRowsFromOffset(
+  document: WrappableDocument,
+  visualOffset: number,
+  wrapWidth: number,
+  height: number,
+): VisualRow[] {
+  const start = $lineSegmentAtVisualRow(document, visualOffset, wrapWidth);
+  const rows: VisualRow[] = [];
+  for (let lineIndex = start.lineIndex; lineIndex < document.lineCount && rows.length < height; lineIndex++) {
+    const segments = $wrapLine(document.line(lineIndex), wrapWidth);
+    const firstSegment = lineIndex === start.lineIndex ? start.segmentIndex : 0;
+    for (let segmentIndex = firstSegment; segmentIndex < segments.length && rows.length < height; segmentIndex++) {
+      const segment = segments[segmentIndex];
+      if (!segment) break;
+      rows.push({ lineIndex, segmentIndex, segment, firstOfLine: segmentIndex === 0 });
+    }
+  }
+  return rows;
+}
+
 // Stateless capability class (project.conventions.md new-file rule): every operation is a pure
 // static, published through the Static() seam like ScrollbarGeometry.
 class $EditorWrap {
@@ -280,6 +359,14 @@ class $EditorWrap {
   static segmentIndexForCursor = $segmentIndexForCursor;
   /** The O(window) walk of visible visual rows from a logical scrollTop. */
   static visualRowsForWindow = $visualRowsForWindow;
+  /** Total visual rows the document occupies (the wrapped scroll extent / scrollbar scrollSize). */
+  static totalVisualRows = $totalVisualRows;
+  /** Visual-row index of a logical line's first row (logical→visual scroll bridge). */
+  static firstVisualRowOfLine = $firstVisualRowOfLine;
+  /** The (line, segment) at an absolute visual-row offset (visual→logical; enables mid-line window top). */
+  static lineSegmentAtVisualRow = $lineSegmentAtVisualRow;
+  /** The O(window) walk of visible visual rows from an absolute VISUAL-row offset (mid-line start ok). */
+  static visualRowsFromOffset = $visualRowsFromOffset;
   /** Vertical movement by visual rows with a row-relative goal column. */
   static moveByVisualRows = $moveByVisualRows;
   /** Smallest logical-scrollTop change that reveals the cursor's visual row (O(height)). */

@@ -96,6 +96,13 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     const mode = settings.glyphMode.value;
     theme.setGlyphLevel(mode === 'auto' ? TerminalCapabilities.Class.detectGlyphLevel() : mode);
   });
+  // Word wrap toggling (command OR settings panel) switches viewport.scrollTop between LOGICAL-line and
+  // VISUAL-row units. Re-anchoring on the cursor sets a valid scrollTop in the new units — no fragile
+  // conversion — so the cursor stays on screen. Depends on settings.wordWrap so BOTH toggle paths fire.
+  app.$watchEffect(() => {
+    void settings.wordWrap.value;
+    workspace.editor.revealCursor();
+  });
 
   // Last mouse event seen (for the observability side channel — proves the mouse path is live).
   let lastMouse: { type: string; x: number; y: number; button: number } | null = null;

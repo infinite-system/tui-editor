@@ -46,6 +46,8 @@ glide_pane() { # <label> <fixture> <status-field> <needs-open> <wheel-col>
   local S="bc-${label}-$$"
   "$H" launch "$S" 120x40 bun run src/main.ts "$fixture" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null
   [ "$needsopen" = "open" ] && open_file "$S"
+  # Focus the pane first — a wheel over an unfocused editor can be swallowed before the glide starts.
+  tmux send-keys -t "$S" -l "$(printf '\033[<0;%d;12M' "$wcol")"; tmux send-keys -t "$S" -l "$(printf '\033[<0;%d;12m' "$wcol")"; sleep 0.2
   tmux send-keys -t "$S" -l "$(printf '\033[<65;%d;12M' "$wcol")"   # ONE wheel-down over the pane
   sleep 0.12; local early="$("$H" field "$S" "$fld")"
   sleep 1.4; "$H" settle "$S" >/dev/null 2>&1; local settled="$("$H" field "$S" "$fld")"
@@ -63,9 +65,36 @@ glide_pane() { # <label> <fixture> <status-field> <needs-open> <wheel-col>
 glide_pane editor "$LONG" editorScrollTop open   60
 glide_pane tree   "$TREE" treeScrollTop  noopen 10
 
-# NOTE (documented, not yet a passing contract): WRAP-MODE vertical scroll is currently a DIRECT step
-# (no momentum) by design — see the wrap-scroll rework (project.progress.md bug 2). When that lands with
-# momentum over VISUAL rows, add a wrap-mode glide contract here (ratchet).
+# ---- CONTRACT: wrap-mode momentum + visual-row extent (RATCHET: the "momentum gone in wrap" report) ----
+# Wrap mode feeds the SAME momentum engine in VISUAL-ROW units, so it glides like non-wrap AND reaches
+# the true last visual row (extent = wrapped visual rows, not logical lines). Both were user-felt gaps.
+echo "== CONTRACT wrap-scroll: wrap-mode wheel glides-then-decays + reaches the true last visual row =="
+WRAP=$(mktemp -d /tmp/tui-bc-wrap.XXXXXX); python3 -c "open('$WRAP/w.txt','w').write(''.join('L%03d '%i + 'word '*40 + '\n' for i in range(200)))"
+python3 -c "import json,os;p=os.path.expanduser('$SET');d=json.load(open(p));d['wordWrap']=True;json.dump(d,open(p,'w'),indent=2)"
+S="bc-wrap-$$"; SESSIONS="$SESSIONS $S"
+"$H" launch "$S" 120x40 bun run src/main.ts "$WRAP" >/dev/null; "$H" ready "$S" 20 >/dev/null
+open_file "$S"
+tmux send-keys -t "$S" -l "$(printf '\033[<0;60;12M')"; tmux send-keys -t "$S" -l "$(printf '\033[<0;60;12m')"; sleep 0.2  # focus
+tmux send-keys -t "$S" -l "$(printf '\033[<65;60;12M')"   # ONE wheel-down
+sleep 0.12; wearly="$("$H" field "$S" editorScrollTop)"
+sleep 1.4; "$H" settle "$S" >/dev/null 2>&1; wsettled="$("$H" field "$S" editorScrollTop)"
+sleep 0.6; wrest="$("$H" field "$S" editorScrollTop)"
+if [ "${wsettled:-0}" -gt 1 ] 2>/dev/null && [ "${wsettled:-0}" -ge "${wearly:-0}" ] 2>/dev/null && [ "${wrest:-0}" = "${wsettled:-0}" ]; then
+  pass "wrap-mode glide-then-decay (early=$wearly settled=$wsettled rest=$wrest)"
+else
+  bad "wrap-mode NO glide/decay (early=$wearly settled=$wsettled rest=$wrest)"
+fi
+# Extent: PageDown to the end reaches a visual-row scrollTop that EXCEEDS the 200 logical lines (a
+# logical-line extent would cap near lineCount-height ~162; visual rows go much further).
+for _ in $(seq 1 25); do "$H" send "$S" PageDown >/dev/null 2>&1; done; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
+wbottom="$("$H" field "$S" editorScrollTop)"
+if [ "${wbottom:-0}" -gt 200 ] 2>/dev/null; then
+  pass "wrap-mode reaches true last visual row (scrollTop=$wbottom > 200 logical lines)"
+else
+  bad "wrap-mode capped at logical lines (scrollTop=$wbottom, expected > 200 visual rows)"
+fi
+python3 -c "import json,os;p=os.path.expanduser('$SET');d=json.load(open(p));d['wordWrap']=False;json.dump(d,open(p,'w'),indent=2)"
+"$H" kill "$S" >/dev/null 2>&1; rm -rf "$WRAP"
 
 echo ""
 if [ "$fail" = 0 ]; then echo "behavioral-contracts: ALL-PASS"; else echo "behavioral-contracts: FAILURES"; fi
