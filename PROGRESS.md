@@ -26,7 +26,10 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 - [x] 8. Idle quiescence — DEMAND-DRIVEN rendering (renderer.auto() + live-request on animations,
       dropLive at quiescence) → measured frame delta 0 over 9-10s at rest, ~0 CPU, RSS 99.6MB (prod
       profile: NODE_ENV=production default + TUI_OBSERVE-gated I/O). Wheel glide advances past input
-      then re-quiesces. (68f897e) Worker D's PERFORMANCE_BASELINES.md still to fold in on merge. — 10s at-rest assertion (frame delta 0, CPU ~0; 14% live
+      then re-quiesces. (68f897e). BUILD TARGET: `bun run build:prod` -> dist/fable standalone
+      (--external web-tree-sitter unblocks --compile; lazy wasm never fires as tree-sitter is
+      unwired; BUILD.md documents run modes + the ship-wasm-when-wired follow-up) (bae00b7).
+      Worker D's PERFORMANCE_BASELINES.md (startup vs <150ms, RSS, idle CPU) folds in on merge. — 10s at-rest assertion (frame delta 0, CPU ~0; 14% live
       sample to disambiguate), RSS 110MB vs 100MB target itemized (PERFORMANCE_BASELINES.md),
       create/dispose lifecycle stability.
 - [~] 9. Static-capability pass — ACCELERATED by partition: codex converting the STABLE legacy bags
