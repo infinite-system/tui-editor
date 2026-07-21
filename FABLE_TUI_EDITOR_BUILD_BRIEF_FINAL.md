@@ -2754,8 +2754,8 @@ Fable must prove that every requested subsystem exists, works together, disposes
 Create and maintain:
 
 - `VERIFICATION_PLAN.md`
-- `VERIFICATION_RESULTS.md`
-- `PERFORMANCE_BASELINES.md`
+- `project.verification-results.md`
+- `project.performance-baselines.md`
 - `RESOURCE_LIFECYCLE_AUDIT.md`
 - `ARCHITECTURE_COMPLIANCE.md`
 - `UX_REVIEW.md`

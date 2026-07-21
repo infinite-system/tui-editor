@@ -1,13 +1,13 @@
 # Handoff — resuming the autonomous TUI build
 
 Full authority to build the whole thing to completion (brief Definition of Done + the §5.1 gate).
-Files on disk survive context compaction; this file + PROGRESS.md are the durable memory.
+Files on disk survive context compaction; this file + `project.progress.md` are the durable memory.
 
 ## MUST RE-READ ON RESUME (in order — highest signal first)
 0. `project.conventions.md` — THE operative convention set (deterministic self-handoff: load this
    BEFORE anything; every turn status carries `conventions @ <git hash of the file>`).
-1. `PROGRESS.md` — the live checklist (USER PIPELINE) + the EXACT next action (file/function/change).
-2. This file (`HANDOFF.md`) — role, API facts, protocols, settled decisions.
+1. `project.progress.md` — the live checklist (USER PIPELINE) + the EXACT next action (file/function/change).
+2. This file (`project.handoff.md`) — role, API facts, protocols, settled decisions.
 3. The contract(s) for whatever you're mid-work on. Editor rework frontier →
    `src/modules/editor/editor.invariants.md`, `src/modules/app/app.invariants.md`,
    `src/modules/ui/ui.invariants.md`. A module merge → that module's `*.invariants.md`.
@@ -16,7 +16,7 @@ Files on disk survive context compaction; this file + PROGRESS.md are the durabl
 6. `project.decisions.md` — the 10 ivue decisions + the 3 study corrections (vue dep, vendored
    Static/kernel, createX-is-ours).
 7. `project.ivue-reference.md` — the flyweight + exact ivue patterns (only if writing ivue code).
-8. Source at the current frontier (from PROGRESS "Next action"): typically
+8. Source at the current frontier (from `project.progress.md` "Next action"): typically
    `src/modules/ui/RootView.ts` (caret/selection render), `src/modules/editor/{Editor,Cursor,TextDocument,editor.coordinates}.ts`, `src/modules/app/Bootstrap.ts`.
 
 ## What this is
@@ -68,7 +68,7 @@ checker + `bun test` before merging. Deprecate sub-par output (don't patch aroun
 - Contracts-first governance; module contracts bootstrapped per milestone; docs named `project.<role>.md` / `<module>.<role>.ts`; PascalCase class files.
 - Verification: tmux + status.json for state; tsc + tests green at EVERY commit.
 
-## The blackline large-project acceptance test (REQUIRED for the gate — see VERIFICATION_RESULTS.md)
+## The blackline large-project acceptance test (REQUIRED for the gate — see project.verification-results.md)
 - ISOLATED WORKTREE ONLY, never touch live blackline-app:
   `git -C /home/parallels/dev/blackline/blackline-app worktree add /home/parallels/dev/blackline/bl-tui-test HEAD`, point the editor there, edit/revert, then
   `git -C /home/parallels/dev/blackline/blackline-app worktree remove --force /home/parallels/dev/blackline/bl-tui-test` and confirm blackline-app is untouched.
@@ -76,4 +76,4 @@ checker + `bun test` before merging. Deprecate sub-par output (don't patch aroun
 
 ## Rules
 - Never block on a question — pick the best contract-consistent default, record it in `project.decisions.md`, keep going. Surface only a TRUE hard blocker (missing credential / ambiguous product call with no safe default).
-- Commit frequently. Keep PROGRESS.md + this file current every few turns. codex not trusted with deletions; commit before delegating.
+- Commit frequently. Keep `project.progress.md` + this file current every few turns. codex not trusted with deletions; commit before delegating.

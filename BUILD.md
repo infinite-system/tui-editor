@@ -37,5 +37,5 @@ wasm loads only when a real grammar is requested.
 
 ## Startup / size / RSS
 Comprehensive baselines (startup vs the <150ms budget, RSS vs ~100 MB, idle CPU) are measured by
-`scripts/perf-baselines.sh` into `PERFORMANCE_BASELINES.md`. Spot check: the compiled binary boots
+`scripts/perf-baselines.sh` into `project.performance-baselines.md`. Spot check: the compiled binary boots
 through the tmux harness and loads a workspace; interpreted prod RSS ≈ 100 MB.

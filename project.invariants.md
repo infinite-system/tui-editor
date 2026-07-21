@@ -584,7 +584,7 @@ checker, resource-lifecycle audit, recorded benchmarks, an independent subagent 
 completeness critic dry twice — each a checkable artifact.
 
 **Generates:** The layered verification model; the subagent cross-check; the completion gate;
-`VERIFICATION_RESULTS.md` and the traceability matrix.
+`project.verification-results.md` and the traceability matrix.
 
 **Evidence:** `project.implementation-plan.md` §5 (the completion gate + layered verification + subagent
 panel). Enforced at every gate.

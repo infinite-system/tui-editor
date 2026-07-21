@@ -1,4 +1,4 @@
-# Performance Baselines — measured (PROGRESS item 8)
+# Performance Baselines — measured (`project.progress.md` item 8)
 
 Measured with `scripts/perf-baselines.sh` (rerunnable, session-scoped: unique tmux sessions +
 per-session status side channels, so live demo instances are never touched).
