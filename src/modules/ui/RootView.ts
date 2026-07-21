@@ -412,10 +412,26 @@ export function buildRootView(
       workspace.ensureLogWindow(workspace.gitPanel.logScrollTop.value);
     },
   });
+  // File-tree vertical scrollbar (files view). The tree owns an independent scrollTop; a thumb drag
+  // adopts authority (halts the wheel-momentum) and writes the offset, the same One-Writer pattern.
+  const treeVerticalBar = new ScrollBarRenderable(renderer, {
+    id: 'tree-scrollbar',
+    orientation: 'vertical',
+    position: 'absolute',
+    width: 2,
+    showArrows: false,
+    onChange: (position) => {
+      if (applyingBarGeometry) return;
+      workspace.haltTreeScroll();
+      workspace.tree.scrollTop.value = trueScrollPosition(treeVerticalBar, position);
+    },
+  });
+  sidebar.add(treeVerticalBar);
   sidebar.add(changesBar);
   sidebar.add(logBar);
   barThickness.set(editorVerticalBar, 1);
   barThickness.set(editorHorizontalBar, 1);
+  barThickness.set(treeVerticalBar, 2);
   barThickness.set(changesBar, 2);
   barThickness.set(logBar, 2);
 
@@ -517,6 +533,22 @@ export function buildRootView(
         viewportSize: viewportWidth,
         scrollPosition: editor.viewport.scrollLeft.value,
       });
+
+    // File-tree scrollbar (files view): the whole sidebar body is the tree list. scrollSize 0 in git
+    // view routes through the visibility rule so the bar hides when the tree isn't showing.
+    const filesVisible = workspace.sidebarView.value !== 'git';
+    const sidebarInnerWidthFiles = sidebarWidth() - 2;
+    const treeViewportHeight = Math.max(1, (sidebar.height as number) - 2);
+    applyBarGeometry(
+      treeVerticalBar,
+      'vertical',
+      { top: 0, left: 0, width: sidebarInnerWidthFiles, height: treeViewportHeight },
+      {
+        scrollSize: filesVisible ? workspace.tree.rows.length : 0,
+        viewportSize: treeViewportHeight,
+        scrollPosition: workspace.tree.scrollTop.value,
+      },
+    );
 
     // Git regions, in the sidebar's content box: branch row 0; changes rows 1..; divider;
     // log rows below — offsets RECOMPUTED from the rendered geometry each frame (splitRatio and
