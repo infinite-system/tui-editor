@@ -1136,8 +1136,11 @@ export function buildRootView(
     tooltipText.visible = tooltip.visible.value;
     if (tooltip.visible.value) {
       const tooltipLabel = ` ${tooltip.text.value} `;
-      // Horizontal clamp so the tooltip never overflows the canvas (the scrollbar-geometry lesson).
-      tooltipText.left = Math.max(0, Math.min(tooltip.anchorX.value, renderer.width - lineWidth(tooltipLabel)));
+      // CENTER the tooltip horizontally over the anchor cell (its midpoint aligns to the cursor
+      // column), then clamp so it never overflows the canvas (the scrollbar-geometry lesson).
+      const tooltipWidth = lineWidth(tooltipLabel);
+      const centeredLeft = tooltip.anchorX.value - Math.floor(tooltipWidth / 2);
+      tooltipText.left = Math.max(0, Math.min(centeredLeft, renderer.width - tooltipWidth));
       // Vertical: default ABOVE the anchor row (so it does not cover the pointed-at row); flip BELOW
       // only when there is no room above (near the top edge). Explicit 'below' forces below.
       const anchorY = tooltip.anchorY.value;
