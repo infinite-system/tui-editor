@@ -7,8 +7,7 @@ import { Clock } from '../system/Clock';
 import { StatusChannel } from '../system/StatusChannel';
 import { GitCommands, type GitCommandResult } from './GitCommands';
 import {
-  parseLog,
-  parseStatusPorcelainV2,
+  GitParsers,
   type CommitRecord,
   type GitFileRecord,
 } from './git.parsers';
@@ -99,7 +98,7 @@ class $GitRepository {
         return;
       }
 
-      const status = parseStatusPorcelainV2(result.stdout);
+      const status = GitParsers.Class.parseStatusPorcelainV2(result.stdout);
       if (requestId !== this.refreshRequestId) return;
       if (status.branch !== this.branch.value) {
         this.historyRequestId++;
@@ -143,7 +142,7 @@ class $GitRepository {
         return [];
       }
 
-      const commits = parseLog(result.stdout).slice(0, limit);
+      const commits = GitParsers.Class.parseLog(result.stdout).slice(0, limit);
       if (requestId !== this.historyRequestId) return [];
       this.historyPage.value = commits;
       this.error.value = null;

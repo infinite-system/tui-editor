@@ -2,14 +2,12 @@ import { expect, test } from 'bun:test';
 import {
   LOG_FIELD_SEPARATOR,
   LOG_RECORD_SEPARATOR,
-  parseLog,
-  parseNameStatus,
-  parseStatusPorcelainV2,
+  GitParsers,
 } from '../git.parsers';
 
 test('name-status parser yields one status letter + path per line', () => {
   const output = ['M\tsrc/modules/git/GitCommands.ts', 'A\tdocs/new.md', 'D\told.txt', ''].join('\n');
-  expect(parseNameStatus(output)).toEqual([
+  expect(GitParsers.Class.parseNameStatus(output)).toEqual([
     { status: 'M', path: 'src/modules/git/GitCommands.ts' },
     { status: 'A', path: 'docs/new.md' },
     { status: 'D', path: 'old.txt' },
@@ -18,7 +16,7 @@ test('name-status parser yields one status letter + path per line', () => {
 
 test('name-status parser shows a rename as its NEW path with glyph R and keeps the source', () => {
   const output = 'R100\tsrc/old-name.ts\tsrc/new-name.ts\n';
-  expect(parseNameStatus(output)).toEqual([
+  expect(GitParsers.Class.parseNameStatus(output)).toEqual([
     { status: 'R', path: 'src/new-name.ts', originalPath: 'src/old-name.ts' },
   ]);
 });
@@ -30,7 +28,7 @@ test('name-status parser handles copies, quoted paths, and skips malformed lines
     'M\t"\\321\\202\\320\\265\\321\\201\\321\\202.md"', // git-quoted UTF-8 octal bytes
     'not-a-status-line',
   ].join('\n');
-  expect(parseNameStatus(output)).toEqual([
+  expect(GitParsers.Class.parseNameStatus(output)).toEqual([
     { status: 'C', path: 'copy.ts', originalPath: 'source.ts' },
     { status: 'M', path: 'тест.md' },
   ]);
@@ -47,7 +45,7 @@ test('porcelain v2 parser separates staged unstaged and untracked XY records', (
     '',
   ].join('\n');
 
-  const status = parseStatusPorcelainV2(output);
+  const status = GitParsers.Class.parseStatusPorcelainV2(output);
 
   expect(status.branch).toBe('feature/parser');
   expect(status.head).toBe('0123456789abcdef0123456789abcdef01234567');
@@ -72,7 +70,7 @@ test('porcelain v2 parser decodes rename paths and quoted UTF-8 bytes', () => {
     '? "caf\\303\\251.ts"',
   ].join('\n');
 
-  const status = parseStatusPorcelainV2(output);
+  const status = GitParsers.Class.parseStatusPorcelainV2(output);
 
   expect(status.head).toBe('');
   expect(status.staged[0]).toEqual({
@@ -103,7 +101,7 @@ test('log parser returns compact commit records', () => {
     '',
   ].join(LOG_FIELD_SEPARATOR);
 
-  const commits = parseLog(
+  const commits = GitParsers.Class.parseLog(
     `${first}${LOG_RECORD_SEPARATOR}\n${second}${LOG_RECORD_SEPARATOR}\n`,
   );
 

@@ -7,6 +7,7 @@
 // invariant: The core is complete without plugins (project.invariants.md)
 import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
+import { CommandScoring } from './commands.scoring';
 
 export interface Command {
   id: string;
@@ -14,26 +15,6 @@ export interface Command {
   category?: string;
   run: () => void | Promise<void>;
   when?: () => boolean;
-}
-
-/** Case-insensitive subsequence match; returns a score (lower = tighter) or -1. */
-export function fuzzyScore(query: string, text: string): number {
-  if (!query) return 0;
-  const loweredQuery = query.toLowerCase();
-  const loweredText = text.toLowerCase();
-  let queryIndex = 0;
-  let textIndex = 0;
-  let score = 0;
-  let lastMatch = -1;
-  while (queryIndex < loweredQuery.length && textIndex < loweredText.length) {
-    if (loweredQuery[queryIndex] === loweredText[textIndex]) {
-      if (lastMatch >= 0) score += textIndex - lastMatch; // reward adjacency
-      lastMatch = textIndex;
-      queryIndex++;
-    }
-    textIndex++;
-  }
-  return queryIndex === loweredQuery.length ? score : -1;
 }
 
 class $CommandRegistry {
@@ -82,7 +63,7 @@ class $CommandRegistry {
   private recompute(): void {
     const query = this.query.value;
     const scored = this.all()
-      .map((command) => ({ command, score: fuzzyScore(query, command.title) }))
+      .map((command) => ({ command, score: CommandScoring.Class.fuzzyScore(query, command.title) }))
       .filter((entry) => entry.score >= 0)
       .sort((left, right) => left.score - right.score || left.command.title.localeCompare(right.command.title));
     this.filteredRef.value = scored.map((entry) => entry.command);

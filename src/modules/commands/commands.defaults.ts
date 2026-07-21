@@ -2,6 +2,7 @@
 // registered here. Plugins (M7) contribute additional commands to the same registry.
 //
 // invariant: The core is complete without plugins (project.invariants.md)
+import { Static } from '../system/Static';
 import type { CommandRegistry } from './CommandRegistry';
 import type { Workspace } from '../workspace/Workspace';
 import type { Theme } from '../theme/Theme';
@@ -13,7 +14,7 @@ export interface CommandContext {
   requestRender: () => void;
 }
 
-export function registerDefaultCommands(
+function registerDefaultCommandsImplementation(
   registry: CommandRegistry.Instance,
   context: CommandContext,
 ): void {
@@ -90,4 +91,13 @@ export function registerDefaultCommands(
       run: () => context.quit(),
     },
   ]);
+}
+
+class $CommandDefaults {
+  static registerDefaultCommands = registerDefaultCommandsImplementation;
+}
+
+export namespace CommandDefaults {
+  export const $Class = $CommandDefaults;
+  export const Class = Static($CommandDefaults);
 }

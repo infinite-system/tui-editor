@@ -6,6 +6,8 @@
 // invariant: Cost tracks the actively observed set (project.invariants.md)
 //   — only the visible window is tokenized, one line at a time.
 
+import { Static } from '../system/Static';
+
 export type Role =
   | 'keyword'
   | 'string'
@@ -156,7 +158,7 @@ function tokenizeMarkdown(line: string): Span[] {
   return [{ text: line, role: 'text' }];
 }
 
-export function highlightLine(line: string, language: LangId): Span[] {
+function highlightLineImplementation(line: string, language: LangId): Span[] {
   if (language === 'diff') {
     // Line-level diff coloring: whole-line roles keyed by the unified-diff prefix.
     if (line.startsWith('+')) return [{ text: line, role: 'added' }];
@@ -176,4 +178,13 @@ export function highlightLine(line: string, language: LangId): Span[] {
     default:
       return [{ text: line, role: 'text' }];
   }
+}
+
+class $Highlighter {
+  static highlightLine = highlightLineImplementation;
+}
+
+export namespace Highlighter {
+  export const $Class = $Highlighter;
+  export const Class = Static($Highlighter);
 }

@@ -10,7 +10,7 @@ import { Kernel } from '../kernel/Kernel';
 import { Workspace } from '../workspace/Workspace';
 import { Theme } from '../theme/Theme';
 import { CommandRegistry } from '../commands/CommandRegistry';
-import { registerDefaultCommands } from '../commands/commands.defaults';
+import { CommandDefaults } from '../commands/commands.defaults';
 import { buildRootView, type RootView } from '../ui/RootView';
 import { StatusChannel } from '../system/StatusChannel';
 import { FrameProbe } from '../system/FrameProbe';
@@ -254,7 +254,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     options.onQuit?.();
   };
 
-  registerDefaultCommands(commands, {
+  CommandDefaults.Class.registerDefaultCommands(commands, {
     workspace,
     theme,
     quit: () => void shutdown(),

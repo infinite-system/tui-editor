@@ -5,6 +5,8 @@
 
 // invariant: Cost tracks the actively observed set (project.invariants.md)
 
+import { Static } from '../system/Static';
+
 /** A contiguous run of indices to fetch: commits [offset, offset+length). */
 export interface FetchRange {
   offset: number;
@@ -16,7 +18,7 @@ export interface FetchRange {
  * minimal set of git-log pages to fetch to fill the window. Merges adjacent gaps into one range so
  * a scroll fetches at most a few pages, never one call per row.
  */
-export function missingRanges(loaded: ReadonlySet<number>, start: number, count: number): FetchRange[] {
+function missingRangesImplementation(loaded: ReadonlySet<number>, start: number, count: number): FetchRange[] {
   const from = Math.max(0, start);
   const to = from + count; // exclusive
   const ranges: FetchRange[] = [];
@@ -37,10 +39,20 @@ export function missingRanges(loaded: ReadonlySet<number>, start: number, count:
  * Loaded indices that fall OUTSIDE the keep-window `[keepStart, keepStart+keepCount)` and should be
  * dropped to bound memory. keepCount is typically the viewport height plus a margin above and below.
  */
-export function evictable(loaded: Iterable<number>, keepStart: number, keepCount: number): number[] {
+function evictableImplementation(loaded: Iterable<number>, keepStart: number, keepCount: number): number[] {
   const low = Math.max(0, keepStart);
   const high = keepStart + keepCount; // exclusive
   const evicted: number[] = [];
   for (const index of loaded) if (index < low || index >= high) evicted.push(index);
   return evicted;
+}
+
+class $GitWindow {
+  static missingRanges = missingRangesImplementation;
+  static evictable = evictableImplementation;
+}
+
+export namespace GitWindow {
+  export const $Class = $GitWindow;
+  export const Class = Static($GitWindow);
 }

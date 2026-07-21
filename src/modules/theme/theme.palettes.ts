@@ -1,5 +1,6 @@
 // Color palettes as semantic tokens, with truecolor → 256 → 16 down-quantization.
 // invariant: Appearance is data with a capability fallback (project.invariants.md)
+import { Static } from '../system/Static';
 import type { ColorDepth } from './TerminalCapabilities';
 
 export interface Palette {
@@ -109,7 +110,7 @@ function rgbToHex(red: number, green: number, blue: number): string {
 }
 
 /** Return a palette whose colors are quantized to the terminal's depth. */
-export function quantizePalette(palette: Palette, depth: ColorDepth): Palette {
+function quantizePaletteImplementation(palette: Palette, depth: ColorDepth): Palette {
   if (depth === 'truecolor') return palette;
   const mapColor = depth === '256' ? to256Hex : to16Hex;
   const result = { ...palette };
@@ -120,4 +121,13 @@ export function quantizePalette(palette: Palette, depth: ColorDepth): Palette {
     }
   }
   return result;
+}
+
+class $ThemePalettes {
+  static quantizePalette = quantizePaletteImplementation;
+}
+
+export namespace ThemePalettes {
+  export const $Class = $ThemePalettes;
+  export const Class = Static($ThemePalettes);
 }

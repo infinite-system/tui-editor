@@ -13,7 +13,7 @@
 import { Reactive } from 'ivue';
 import { shallowRef } from 'vue';
 import { GitCommands } from './GitCommands';
-import { parseNameStatus, type CommitFileChange } from './git.parsers';
+import { GitParsers, type CommitFileChange } from './git.parsers';
 import type { ExpandedCommit } from './git.log-rows';
 
 export type CommitFilesFetch = (sha: string) => Promise<readonly CommitFileChange[]>;
@@ -114,7 +114,7 @@ class $CommitExpansion {
     if (this.options.fetch) return this.options.fetch(sha);
     const result = await this.GitCommands.showNameStatus(this.cwd, sha);
     if (result.code !== 0) return [];
-    return parseNameStatus(result.stdout);
+    return GitParsers.Class.parseNameStatus(result.stdout);
   }
 }
 
