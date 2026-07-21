@@ -37,6 +37,15 @@ class $FileTree {
   get selectionMomentum() {
     return shallowRef<ScrollMomentum>(AT_REST);
   }
+  // INDEPENDENT scroll offset (first visible row), like the git-changes list — NOT derived from the
+  // selection. Wheel scrolls this; selection moves independently; clicking a visible row leaves it
+  // untouched (so opening a file never snaps the list). RootView sets viewportHeight each frame.
+  get scrollTop() {
+    return ref(0);
+  }
+  get viewportHeight() {
+    return ref(1);
+  }
   // shallowRef holding the last flattened rows (recomputed on structural change only).
   private get rowsRef() {
     return shallowRef<TreeRow[]>([]);
