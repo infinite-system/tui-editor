@@ -62,6 +62,20 @@ case "$cmd" in
     tmux send-keys -t "$session" -l "$(printf '\033[<%d;%d;%dm' "$button" "$((x+1))" "$((y+1))")"
     sleep 0.2
     ;;
+  drag)
+    # drag <session> <x1> <y1> <x2> <y2>  — SGR left-press at (x1,y1), drag motion (button+32)
+    # through a midpoint to (x2,y2), release at (x2,y2). 0-based cells; SGR is 1-based.
+    session="$1"; x1="$2"; y1="$3"; x2="$4"; y2="$5"
+    tmux send-keys -t "$session" -l "$(printf '\033[<0;%d;%dM' "$((x1+1))" "$((y1+1))")"
+    sleep 0.08
+    midX=$(( (x1+x2)/2 + 1 )); midY=$(( (y1+y2)/2 + 1 ))
+    tmux send-keys -t "$session" -l "$(printf '\033[<32;%d;%dM' "$midX" "$midY")"
+    sleep 0.08
+    tmux send-keys -t "$session" -l "$(printf '\033[<32;%d;%dM' "$((x2+1))" "$((y2+1))")"
+    sleep 0.08
+    tmux send-keys -t "$session" -l "$(printf '\033[<0;%d;%dm' "$((x2+1))" "$((y2+1))")"
+    sleep 0.2
+    ;;
   scroll)
     # scroll <session> <x> <y> up|down [amount]  — SGR wheel at 0-based (x,y); button 64=up, 65=down.
     # Wheel events are press-only (no release); repeat `amount` times (default 1).

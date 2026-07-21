@@ -335,7 +335,14 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
         switch (key.name) {
           case 's': editor.save(); break;
           case 'a': editor.selectAll(); break;
-          case 'c': void editor.copySelection(); break;
+          case 'c':
+            // Publish how many characters landed on the clipboard — the observable proof that
+            // copy actually copied (the human-QA "cannot copy" bug's verification channel).
+            void editor.copySelection().then((copiedCharacters) => {
+              StatusChannel.Class.update({ lastCopyChars: copiedCharacters });
+              StatusChannel.Class.flush();
+            });
+            break;
           case 'x': void editor.cutSelection(); break;
           case 'v': void editor.pasteClipboard(); break;
           case 'z': key.shift ? editor.performRedo() : editor.performUndo(); break;

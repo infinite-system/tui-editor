@@ -112,6 +112,24 @@ export function lineWidth(line: string, tabWidth = 4): number {
   return displayColumn(line, graphemeCount(line), tabWidth);
 }
 
+/**
+ * Inverse of `displayColumn`: the grapheme index whose cell covers `targetColumn` (a mouse hit).
+ * A hit inside a wide glyph or a tab resolves to THAT grapheme; a hit past end-of-line clamps to
+ * the line's grapheme count (caret after the last character).
+ */
+export function graphemeAtDisplayColumn(line: string, targetColumn: number, tabWidth = 4): number {
+  if (targetColumn <= 0) return 0;
+  const clusters = graphemes(line);
+  let column = 0;
+  for (let index = 0; index < clusters.length; index++) {
+    const cluster = clusters[index] ?? '';
+    const width = cluster === '\t' ? tabWidth - (column % tabWidth) : graphemeWidth(cluster);
+    if (targetColumn < column + width) return index;
+    column += width;
+  }
+  return clusters.length;
+}
+
 /** Clamp a grapheme column to a line's valid range [0, graphemeCount]. */
 export function clampCol(line: string, column: number): number {
   return Math.max(0, Math.min(column, graphemeCount(line)));

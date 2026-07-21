@@ -8,6 +8,7 @@ import {
   displayColumn,
   graphemeWidth,
   lineWidth,
+  graphemeAtDisplayColumn,
 } from '../editor.coordinates';
 import { TextDocument } from '../TextDocument';
 
@@ -68,4 +69,31 @@ test('split line at a grapheme boundary keeps the emoji intact', () => {
   document.splitLine(0, 2); // split after the emoji
   expect(document.line(0)).toBe('a😀');
   expect(document.line(1)).toBe('b');
+});
+
+test('graphemeAtDisplayColumn inverts displayColumn on plain text', () => {
+  const line = 'hello world';
+  for (let graphemeIndex = 0; graphemeIndex <= graphemeCount(line); graphemeIndex++) {
+    expect(graphemeAtDisplayColumn(line, displayColumn(line, graphemeIndex))).toBe(graphemeIndex);
+  }
+});
+
+test('graphemeAtDisplayColumn: a hit inside a wide glyph resolves to that glyph', () => {
+  const line = 'a中b'; // cells: a=0, 中=1..2 (wide), b=3
+  expect(graphemeAtDisplayColumn(line, 0)).toBe(0); // on 'a'
+  expect(graphemeAtDisplayColumn(line, 1)).toBe(1); // left cell of 中
+  expect(graphemeAtDisplayColumn(line, 2)).toBe(1); // right cell of 中 -> still 中
+  expect(graphemeAtDisplayColumn(line, 3)).toBe(2); // on 'b'
+});
+
+test('graphemeAtDisplayColumn: a hit inside a tab resolves to the tab', () => {
+  const line = '\ta'; // tab covers cells 0..3 (tabWidth 4), 'a' at cell 4
+  expect(graphemeAtDisplayColumn(line, 0)).toBe(0);
+  expect(graphemeAtDisplayColumn(line, 3)).toBe(0); // still inside the tab
+  expect(graphemeAtDisplayColumn(line, 4)).toBe(1); // on 'a'
+});
+
+test('graphemeAtDisplayColumn clamps past end-of-line and below zero', () => {
+  expect(graphemeAtDisplayColumn('ab', 99)).toBe(2); // caret after the last char
+  expect(graphemeAtDisplayColumn('ab', -5)).toBe(0);
 });

@@ -142,9 +142,11 @@ class $Editor {
 
   // --- clipboard ------------------------------------------------------------
 
-  async copySelection(): Promise<void> {
+  /** Copy the selection to the clipboard; returns the number of characters copied (0 = nothing). */
+  async copySelection(): Promise<number> {
     const text = this.selectionText();
     if (text) await Clipboard.Class.copy(text);
+    return text.length;
   }
 
   async cutSelection(): Promise<void> {

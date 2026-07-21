@@ -19,8 +19,9 @@ import type { CommandRegistry } from '../commands/CommandRegistry';
 import type { Palette } from '../theme/theme.palettes';
 import { highlightLine, type Role } from '../syntax/Highlighter';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
-import { displayColumn, lineWidth } from '../editor/editor.coordinates';
+import { displayColumn, lineWidth, graphemeAtDisplayColumn } from '../editor/editor.coordinates';
 import { SelectableText } from './SelectableText';
+import { Logging } from '../system/Logging';
 
 function roleColor(role: Role, palette: Palette): string {
   switch (role) {
@@ -96,7 +97,12 @@ export function buildRootView(
   const codeBody = new SelectableText(renderer, {
     id: 'editor-code',
     content: '',
-    selectable: true,
+    // selectable:false — OpenTUI's OWN mouse-drag selection is a second writer of selection state
+    // that the model never sees: its highlight appeared on drag, then the next paint's
+    // applySelection() (reading the EMPTY model selection) wiped it — the human-QA
+    // "selection appears then disappears" bug. The model is the one writer; mouse events below
+    // drive cursor+anchor, and the native selection is only ever set programmatically from them.
+    selectable: false,
     flexGrow: 1,
     // An editor pane NEVER soft-wraps: one file line == one visual row, always; long lines clip at
     // the right edge (horizontal scroll covers the rest). Wrapping desyncs the gutter (which
@@ -393,8 +399,43 @@ export function buildRootView(
     else workspace.tree.moveSelection(wheelDelta(event));
   };
   editorArea.onMouseScroll = (event) => {
-    const editor = workspace.editor;
-    if (editor.hasDocument.value) editor.viewport.scrollBy(wheelDelta(event), editor.document.lineCount);
+    if (workspace.editor.hasDocument.value)
+      workspace.editor.viewport.scrollBy(wheelDelta(event), workspace.editor.document.lineCount);
+  };
+
+  // Mouse selection drives the MODEL (cursor + anchor) — the single writer; the native highlight
+  // is then applied FROM the model by applySelection() each paint, so it persists across repaints
+  // and Ctrl+C copies exactly what is highlighted.
+  // invariant: The selected range renders with a background (ui.invariants.md)
+  const documentPositionAtCell = (cellX: number, cellY: number): { line: number; column: number } | null => {
+    if (!workspace.editor.hasDocument.value) return null;
+    const line = Math.max(
+      0,
+      Math.min(
+        workspace.editor.viewport.scrollTop.value + (cellY - codeBody.y),
+        workspace.editor.document.lineCount - 1,
+      ),
+    );
+    const column = graphemeAtDisplayColumn(workspace.editor.document.line(line), cellX - codeBody.x);
+    return { line, column };
+  };
+  codeBody.onMouseDown = (event) => {
+    const hit = documentPositionAtCell(event.x, event.y);
+    if (process.env.TUI_DEBUG_MOUSE === '1') Logging.Class.info(`mouseDown (${event.x},${event.y}) hit=${JSON.stringify(hit)}`);
+    if (!hit) return;
+    workspace.focusEditor(); // click-to-focus
+    workspace.editor.cursor.set(hit.line, hit.column);
+    workspace.editor.cursor.setAnchorHere(); // anchor at the press; dragging extends from here
+  };
+  codeBody.onMouseDrag = (event) => {
+    const hit = documentPositionAtCell(event.x, event.y);
+    if (process.env.TUI_DEBUG_MOUSE === '1') Logging.Class.info(`mouseDrag (${event.x},${event.y}) hit=${JSON.stringify(hit)}`);
+    if (!hit) return;
+    workspace.editor.cursor.set(hit.line, hit.column); // anchor stays — selection = anchor -> cursor
+  };
+  codeBody.onMouseUp = () => {
+    // A plain click (no drag) leaves anchor == cursor: clear it so no empty selection lingers.
+    if (!workspace.editor.cursor.hasSelection) workspace.editor.cursor.clearSelection();
   };
 
   update();

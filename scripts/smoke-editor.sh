@@ -84,6 +84,21 @@ chkne "selection range published" "$(f selection)"
 "$H" send "$S" Escape >/dev/null
 chk "selection cleared after Escape" "$(f hasSelection)" "false"
 
+echo "== mouse drag-select persists + Ctrl+C copies (human-QA regression) =="
+# Drag along row y=2 (doc line 1, "A tiny project..." — a CONTENT line; an empty line cannot hold
+# a horizontal selection).
+"$H" drag "$S" 40 2 50 2 >/dev/null
+"$H" settle "$S" >/dev/null 2>&1
+chk "drag created a selection" "$(f hasSelection)" "true"
+sleep 0.8
+"$H" settle "$S" >/dev/null 2>&1
+chk "selection persists across frames" "$(f hasSelection)" "true"
+"$H" send "$S" C-c >/dev/null
+sleep 0.4
+copied="$(f lastCopyChars)"
+if [ -n "$copied" ] && [ "$copied" != "null" ] && [ "$copied" -gt 0 ] 2>/dev/null; then echo "  PASS  Ctrl+C copied $copied chars"; else echo "  FAIL  Ctrl+C copied nothing (lastCopyChars=$copied)"; fail=1; fi
+"$H" send "$S" Escape >/dev/null
+
 echo "== mouse input path (real SGR click arrives) =="
 "$H" click "$S" 40 5 >/dev/null
 "$H" settle "$S" >/dev/null 2>&1
