@@ -5,7 +5,7 @@
 import { Reactive } from 'ivue';
 import { ref } from 'vue';
 import { TerminalCapabilities, type ColorDepth, type GlyphLevel } from './TerminalCapabilities';
-import { PALETTES, DARK, quantizePalette, type Palette } from './theme.palettes';
+import { PALETTES, DARK, ThemePalettes, type Palette } from './theme.palettes';
 import { ThemeIcons, type IconSet } from './theme.icons';
 
 class $Theme {
@@ -22,7 +22,7 @@ class $Theme {
   // Derived (plain getters — re-derive on read, zero per-instance cost).
   get palette(): Palette {
     const base = PALETTES[this.paletteName.value] ?? DARK;
-    return quantizePalette(base, this.colorDepth.value);
+    return ThemePalettes.Class.quantizePalette(base, this.colorDepth.value);
   }
   get icons(): IconSet {
     return ThemeIcons.Class.iconSetFor(this.glyphLevel.value);

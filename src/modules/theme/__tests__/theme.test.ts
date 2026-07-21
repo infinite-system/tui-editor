@@ -1,14 +1,14 @@
 import { test, expect } from 'bun:test';
-import { DARK, quantizePalette } from '../theme.palettes';
+import { DARK, ThemePalettes } from '../theme.palettes';
 import { ThemeIcons } from '../theme.icons';
 
 test('truecolor quantization is identity', () => {
-  const palette = quantizePalette(DARK, 'truecolor');
+  const palette = ThemePalettes.Class.quantizePalette(DARK, 'truecolor');
   expect(palette.bg).toBe(DARK.bg);
 });
 
 test('16-color quantization maps every color into the ANSI-16 set', () => {
-  const palette = quantizePalette(DARK, '16');
+  const palette = ThemePalettes.Class.quantizePalette(DARK, '16');
   const ansi = new Set([
     '#000000', '#800000', '#008000', '#808000', '#000080', '#800080',
     '#008080', '#c0c0c0', '#808080', '#ff0000', '#00ff00', '#ffff00',
@@ -23,7 +23,7 @@ test('16-color quantization maps every color into the ANSI-16 set', () => {
 });
 
 test('256 quantization keeps hex shape', () => {
-  const palette = quantizePalette(DARK, '256');
+  const palette = ThemePalettes.Class.quantizePalette(DARK, '256');
   expect(palette.accent).toMatch(/^#[0-9a-f]{6}$/);
 });
 
