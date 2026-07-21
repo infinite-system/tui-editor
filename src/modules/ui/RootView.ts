@@ -580,6 +580,7 @@ export function buildRootView(
   // Hover/press state (view-only), driven by tab-bar mouse move/press.
   let tabBarHover: { kind: 'tab' | 'close' | 'arrowLeft' | 'arrowRight' | 'badge'; index: number } | null = null;
   let tabBarArrowPressed: 'arrowLeft' | 'arrowRight' | null = null;
+  let tabBarClosePressed: number | null = null; // index of the tab whose ✕ is being pressed
   // The strip's VIEWPORT PAN offset (first visible tab), INDEPENDENT of the active tab — the overflow
   // arrows drive this and never change which buffer is active (VS Code's ‹ › pan the strip only).
   // Changing the active tab (click / Ctrl+PageUp-Down) auto-reveals it, but panning does not snap back.
@@ -667,8 +668,11 @@ export function buildRootView(
       chunks.push(paint(' ', labelColor));
       column += entry.labelWidth;
       const closeColumn = column;
-      const closeColor = isCloseHover ? palette.warning : labelColor;
-      const closeBackground = isCloseHover ? palette.selection : rowBackground;
+      // The ✕ is an INDEPENDENTLY-stated target on EVERY tab (including active): idle → hover (bright
+      // error ✕ that pops even over the active tab's selection bg) → pressed (inverted: bg over error).
+      const isClosePressed = tabBarClosePressed === index;
+      const closeColor = isClosePressed ? palette.bg : isCloseHover ? palette.error : labelColor;
+      const closeBackground = isClosePressed ? palette.error : rowBackground;
       chunks.push(closeBackground ? bg(closeBackground)(fg(closeColor)('✕')) : fg(closeColor)('✕'));
       column += 1;
       chunks.push(paint(' ', labelColor)); // trailing pad — ✕ never touches the edge
@@ -761,8 +765,11 @@ export function buildRootView(
     const segment = tabBarSegmentAt(localColumn);
     if (!segment) return;
     if (segment.kind === 'tab') {
-      if (localColumn === segment.closeColumn) workspace.requestCloseTab(segment.index);
-      else workspace.activateTab(segment.index);
+      if (localColumn === segment.closeColumn) {
+        tabBarClosePressed = segment.index; // show the pressed ✕ before the close/confirm
+        renderer.requestRender();
+        workspace.requestCloseTab(segment.index);
+      } else workspace.activateTab(segment.index);
     } else if (segment.kind === 'badge') {
       openTabDropdown(segment.start);
     } else {
@@ -773,8 +780,9 @@ export function buildRootView(
     }
   };
   tabBar.onMouseUp = () => {
-    if (tabBarArrowPressed) {
+    if (tabBarArrowPressed || tabBarClosePressed !== null) {
       tabBarArrowPressed = null;
+      tabBarClosePressed = null;
       renderer.requestRender();
     }
   };
@@ -793,9 +801,10 @@ export function buildRootView(
     }
   };
   tabBar.onMouseOut = () => {
-    if (tabBarHover || tabBarArrowPressed) {
+    if (tabBarHover || tabBarArrowPressed || tabBarClosePressed !== null) {
       tabBarHover = null;
       tabBarArrowPressed = null;
+      tabBarClosePressed = null;
       renderer.requestRender();
     }
   };
