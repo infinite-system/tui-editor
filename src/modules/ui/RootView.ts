@@ -153,14 +153,21 @@ export function buildRootView(
   const editorViewportHeight = () => Math.max(1, (editorArea.height as number) - 2);
   const editorViewportWidth = () => Math.max(1, (editorArea.width as number) - 2 - 6); // gutter
 
+  // First visible tree row (the render window slides to keep the selection on screen); shared by
+  // the renderer and the mouse hit-test so clicks land on the row the user actually sees.
+  function treeWindowTop(): number {
+    const selectedIndex = workspace.tree.selectedIndex.value;
+    const height = Math.max(1, (sidebar.height as number) - 2);
+    return selectedIndex >= height ? selectedIndex - height + 1 : 0;
+  }
+
   function renderTree(): string {
     const palette = readPalette();
     const rows = workspace.tree.rows;
     const selectedIndex = workspace.tree.selectedIndex.value;
     const height = Math.max(1, (sidebar.height as number) - 2);
     // Flyweight: only render the visible window around the selection.
-    let top = 0;
-    if (selectedIndex >= height) top = selectedIndex - height + 1;
+    const top = treeWindowTop();
     const visible = rows.slice(top, top + height);
     const lines = visible.map((row, visibleIndex) => {
       const rowIndex = top + visibleIndex;
@@ -436,6 +443,26 @@ export function buildRootView(
   codeBody.onMouseUp = () => {
     // A plain click (no drag) leaves anchor == cursor: clear it so no empty selection lingers.
     if (!workspace.editor.cursor.hasSelection) workspace.editor.cursor.clearSelection();
+  };
+
+  // Sidebar clicks: focus follows the click (files or git view), and a click on a tree row SELECTS
+  // it — clicking the already-selected row ACTIVATES it (open file / toggle folder). Keyboard
+  // parity holds: everything here is also reachable via arrows/Enter.
+  sidebar.onMouseDown = (event) => {
+    if (workspace.focus.value === 'git') {
+      // Git rows get click-select with the changes-list treatment; for now the click just keeps
+      // focus on the git panel.
+      workspace.focusGit();
+      return;
+    }
+    workspace.focusFiles(); // click-to-focus
+    const rowIndex = treeWindowTop() + (event.y - (sidebar.y + 1)); // +1: sidebar top border
+    if (rowIndex < 0 || rowIndex >= workspace.tree.rows.length) return;
+    if (workspace.tree.selectedIndex.value === rowIndex) {
+      workspace.activate(); // second click on the selected row opens/toggles
+    } else {
+      workspace.tree.selectedIndex.value = rowIndex;
+    }
   };
 
   update();

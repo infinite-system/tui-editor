@@ -105,6 +105,14 @@ echo "== mouse input path (real SGR click arrives) =="
 mouse="$(f mouse)"
 if [ -n "$mouse" ] && [ "$mouse" != "null" ]; then echo "  PASS  mouse click registered ($mouse)"; else echo "  FAIL  mouse click did not register"; fail=1; fi
 
+echo "== tree click: select, click-again activates; click-to-focus (human-QA regression) =="
+"$H" send "$S" Escape >/dev/null   # ensure editor focus first (escape w/o selection -> files)... then re-focus editor by clicking
+"$H" click "$S" 5 1 >/dev/null     # click tree row 0 -> select + focus files
+chk "tree click focuses files" "$(f focus)" "files"
+chk "tree click selected row 0" "$(f treeSelected)" "0"
+"$H" click "$S" 60 5 >/dev/null    # click editor pane -> focus editor
+chk "editor click focuses editor" "$(f focus)" "editor"
+
 echo "== command palette (Ctrl+P) =="
 "$H" send "$S" C-p >/dev/null
 chk "palette overlay" "$(f overlay)" "palette"
