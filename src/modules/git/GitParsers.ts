@@ -1,7 +1,7 @@
 // Pure parsers for stable Git CLI formats. These produce compact plain records; callers may
 // retain or virtualize the arrays without creating a reactive object per status/commit row.
 
-import { Static } from '../system/Static';
+import { Static } from 'ivue/extras';
 
 export const LOG_FIELD_SEPARATOR = '\x1f';
 export const LOG_RECORD_SEPARATOR = '\x1e';

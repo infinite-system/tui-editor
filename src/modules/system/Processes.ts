@@ -1,4 +1,4 @@
-import { Static } from './Static';
+import { Static } from 'ivue/extras';
 // Subprocess capability (Bun.spawn). All external-process access is confined here so the
 // argument-injection boundary (L9) has one home: callers pass an ARGV ARRAY, never a shell
 // string, so filenames/branches can never be interpreted as arguments or shell syntax.

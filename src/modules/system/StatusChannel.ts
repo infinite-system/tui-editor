@@ -1,4 +1,4 @@
-import { Static } from './Static';
+import { Static } from 'ivue/extras';
 // Observability side channel (plan §5.2) — the deterministic artifact the tmux harness
 // asserts against instead of scraping the pane. The app pushes model/process state here;
 // this writes artifacts/status.json atomically after each settled frame.

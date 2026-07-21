@@ -1,6 +1,6 @@
 // File-type icon sets as swappable data, each level of the glyph fallback ladder.
 // invariant: Appearance is data with a capability fallback (project.invariants.md)
-import { Static } from '../system/Static';
+import { Static } from 'ivue/extras';
 import type { GlyphLevel } from './TerminalCapabilities';
 
 export interface IconSet {

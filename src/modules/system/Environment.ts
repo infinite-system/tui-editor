@@ -1,4 +1,4 @@
-import { Static } from './Static';
+import { Static } from 'ivue/extras';
 // System environment capability — static, allocation-free (namespace pattern).
 // invariant: Imported dependencies are read late (project.invariants.md)
 

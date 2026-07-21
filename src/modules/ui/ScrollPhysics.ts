@@ -1,7 +1,7 @@
 // Movement/scroll feel — the HAND-TUNED product values and the curves that deliver them.
 // "Speed is product, delivery is physics": what feels right is a product decision recorded here;
 // the mechanisms (key-repeat runs, momentum) just deliver it. Stateless capability (Static).
-import { Static } from '../system/Static';
+import { Static } from 'ivue/extras';
 
 class $ScrollPhysics {
   /** Key repeats within this window continue an acceleration run; a gap resets it. */

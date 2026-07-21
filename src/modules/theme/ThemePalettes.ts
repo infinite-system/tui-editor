@@ -1,6 +1,6 @@
 // Color palettes as semantic tokens, with truecolor → 256 → 16 down-quantization.
 // invariant: Appearance is data with a capability fallback (project.invariants.md)
-import { Static } from '../system/Static';
+import { Static } from 'ivue/extras';
 import type { ColorDepth } from './TerminalCapabilities';
 
 export interface Palette {

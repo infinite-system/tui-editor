@@ -1,7 +1,7 @@
 // OS clipboard capability with a platform fallback ladder: copy/paste via wl-copy·wl-paste (Wayland)
 // / xclip / xsel / pbcopy·pbpaste (macOS); OSC 52 terminal escape as the copy fallback (works over
 // SSH, write-only). Stateless behavior → a Static capability. Detection is cached at module scope.
-import { Static } from './Static';
+import { Static } from 'ivue/extras';
 import { openSync, writeSync, closeSync } from 'node:fs';
 
 export interface ClipboardTool {

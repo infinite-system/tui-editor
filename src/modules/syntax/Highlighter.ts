@@ -6,7 +6,7 @@
 // invariant: Cost tracks the actively observed set (project.invariants.md)
 //   — only the visible window is tokenized, one line at a time.
 
-import { Static } from '../system/Static';
+import { Static } from 'ivue/extras';
 
 export type Role =
   | 'keyword'

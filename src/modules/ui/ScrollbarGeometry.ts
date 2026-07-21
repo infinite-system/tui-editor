@@ -8,7 +8,7 @@
 //
 // invariant: A scrollbar track is derived per frame from its region rect (ui.invariants.md)
 
-import { Static } from '../system/Static';
+import { Static } from 'ivue/extras';
 
 export interface RegionRect {
   /** Content-box cells of the region the bar scrolls (relative to whatever frame the caller uses —

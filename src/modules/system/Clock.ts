@@ -1,4 +1,4 @@
-import { Static } from './Static';
+import { Static } from 'ivue/extras';
 // Time capability. Isolated so tests can inject deterministic time and undo-coalescing is
 // reproducible. Static.
 let override: (() => number) | null = null;

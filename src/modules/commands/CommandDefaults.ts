@@ -2,7 +2,7 @@
 // registered here. Plugins (M7) contribute additional commands to the same registry.
 //
 // invariant: The core is complete without plugins (project.invariants.md)
-import { Static } from '../system/Static';
+import { Static } from 'ivue/extras';
 import type { CommandRegistry } from './CommandRegistry';
 import type { Workspace } from '../workspace/Workspace';
 import type { Theme } from '../theme/Theme';

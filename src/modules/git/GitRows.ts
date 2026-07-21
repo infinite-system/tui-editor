@@ -2,7 +2,7 @@
 // placeholder) built from the repository's status buckets. Pure and shared: the renderer draws
 // exactly this list and the mouse hit-tester indexes into the SAME list, so clicks always land on
 // the row the user sees (the lesson from the tree: renderer and hit-test must share layout math).
-import { Static } from '../system/Static';
+import { Static } from 'ivue/extras';
 import type { GitFileRecord } from './GitParsers';
 
 export type ChangeBucket = 'staged' | 'unstaged' | 'untracked';

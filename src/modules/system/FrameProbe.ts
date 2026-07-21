@@ -5,7 +5,7 @@
 // engine's packed 16-bit representation — not hex — but they are STABLE, so equality/inequality
 // across cells is all a visual assertion needs (e.g. "these columns differ from their neighbours").
 import { writeFileSync } from 'node:fs';
-import { Static } from './Static';
+import { Static } from 'ivue/extras';
 
 export interface FrameRow {
   y: number;

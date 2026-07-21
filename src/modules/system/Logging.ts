@@ -1,4 +1,4 @@
-import { Static } from './Static';
+import { Static } from 'ivue/extras';
 // File logger — the TUI owns the terminal, so logs must never touch stdout/stderr.
 // Writes to artifacts/tui.log. Static capability.
 import { appendFileSync, mkdirSync } from 'node:fs';

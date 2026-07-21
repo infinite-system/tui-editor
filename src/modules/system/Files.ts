@@ -1,4 +1,4 @@
-import { Static } from './Static';
+import { Static } from 'ivue/extras';
 // Filesystem capability. Static, allocation-free. All path access is confined here so the
 // path-traversal boundary (L9) has one home.
 //

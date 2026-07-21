@@ -5,7 +5,7 @@
 
 // invariant: Cost tracks the actively observed set (project.invariants.md)
 
-import { Static } from '../system/Static';
+import { Static } from 'ivue/extras';
 
 /** A contiguous run of indices to fetch: commits [offset, offset+length). */
 export interface FetchRange {

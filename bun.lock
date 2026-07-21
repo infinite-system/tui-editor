@@ -6,7 +6,7 @@
       "name": "tui-editor",
       "dependencies": {
         "@opentui/core": "^0.4.5",
-        "ivue": "^2.0.0",
+        "ivue": "^2.1.0",
         "vue": "^3.5.40",
         "web-tree-sitter": "^0.26.11",
       },
@@ -87,7 +87,7 @@
 
     "get-east-asian-width": ["get-east-asian-width@1.6.0", "", {}, "sha512-QRbvDIbx6YklUe6RxeTeleMR0yv3cYH6PsPZHcnVn7xv7zO1BHN8r0XETu8n6Ye3Q+ahtSarc3WgtNWmehIBfA=="],
 
-    "ivue": ["ivue@2.0.0", "", { "peerDependencies": { "vue": "^3.2.0", "vue-demi": "*" }, "optionalPeers": ["vue-demi"], "bin": { "ivue": "bin/ivue.mjs" } }, "sha512-XtDc1jnVP/HmoJKOFz9v1XF/gzdDXkYXQGCWBAJ7hz/0C9CjjPI6iejhibGSYeqsae/ylL6ZE9DFvqlb8jU5UA=="],
+    "ivue": ["ivue@2.1.0", "", { "peerDependencies": { "vue": "^3.2.0", "vue-demi": "*" }, "optionalPeers": ["vue-demi"], "bin": { "ivue": "bin/ivue.mjs" } }, "sha512-Ab5iapydi0IPbijkwVGG2KeJQDyWUcOwsompWN0naiDtpmsPdZV+v/ryKRwfZHgFVWXqQApj6XvcKLOlLS5jlQ=="],
 
     "magic-string": ["magic-string@0.30.21", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.5" } }, "sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ=="],
 

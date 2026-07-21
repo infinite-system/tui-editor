@@ -1,4 +1,4 @@
-import { Static } from '../system/Static';
+import { Static } from 'ivue/extras';
 
 /** Case-insensitive subsequence match; returns a score (lower = tighter) or -1. */
 function $fuzzyScore(query: string, text: string): number {
