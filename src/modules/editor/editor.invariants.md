@@ -117,8 +117,12 @@ system capability. Spans use the grapheme coordinate model (first reality invari
 **Generates:** shift+arrow / mouse-drag selection; selection-aware editing; copy/cut/paste; the
 selection highlight in `RootView`.
 
-**Evidence:** not yet built — `Cursor.ts` has only line/col/goalCol, no anchor; no clipboard
-exists. Required by `project.implementation-plan.md` M3 (added 2026-07-21).
+**Evidence:** IMPLEMENTED — `Cursor.ts` `anchor` + `selectionRange()` (normalized); `Editor`
+selection-aware `insertText`/`insertNewline`/`backspace`/`deleteChar` (replace-selection),
+`copySelection`/`cutSelection`/`pasteClipboard` via `system/Clipboard.ts` (Static, OS tools + OSC 52),
+`selectAll`, extend-on-shift movement; `Bootstrap` wires shift+arrow extend + Ctrl+C/X/V/A. Tested:
+`editor/__tests__/selection.test.ts` (7 tests, grapheme-correct multi-line ranges). The visual
+selection HIGHLIGHT in RootView is pending the tmux visual pass.
 
 **Impossible if true:** typing over a selection that leaves the selected text in place; a copy
 that returns text split mid-grapheme; a paste that inserts without removing the selection.

@@ -184,7 +184,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   };
 
   const onKey = (key: KeyEvent): void => {
-    if ((key.name === 'q' && key.ctrl) || (key.name === 'c' && key.ctrl)) {
+    if (key.name === 'q' && key.ctrl) {
       void shutdown();
       return;
     }
@@ -248,31 +248,41 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
           break;
       }
     } else {
-      // editor focus
+      // editor focus. invariant: Selection is an anchor plus the cursor and edits replace it
+      // (src/modules/editor/editor.invariants.md)
       const ed = workspace.editor;
       const accel = movementAcceleration(key);
+      const extend = key.shift; // shift + movement extends the selection
       if (key.name === 's' && key.ctrl) {
         ed.save();
+      } else if (key.name === 'a' && key.ctrl) {
+        ed.selectAll();
+      } else if (key.name === 'c' && key.ctrl) {
+        void ed.copySelection();
+      } else if (key.name === 'x' && key.ctrl) {
+        void ed.cutSelection();
+      } else if (key.name === 'v' && key.ctrl) {
+        void ed.pasteClipboard();
       } else if (key.name === 'z' && key.ctrl && !key.shift) {
         ed.performUndo();
       } else if ((key.name === 'z' && key.ctrl && key.shift) || (key.name === 'y' && key.ctrl)) {
         ed.performRedo();
       } else if (key.name === 'up') {
-        ed.moveVertical(-accel);
+        ed.moveVertical(-accel, extend);
       } else if (key.name === 'down') {
-        ed.moveVertical(accel);
+        ed.moveVertical(accel, extend);
       } else if (key.name === 'left') {
-        ed.moveHorizontal(-accel);
+        ed.moveHorizontal(-accel, extend);
       } else if (key.name === 'right') {
-        ed.moveHorizontal(accel);
+        ed.moveHorizontal(accel, extend);
       } else if (key.name === 'pageup') {
-        ed.pageUp();
+        ed.pageUp(extend);
       } else if (key.name === 'pagedown') {
-        ed.pageDown();
+        ed.pageDown(extend);
       } else if (key.name === 'home') {
-        ed.moveToLineStart();
+        ed.moveToLineStart(extend);
       } else if (key.name === 'end') {
-        ed.moveToLineEnd();
+        ed.moveToLineEnd(extend);
       } else if (key.name === 'return') {
         ed.insertNewline();
       } else if (key.name === 'backspace') {
@@ -280,7 +290,8 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       } else if (key.name === 'delete') {
         ed.deleteChar();
       } else if (key.name === 'escape') {
-        workspace.focusFiles();
+        if (ed.hasSelection) ed.cursor.clearSelection();
+        else workspace.focusFiles();
       } else if (isTypedCharacter(key)) {
         ed.insertText(key.sequence);
       }

@@ -184,6 +184,63 @@ class $TextDocument {
     return { line, col };
   }
 
+  // --- multi-line range ops (positions are {line, grapheme-col}; start <= end) ---
+
+  /** Text of the [start, end) range, joined by EOL across lines. */
+  sliceRange(start: { line: number; col: number }, end: { line: number; col: number }): string {
+    if (start.line === end.line) {
+      const cur = this.line(start.line);
+      return cur.slice(graphemeToU16(cur, start.col), graphemeToU16(cur, end.col));
+    }
+    const first = this.line(start.line);
+    const last = this.line(end.line);
+    const parts: string[] = [first.slice(graphemeToU16(first, start.col))];
+    for (let i = start.line + 1; i < end.line; i++) parts.push(this.line(i));
+    parts.push(last.slice(0, graphemeToU16(last, end.col)));
+    return parts.join(this._eol);
+  }
+
+  /** Delete the [start, end) range. Returns the collapse position (= start). */
+  deleteRange(
+    start: { line: number; col: number },
+    end: { line: number; col: number },
+  ): { line: number; col: number } {
+    if (start.line === end.line) {
+      const cur = this.line(start.line);
+      this._lines[start.line] =
+        cur.slice(0, graphemeToU16(cur, start.col)) + cur.slice(graphemeToU16(cur, end.col));
+    } else {
+      const head = this.line(start.line).slice(
+        0,
+        graphemeToU16(this.line(start.line), start.col),
+      );
+      const tail = this.line(end.line).slice(graphemeToU16(this.line(end.line), end.col));
+      this._lines.splice(start.line, end.line - start.line + 1, head + tail);
+    }
+    this.dirty.value = true;
+    this.revision.value++;
+    return { line: start.line, col: start.col };
+  }
+
+  /** Insert possibly-multiline text at line/grapheme-col. Returns the end position. */
+  insertMultiline(line: number, col: number, text: string): { line: number; col: number } {
+    const parts = text.split(/\r?\n/);
+    if (parts.length === 1) {
+      return { line, col: this.insertInline(line, col, parts[0] ?? '') };
+    }
+    const cur = this.line(line);
+    const u16 = graphemeToU16(cur, clampCol(cur, col));
+    const before = cur.slice(0, u16);
+    const after = cur.slice(u16);
+    const firstPart = parts[0] ?? '';
+    const lastPart = parts[parts.length - 1] ?? '';
+    const middle = parts.slice(1, -1);
+    this._lines.splice(line, 1, before + firstPart, ...middle, lastPart + after);
+    this.dirty.value = true;
+    this.revision.value++;
+    return { line: line + parts.length - 1, col: graphemeCount(lastPart) };
+  }
+
   /** Snapshot the full line array (for undo). */
   snapshot(): string[] {
     return this._lines.slice();

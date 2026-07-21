@@ -1,7 +1,8 @@
-// The editor: owns a document, a cursor, and a viewport, and coordinates movement + scroll.
-// Read-only navigation in M2; editing added in M3 (same document, mutation surface exists).
+// The editor: owns a document, a cursor, and a viewport, and coordinates movement, selection,
+// editing, and scroll.
 //
 // invariant: Data flows one way (project.invariants.md)
+// invariant: Selection is an anchor plus the cursor and edits replace it (editor.invariants.md)
 import { Reactive } from 'ivue';
 import { ref } from 'vue';
 import { TextDocument } from './TextDocument';
@@ -11,6 +12,7 @@ import { graphemeCount } from './editor.coordinates';
 import { UndoStore, type EditKind } from '../storage/UndoStore';
 import { Files } from '../system/Files';
 import { Clock } from '../system/Clock';
+import { Clipboard } from '../system/Clipboard';
 
 class $Editor {
   // invariant: Construction goes through overridable seams (project.invariants.md)
@@ -34,10 +36,49 @@ class $Editor {
   openFile(path: string): void {
     this.document.loadFromFile(path);
     this.cursor.set(0, 0);
+    this.cursor.clearSelection();
     this.viewport.scrollTop.value = 0;
     this.hasDocument.value = true;
     this.readOnly.value = this.document.binary.value;
     this.undo.clear();
+  }
+
+  // --- selection ------------------------------------------------------------
+
+  get hasSelection(): boolean {
+    return this.cursor.hasSelection;
+  }
+
+  selectionText(): string {
+    const r = this.cursor.selectionRange();
+    return r ? this.document.sliceRange(r.start, r.end) : '';
+  }
+
+  selectAll(): void {
+    if (!this.hasDocument.value) return;
+    const last = this.document.lineCount - 1;
+    this.cursor.set(0, 0);
+    this.cursor.setAnchorHere();
+    this.cursor.set(last, graphemeCount(this.document.line(last)));
+  }
+
+  /** Delete the active selection (no undo capture — caller captures). Returns whether it removed. */
+  private removeSelection(): boolean {
+    const r = this.cursor.selectionRange();
+    if (!r) return false;
+    const pos = this.document.deleteRange(r.start, r.end);
+    this.cursor.set(pos.line, pos.col);
+    this.cursor.clearSelection();
+    return true;
+  }
+
+  /** Set/extend the anchor for a movement (extend) or drop the selection (plain move). */
+  private beginMove(extend: boolean): void {
+    if (extend) {
+      if (!this.cursor.anchor.value) this.cursor.setAnchorHere();
+    } else {
+      this.cursor.clearSelection();
+    }
   }
 
   // --- editing --------------------------------------------------------------
@@ -57,13 +98,16 @@ class $Editor {
   insertText(str: string): void {
     if (this.readOnly.value || !this.hasDocument.value) return;
     this.captureBefore('insert');
+    this.removeSelection();
     const col = this.document.insertInline(this.cursor.line.value, this.cursor.col.value, str);
     this.cursor.set(this.cursor.line.value, col);
+    this.viewport.scrollToLine(this.cursor.line.value, this.document.lineCount);
   }
 
   insertNewline(): void {
     if (this.readOnly.value || !this.hasDocument.value) return;
     this.captureBefore('newline');
+    this.removeSelection();
     // Auto-indent: copy leading whitespace of the current line.
     const cur = this.document.line(this.cursor.line.value);
     const indent = cur.match(/^\s*/)?.[0] ?? '';
@@ -80,6 +124,10 @@ class $Editor {
   backspace(): void {
     if (this.readOnly.value || !this.hasDocument.value) return;
     this.captureBefore('delete');
+    if (this.removeSelection()) {
+      this.viewport.scrollToLine(this.cursor.line.value, this.document.lineCount);
+      return;
+    }
     const pos = this.document.deleteBackward(this.cursor.line.value, this.cursor.col.value);
     this.cursor.set(pos.line, pos.col);
     this.viewport.scrollToLine(pos.line, this.document.lineCount);
@@ -88,8 +136,39 @@ class $Editor {
   deleteChar(): void {
     if (this.readOnly.value || !this.hasDocument.value) return;
     this.captureBefore('delete');
+    if (this.removeSelection()) return;
     this.document.deleteForward(this.cursor.line.value, this.cursor.col.value);
   }
+
+  // --- clipboard ------------------------------------------------------------
+
+  async copySelection(): Promise<void> {
+    const text = this.selectionText();
+    if (text) await Clipboard.Class.copy(text);
+  }
+
+  async cutSelection(): Promise<void> {
+    if (this.readOnly.value || !this.hasDocument.value) return;
+    const text = this.selectionText();
+    if (!text) return;
+    await Clipboard.Class.copy(text);
+    this.captureBefore('delete');
+    this.removeSelection();
+    this.viewport.scrollToLine(this.cursor.line.value, this.document.lineCount);
+  }
+
+  async pasteClipboard(): Promise<void> {
+    if (this.readOnly.value || !this.hasDocument.value) return;
+    const text = await Clipboard.Class.paste();
+    if (!text) return;
+    this.captureBefore('insert');
+    this.removeSelection();
+    const pos = this.document.insertMultiline(this.cursor.line.value, this.cursor.col.value, text);
+    this.cursor.set(pos.line, pos.col);
+    this.viewport.scrollToLine(pos.line, this.document.lineCount);
+  }
+
+  // --- undo/redo ------------------------------------------------------------
 
   performUndo(): void {
     const current = {
@@ -103,6 +182,7 @@ class $Editor {
     this.document.restore(target.lines);
     this.document.dirty.value = true;
     this.cursor.set(target.cursor.line, target.cursor.col);
+    this.cursor.clearSelection();
     this.viewport.scrollToLine(target.cursor.line, this.document.lineCount);
   }
 
@@ -118,6 +198,7 @@ class $Editor {
     this.document.restore(target.lines);
     this.document.dirty.value = true;
     this.cursor.set(target.cursor.line, target.cursor.col);
+    this.cursor.clearSelection();
     this.viewport.scrollToLine(target.cursor.line, this.document.lineCount);
   }
 
@@ -134,11 +215,14 @@ class $Editor {
     return this.document.dirty.value ? `${name} ●` : name;
   }
 
+  // --- movement (extend = shift-select) -------------------------------------
+
   private curLineLen(): number {
     return graphemeCount(this.document.line(this.cursor.line.value));
   }
 
-  moveVertical(delta: number): void {
+  moveVertical(delta: number, extend = false): void {
+    this.beginMove(extend);
     const target = this.cursor.line.value + delta;
     const max = this.document.lineCount - 1;
     const clamped = Math.max(0, Math.min(target, max));
@@ -146,7 +230,8 @@ class $Editor {
     this.viewport.scrollToLine(clamped, this.document.lineCount);
   }
 
-  moveHorizontal(delta: number): void {
+  moveHorizontal(delta: number, extend = false): void {
+    this.beginMove(extend);
     let line = this.cursor.line.value;
     let col = this.cursor.col.value + delta;
     if (col < 0) {
@@ -168,23 +253,27 @@ class $Editor {
     this.viewport.scrollToLine(line, this.document.lineCount);
   }
 
-  moveToLineStart(): void {
+  moveToLineStart(extend = false): void {
+    this.beginMove(extend);
     this.cursor.set(this.cursor.line.value, 0);
   }
-  moveToLineEnd(): void {
+  moveToLineEnd(extend = false): void {
+    this.beginMove(extend);
     this.cursor.set(this.cursor.line.value, this.curLineLen());
   }
-  pageDown(): void {
-    this.moveVertical(this.viewport.height.value - 1);
+  pageDown(extend = false): void {
+    this.moveVertical(this.viewport.height.value - 1, extend);
   }
-  pageUp(): void {
-    this.moveVertical(-(this.viewport.height.value - 1));
+  pageUp(extend = false): void {
+    this.moveVertical(-(this.viewport.height.value - 1), extend);
   }
-  gotoTop(): void {
+  gotoTop(extend = false): void {
+    this.beginMove(extend);
     this.cursor.set(0, 0);
     this.viewport.scrollToLine(0, this.document.lineCount);
   }
-  gotoBottom(): void {
+  gotoBottom(extend = false): void {
+    this.beginMove(extend);
     const last = this.document.lineCount - 1;
     this.cursor.set(last, 0);
     this.viewport.scrollToLine(last, this.document.lineCount);
