@@ -45,11 +45,13 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
         fast-scroll modifier+multiplier, scrollbar thickness (default = D's averaged constant), glyph mode
         (auto/nerd/unicode/ascii), theme/palette, word-wrap. Migrate E's ceiling into a DEFAULT the panel overrides.
 
-- [x] Cmd+Left/Right → line-start/line-end (user QA). Already bound (mac overlay super forms + Home/End
-      + Ctrl+Home/End doc-start/end); this was a VERIFICATION task. Driven+confirmed: Home→col 0,
-      End→line-end, and the escape sequences mac terminals emit for Cmd+arrow — `\e[H`/`\eOH`→col 0,
-      `\e[F`/`\eOF`→line-end (OpenTUI parses them to home/end). Cmd works via terminal Home/End
-      translation; super-field path wired (untestable on Linux); Home/End the canonical fallback.
+- [x] Cmd+Left/Right → line-start/line-end (user QA). CORRECTED: commit 2da0384 was a FALSE GREEN — it
+      verified Home/End via tmux injection and ASSUMED the terminal translates Cmd→Home, but iTerm2
+      "Natural Text Editing" actually sends RAW ^A/^E (0x01/0x05), so Cmd+Left was hitting Ctrl+A=Select
+      All. FIX: drove the real byte streams and found raw ^A (seq=0x01) is DISTINGUISHABLE from a Kitty
+      Ctrl+A (seq='a'); onKey now diverts raw ^A → lineStart (guarded by renderer.useKittyKeyboard so
+      legacy Ctrl+A stays Select All), and a Ctrl+E binding gives Cmd+Right (raw ^E) → lineEnd (was
+      unbound). Driven-verified: Cmd+Left→col 0, Cmd+Right→col 26, Ctrl+A→Select All — ALL LIVE.
 - [ ] SYMLINK node_modules ignore-robustness (LOW priority, defensive): a top-level `node_modules`/`.git`
       that is a SYMLINK isn't matched by the `node_modules/` (dir) gitignore pattern, so it surfaces as
       `?? node_modules` in the demo worktree. Make the watcher-skip AND panel-hide treat a top-level

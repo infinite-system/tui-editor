@@ -583,6 +583,19 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       : commands.open.value
         ? 'palette'
         : workspace.focus.value;
+
+    // iTerm2 "Natural Text Editing" remaps Cmd+Left → a RAW ^A byte (0x01), which collides with
+    // Ctrl+A = Select All. Under the Kitty protocol a PHYSICALLY pressed Ctrl+A arrives as the kitty
+    // form (`key.sequence === 'a'`, an escape-encoded event), so a raw 0x01 control byte here is the
+    // Cmd remap → line start. We divert it BEFORE resolving (the registry can't tell them apart:
+    // both are {name:'a', ctrl:true}), and ONLY when Kitty is active — on a legacy terminal a raw ^A
+    // really is Ctrl+A and must stay Select All. (Cmd+Right = raw ^E is handled by the Ctrl+E binding,
+    // which is harmless because Ctrl+E was unbound.) Driven-verified against the real byte streams.
+    if (context === 'editor' && renderer.useKittyKeyboard && key.ctrl && key.name === 'a' && key.sequence === '\u0001') {
+      workspace.editor.moveToLineStart(key.shift);
+      return;
+    }
+
     const resolution = keybindings.resolve(
       // Alt-family collapse: mac terminals surface Option as `option` OR `meta` (ESC-prefixed
       // forms); both mean the alt slot of a chord pattern.

@@ -43,10 +43,17 @@ NOTHING decided is lost across compaction or a cold restart, and so EVERY spawne
 - Native horizontal tilt (66/67) is not forwarded by the user's terminal.
 - Fast-scroll modifier [F]: AWAITING the user's `cat -v` capture. The setting is present; default it
   UNSET until the confirmed key + SGR code is relayed.
-- Cmd+Left/Right → line-start/line-end: WORKS via the terminal's Home/End translation. Driven +
-  confirmed: `\e[H`/`\eOH` → col 0, `\e[F`/`\eOF` → line-end (OpenTUI parses these to home/end →
-  editor.lineStart/lineEnd). The mac overlay also has the kitty `super`-field forms (Cmd as super),
-  untestable on Linux but wired. Home/End keys are the always-working canonical fallback (verified).
+- Cmd+Left/Right (iTerm2 "Natural Text Editing"): the terminal sends RAW control bytes — Cmd+Left = ^A
+  (0x01), Cmd+Right = ^E (0x05). It does NOT translate to Home/End. (Commit 2da0384's "works via
+  Home/End translation" was a FALSE GREEN — verified by tmux INJECTION of Home/End, not against the
+  real terminal.) FIX (3f… commit): under the Kitty protocol a PHYSICAL Ctrl+A arrives as the kitty
+  form (`key.sequence === 'a'`, escape-encoded), while the terminal's Cmd remap arrives as a raw 0x01
+  byte (`key.sequence === ''`). They are DISTINGUISHABLE (driven + confirmed: raw seq=[01]/[05]
+  super=undefined vs kitty seq=[61]/[65] super=false). So onKey diverts raw ^A → editor.lineStart
+  (only when `renderer.useKittyKeyboard`, so legacy raw ^A stays Ctrl+A=Select All), and a plain
+  Ctrl+E binding covers Cmd+Right (raw ^E) + Ctrl+E → line-end (Ctrl+E was unbound = no conflict).
+  RESULT, driven-verified against the real bytes: Cmd+Left→col 0, Cmd+Right→line-end, Ctrl+A→Select All,
+  all live. Home/End keys are the always-working canonical line-start/end fallback.
 
 ## Behavioural requirements
 - RESPECT `.gitignore` in BOTH the git panel display AND the GitWatcher recursion — never

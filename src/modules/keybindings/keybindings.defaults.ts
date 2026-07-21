@@ -83,6 +83,10 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 'right', ctrl: true }, action: 'editor.wordRight', context: 'editor' },
   { chord: { key: 'home', ctrl: true }, action: 'editor.documentStart', context: 'editor' },
   { chord: { key: 'end', ctrl: true }, action: 'editor.documentEnd', context: 'editor' },
+  // Ctrl+E → line end. Ctrl+E was unbound, so this is a free win that ALSO makes iTerm2 "Natural Text
+  // Editing" Cmd+Right (which sends a raw ^E / 0x05) jump to the line end. (Cmd+Left = raw ^A is
+  // disambiguated from Ctrl+A = Select All in the onKey handler, since both resolve the same here.)
+  { chord: { key: 'e', ctrl: true }, action: 'editor.lineEnd', context: 'editor' },
   // --- editor: editing ---
   { chord: { key: 'return' }, action: 'editor.newline', context: 'editor' },
   { chord: { key: 'backspace' }, action: 'editor.backspace', context: 'editor' },
