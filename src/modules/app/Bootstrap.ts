@@ -179,19 +179,35 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   // one frame's worth, not the whole idle gap — the paused-clock invariant.
   let lastFrameMs = 0;
   const MAX_DT = 0.1; // seconds
+  // Animation liveness: while ANY animation runs (momentum glide, drag-edge auto-scroll) we hold
+  // ONE live request so the render loop runs; at quiescence we drop it and the loop STOPS (frames
+  // and status writes cease — 'idle CPU above ~zero is forbidden').
+  let liveAnimationHeld = false;
+  const syncAnimationLiveness = (animating: boolean): void => {
+    if (animating && !liveAnimationHeld) {
+      renderer.requestLive();
+      liveAnimationHeld = true;
+    } else if (!animating && liveAnimationHeld) {
+      renderer.dropLive();
+      liveAnimationHeld = false;
+      lastFrameMs = 0; // paused-clock: the next animation's first frame gets a fresh dt
+    }
+  };
   const onFrame = (): void => {
     frame += 1;
-    // Drive the commit-log glide: step the momentum by real dt; keep requesting frames while it
-    // moves so the animation is self-sustaining even on frames that advance 0 whole rows.
+    // Drive the commit-log glide: step the momentum by real dt; the live request keeps frames
+    // coming while anything moves.
     const nowMs = performance.now();
     const dt = lastFrameMs === 0 ? 1 / 30 : Math.min(MAX_DT, (nowMs - lastFrameMs) / 1000);
     lastFrameMs = nowMs;
+    let animating = false;
     if (workspace.gitPanel.logMomentum.value.velocity !== 0) {
-      if (workspace.tickGitLogScroll(dt)) renderer.requestRender();
+      animating = workspace.tickGitLogScroll(dt) || animating;
     }
     // Drag-edge auto-scroll: while a selection drag holds at a pane edge, keep scrolling +
-    // extending the selection (the view returns true while active so frames keep coming).
-    if (view.tickDragAutoScroll(dt)) renderer.requestRender();
+    // extending the selection.
+    animating = view.tickDragAutoScroll(dt) || animating;
+    syncAnimationLiveness(animating);
     // Converge the viewport size with the LAID-OUT layout (gutter width changes when a file opens
     // or its line count crosses a digit boundary; boot/resize alone goes stale). Mutating outside
     // the reactive effect: the write triggers one repaint and converges — no feedback loop.
@@ -200,7 +216,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     const laidOutHeight = view.editorViewportHeight();
     if (editorViewport.width.value !== laidOutWidth || editorViewport.height.value !== laidOutHeight) {
       editorViewport.setSize(laidOutWidth, laidOutHeight);
-      renderer.requestRender();
+      renderer.requestRender(); // one-shot convergence (not an animation — no live request)
     }
     StatusChannel.Class.settle(frame);
     // Exact per-cell visual snapshot for tests (env-gated; no-op otherwise).
@@ -503,7 +519,10 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   renderer.on('resize', onResize);
   app.onDispose(() => renderer.off('resize', onResize));
 
-  renderer.start();
+  // DEMAND-DRIVEN rendering: auto() renders only on requestRender()/live requests — no continuous
+  // targetFps loop at rest (the idle-leak fix: at-rest frame delta must be 0). Animations hold a
+  // live request below and drop it on quiescence.
+  renderer.auto();
   app.markStarted();
   await render();
 

@@ -11,6 +11,9 @@ import { writeFileSync, renameSync, mkdirSync } from 'node:fs';
 // observability (a polluted channel produces false verdicts — the FrameProbe-stride lesson).
 // The harness sets TUI_STATUS_PATH per session; a bare manual run keeps the default.
 const STATUS_PATH = process.env.TUI_STATUS_PATH || 'artifacts/status.json';
+// Observability profile: per-frame disk writes are HARNESS infrastructure (TUI_OBSERVE=1, set by
+// the harness). Default = lean: in-memory state only, no per-frame I/O for real use.
+const OBSERVE = process.env.TUI_OBSERVE === '1' || Boolean(process.env.TUI_STATUS_PATH);
 const TEMP_PATH = `${STATUS_PATH}.tmp`;
 let prepared = false;
 
@@ -69,6 +72,7 @@ class $StatusChannel {
 
   /** Atomically flush the current snapshot to disk (write-temp + rename). */
   static flush(): void {
+    if (!OBSERVE) return;
     if (!prepared) {
       try {
         mkdirSync('artifacts', { recursive: true });
@@ -87,6 +91,7 @@ class $StatusChannel {
 
   /** Mark the frame settled and flush — called after a render quiesces. */
   static settle(frame: number): void {
+    if (!OBSERVE) return;
     state.frame = frame;
     state.renderQuiescent = true;
     this.flush();

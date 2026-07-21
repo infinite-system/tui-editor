@@ -16,6 +16,7 @@ import { addImpulse, stepMomentum, isMoving, AT_REST } from '../ui/scroll-moment
 import { GitRows } from '../git/git.rows';
 import { GitLogRows, type CommitLogRow } from '../git/git.log-rows';
 import { GitCommands } from '../git/GitCommands';
+import { Logging } from '../system/Logging';
 
 export type Focus = 'files' | 'editor' | 'git';
 

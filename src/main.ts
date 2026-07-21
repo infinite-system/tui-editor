@@ -1,8 +1,18 @@
-// Entry point. The kernel boot phase composes modules and seals before App is constructed.
-import { boot } from './modules/app/Bootstrap';
-import { Logging } from './modules/system/Logging';
+// Entry point. PROD PROFILE BY DEFAULT: NODE_ENV selects Vue's build (dev adds per-ref/effect
+// bookkeeping — real CPU+RSS), so it is set BEFORE any vue-importing module loads (dynamic import
+// below keeps the ordering; export NODE_ENV=development to develop against the dev build).
+process.env.NODE_ENV ??= 'production';
+
+async function loadApp() {
+  const [{ boot }, { Logging }] = await Promise.all([
+    import('./modules/app/Bootstrap'),
+    import('./modules/system/Logging'),
+  ]);
+  return { boot, Logging };
+}
 
 async function main(): Promise<void> {
+  const { boot } = await loadApp();
   const rootArgument = process.argv[2];
   const booted = await boot({
     root: rootArgument,
@@ -17,7 +27,8 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => void booted.shutdown());
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
+  const { Logging } = await loadApp();
   Logging.Class.error(`fatal: ${String(error?.stack ?? error)}`);
   // eslint-disable-next-line no-console
   process.stderr.write(`fatal: ${String(error?.stack ?? error)}\n`);

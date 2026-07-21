@@ -184,6 +184,11 @@ export function buildRootView(
   // layout — pre-layout reads return 0).
   const barScales = new Map<object, number>();
   const barThickness = new Map<object, number>();
+  // True while applyBarGeometry is ASSIGNING scrollPosition: the widget fires onChange for
+  // programmatic writes too, and treating those as user thumb-drags halted the momentum glide on
+  // every paint (the 'wheel not smooth since scrollbars' regression). onChange handlers must act
+  // only on USER-initiated changes.
+  let applyingBarGeometry = false;
 
   // Thin draggable scrollbars (OpenTUI ScrollBar: built-in draggable thumb + onChange). Each bar
   // is a 1-cell strip INSIDE its pane's border; onChange writes the SAME model offset the wheel
@@ -195,6 +200,7 @@ export function buildRootView(
     width: 1,
     showArrows: false,
     onChange: (position) => {
+      if (applyingBarGeometry) return;
       workspace.editor.viewport.scrollTop.value = trueScrollPosition(editorVerticalBar, position);
     },
   });
@@ -205,6 +211,7 @@ export function buildRootView(
     height: 1,
     showArrows: false,
     onChange: (position) => {
+      if (applyingBarGeometry) return;
       workspace.editor.viewport.scrollLeft.value = trueScrollPosition(editorHorizontalBar, position);
     },
   });
@@ -217,6 +224,7 @@ export function buildRootView(
     width: 2,
     showArrows: false,
     onChange: (position) => {
+      if (applyingBarGeometry) return;
       workspace.gitPanel.changesScrollTop.value = trueScrollPosition(changesBar, position);
     },
   });
@@ -227,7 +235,8 @@ export function buildRootView(
     width: 2,
     showArrows: false,
     onChange: (position) => {
-      workspace.haltGitLogScroll(); // thumb drag adopts authority (One-Writer)
+      if (applyingBarGeometry) return; // ignore our own per-frame scrollPosition sync (One-Writer)
+      workspace.haltGitLogScroll(); // a real thumb drag adopts authority
       workspace.gitPanel.logScrollTop.value = trueScrollPosition(logBar, position);
       workspace.ensureLogWindow(workspace.gitPanel.logScrollTop.value);
     },
@@ -287,9 +296,14 @@ export function buildRootView(
     bar.left = orientation === 'vertical' ? geometry.trackLeft - (thickness - 1) : geometry.trackLeft;
     if (orientation === 'vertical') bar.height = geometry.trackLength;
     else bar.width = geometry.trackLength;
-    bar.scrollSize = scroll.scrollSize;
-    bar.viewportSize = geometry.reportedViewportSize;
-    bar.scrollPosition = geometry.reportedPosition;
+    applyingBarGeometry = true;
+    try {
+      bar.scrollSize = scroll.scrollSize;
+      bar.viewportSize = geometry.reportedViewportSize;
+      bar.scrollPosition = geometry.reportedPosition;
+    } finally {
+      applyingBarGeometry = false;
+    }
     barScales.set(bar, geometry.reportedToTrueScale);
     if (process.env.TUI_DEBUG_BARS === '1')
       Logging.Class.info(
