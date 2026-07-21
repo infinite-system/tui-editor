@@ -48,6 +48,12 @@ Change a convention → change it HERE (and note the why in decisions.md).
   unless memoization is proven). Cross-module deps are read LATE (getters/method bodies) — never
   top-level `new`/snapshot. Owned constructions go through overridable `createX()` seams.
 - `$stopEffects()` only on classes that OWN effects (it clears ref-getter state cells too).
+- `Static` import source: for now, KEEP the local vendored `src/modules/system/Static.ts` (unchanged).
+  MIGRATION TODO (do NOT act until ivue ships it on npm): `Static` is graduating into the ivue package
+  as a subpath export (keeps the primary `ivue` entry at its ~1.1kb hero size; `Static` is ~0.28kb and
+  ships separately). Once published: `npm i ivue@<next>`, swap the vendored import for the ivue subpath
+  export, delete `src/modules/system/Static.ts`. Subpath name is UNCONFIRMED — coordinator relayed both
+  `ivue/utils` and `ivue/extras`; confirm against the published `package.json` `exports` before switching.
 
 ## Interaction & state discipline
 - One writer per scroll/animation regime per frame; a new authority (keyboard, thumb drag, jump)

@@ -9,6 +9,11 @@ task_spec="$1"; shift || true
 echo "==================== PROJECT CONVENTIONS (binding; violations fail review) ===================="
 cat project.conventions.md
 echo
+echo "==================== FRACTAL INHERITANCE (binding, recursive) ===================="
+echo "If YOU spawn a sub-agent for any part of this task, you MUST build its prompt with THIS script"
+echo "(scripts/delegate-packet.sh) — never hand-assembled. This is how conventions propagate to every"
+echo "clone at every depth. Spawning a sub-agent without it is a convention violation."
+echo
 echo "==================== METHOD (IBR + /invariants — apply, do not just read) ===================="
 echo "Skills (in your worktree): .claude/skills/ibr/SKILL.md · .claude/skills/invariants/SKILL.md"
 echo "Contract essentials: both section headings ('## Reality-based invariants', '## Chosen invariants');"

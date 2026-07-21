@@ -39,5 +39,30 @@ if [ -n "$tsc_pipes" ]; then
   fail=1
 fi
 
+# 5) ATOMIC-BIND: a file exporting `namespace X { … Static($/Reactive($ }` MUST be named X.ts.
+#    Makes convert-without-rename impossible — the incomplete conversion fails the gate.
+mismatch=""
+while IFS= read -r file; do
+  [ -z "$file" ] && continue
+  namespace=$(grep -oE "^export namespace [A-Za-z0-9_]+" "$file" | head -1 | awk '{print $3}')
+  base=$(basename "$file" .ts)
+  if [ -n "$namespace" ] && [ "$namespace" != "$base" ]; then
+    mismatch="$mismatch$file (namespace=$namespace, expected $namespace.ts)"$'\n'
+  fi
+done < <(grep -rlE "Static\(\\\$|Reactive\(\\\$" src/modules --include='*.ts' | grep -vE "\.test\.ts")
+if [ -n "$mismatch" ]; then
+  echo "CONVENTIONS FAIL: namespace+Static/Reactive file(s) not named after their namespace (atomic-bind):"
+  echo "$mismatch"
+  fail=1
+fi
+
+# 6) $-RAW-FORM: the old '...Implementation' backing-member suffix is banned (use $name).
+impl_suffix=$(grep -rnE "[A-Za-z0-9_]+Implementation\b" src/modules --include='*.ts' | grep -vE "\.test\.ts" || true)
+if [ -n "$impl_suffix" ]; then
+  echo "CONVENTIONS FAIL: '...Implementation'-suffixed member(s) — the raw form is \$name:"
+  echo "$impl_suffix"
+  fail=1
+fi
+
 [ "$fail" = 0 ] && echo "conventions-gate: PASS"
 exit "$fail"
