@@ -18,6 +18,7 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 'tab' }, action: 'focus.toggle' },
   // Editor buffer tabs (item 10a) — global (work in any focus). Ctrl+Tab needs the kitty keyboard
   // protocol; Ctrl+PageUp/PageDown are the widely-supported equivalents.
+  { chord: { key: ',', ctrl: true }, action: 'settings.toggle' },
   { chord: { key: 'w', ctrl: true }, action: 'buffer.close' },
   { chord: { key: 'tab', ctrl: true, shift: false }, action: 'buffer.next' },
   { chord: { key: 'tab', ctrl: true, shift: true }, action: 'buffer.previous' },
@@ -37,6 +38,13 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 'down' }, action: 'menu.next', context: 'menu' },
   { chord: { key: 'return' }, action: 'menu.run', context: 'menu' },
   { chord: { key: 'escape' }, action: 'menu.close', context: 'menu' },
+
+  // --- settings panel (Ctrl+,) ---
+  { chord: { key: 'up' }, action: 'settings.up', context: 'settings' },
+  { chord: { key: 'down' }, action: 'settings.down', context: 'settings' },
+  { chord: { key: 'left' }, action: 'settings.decrease', context: 'settings' },
+  { chord: { key: 'right' }, action: 'settings.increase', context: 'settings' },
+  { chord: { key: 'escape' }, action: 'settings.close', context: 'settings' },
 
   // --- files (tree) ---
   { chord: { key: 'up' }, action: 'tree.up', context: 'files' },

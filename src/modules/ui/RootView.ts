@@ -33,6 +33,7 @@ import { GitLogRows } from '../git/GitLogRows';
 import { ScrollbarGeometry } from './ScrollbarGeometry';
 import type { ContextMenu, ContextMenuItem } from './ContextMenu';
 import type { Tooltip } from './Tooltip';
+import type { SettingsPanel } from '../settings/SettingsPanel';
 import { Logging } from '../system/Logging';
 
 function roleColor(role: Role, palette: Palette): string {
@@ -87,6 +88,7 @@ export function buildRootView(
   app: App.Instance,
   contextMenu: ContextMenu.Instance,
   tooltip: Tooltip.Instance,
+  settingsPanel: SettingsPanel.Instance,
 ): RootView {
   const root = renderer.root;
   const readPalette = () => theme.palette;
@@ -218,6 +220,23 @@ export function buildRootView(
   const confirmText = new TextRenderable(renderer, { id: 'confirm-discard-text', content: '' });
   confirmBox.add(confirmText);
   root.add(confirmBox);
+
+  // Settings panel (Ctrl+,) — an overlay pane over the reactive settings store. ↑/↓ select, ←/→ change.
+  const settingsBox = new BoxRenderable(renderer, {
+    id: 'settings-panel',
+    position: 'absolute',
+    left: '15%',
+    top: 2,
+    width: '70%',
+    border: true,
+    borderStyle: 'rounded',
+    title: 'Settings',
+    visible: false,
+    zIndex: 122,
+  });
+  const settingsText = new TextRenderable(renderer, { id: 'settings-panel-text', content: '' });
+  settingsBox.add(settingsText);
+  root.add(settingsBox);
 
   // Context-menu modal layer. The BACKDROP is an invisible (transparent, borderless) full-screen
   // box just beneath the menu: OpenTUI stamps the hit grid in render order (zIndex ascending), so
@@ -1102,6 +1121,31 @@ export function buildRootView(
       confirmBox.backgroundColor = palette.panel;
       confirmText.content = ` Close ${Files.Class.basename(tabPath)} with unsaved changes?  [y/N]`;
       confirmText.fg = palette.fg;
+    }
+
+    // Settings panel overlay — projected from the SettingsPanel model (↑/↓ select, ←/→ change).
+    settingsBox.visible = settingsPanel.open.value;
+    if (settingsPanel.open.value) {
+      settingsBox.borderColor = palette.accent;
+      settingsBox.titleColor = palette.accent;
+      settingsBox.backgroundColor = palette.panel;
+      const settingsChunks: TextChunk[] = [];
+      settingsChunks.push(fg(palette.dim)('  ↑/↓ select   ←/→ change   Esc close   (saved live)\n\n'));
+      const settingsRows = settingsPanel.rows();
+      const labelWidth = settingsRows.reduce((widest, row) => Math.max(widest, row.label.length), 0);
+      settingsRows.forEach((row) => {
+        const marker = row.selected ? '›' : ' ';
+        const labelText = ` ${marker} ${row.label.padEnd(labelWidth, ' ')}   `;
+        const valueText = `${row.valueText}\n`;
+        if (row.selected) {
+          settingsChunks.push(bg(palette.selection)(fg(palette.fg)(labelText)));
+          settingsChunks.push(bg(palette.selection)(fg(palette.accent)(valueText)));
+        } else {
+          settingsChunks.push(fg(palette.fg)(labelText));
+          settingsChunks.push(fg(palette.dim)(valueText));
+        }
+      });
+      settingsText.content = new StyledText(settingsChunks);
     }
 
     // Context menu overlay (+ its modal backdrop) — projected purely from the ContextMenu model.

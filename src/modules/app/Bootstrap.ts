@@ -14,6 +14,8 @@ import { CommandDefaults } from '../commands/CommandDefaults';
 import { buildRootView, type RootView } from '../ui/RootView';
 import { ContextMenu } from '../ui/ContextMenu';
 import { Tooltip } from '../ui/Tooltip';
+import { Settings } from '../settings/Settings';
+import { SettingsPanel } from '../settings/SettingsPanel';
 import { StatusChannel } from '../system/StatusChannel';
 import { FrameProbe } from '../system/FrameProbe';
 import { ScrollPhysics } from '../ui/ScrollPhysics';
@@ -66,11 +68,16 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
 
   const commands = new CommandRegistry.Class();
 
+  // Reactive settings store (item G): load user + project settings; changes live-apply + persist.
+  const settings = new Settings.Class();
+  settings.load({ workspaceRoot: options.root ?? Environment.Class.cwd });
+
   // App-level overlay view models (the view projects them; input routes through here).
   const contextMenu = new ContextMenu.Class();
   const tooltip = new Tooltip.Class();
+  const settingsPanel = new SettingsPanel.Class(settings);
 
-  const view = buildRootView(renderer, workspace, theme, commands, app, contextMenu, tooltip);
+  const view = buildRootView(renderer, workspace, theme, commands, app, contextMenu, tooltip, settingsPanel);
 
   // Last mouse event seen (for the observability side channel — proves the mouse path is live).
   let lastMouse: { type: string; x: number; y: number; button: number } | null = null;
@@ -111,6 +118,8 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       gitSelectedPaths: [...workspace.gitPanel.selectedPaths.value],
       contextMenuOpen: contextMenu.open.value,
       tooltipVisible: tooltip.visible.value,
+      settingsOpen: settingsPanel.open.value,
+      settingsSelected: settingsPanel.selectedIndex.value,
       // Editor buffer tabs (item 10a). liveBufferCount proves the FLYWEIGHT: it must stay far below
       // tabCount (only the active + any dirty background buffer holds a live document).
       bufferTabCount: workspace.buffers.count,
@@ -385,6 +394,12 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     'palette.next': () => commands.moveSelection(1),
     'palette.erase': () => commands.backspaceQuery(),
     'focus.toggle': () => workspace.toggleFocus(),
+    'settings.toggle': () => settingsPanel.toggle(),
+    'settings.close': () => settingsPanel.close(),
+    'settings.up': () => settingsPanel.moveSelection(-1),
+    'settings.down': () => settingsPanel.moveSelection(1),
+    'settings.increase': () => settingsPanel.adjust(1),
+    'settings.decrease': () => settingsPanel.adjust(-1),
     'buffer.close': () => workspace.closeActiveTab(),
     'buffer.next': () => workspace.cycleTab(1),
     'buffer.previous': () => workspace.cycleTab(-1),
@@ -554,7 +569,11 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       return;
     }
 
-    const context = commands.open.value ? 'palette' : workspace.focus.value;
+    const context = settingsPanel.open.value
+      ? 'settings'
+      : commands.open.value
+        ? 'palette'
+        : workspace.focus.value;
     const resolution = keybindings.resolve(
       // Alt-family collapse: mac terminals surface Option as `option` OR `meta` (ESC-prefixed
       // forms); both mean the alt slot of a chord pattern.
