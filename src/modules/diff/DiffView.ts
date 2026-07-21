@@ -42,9 +42,7 @@ import {
   isMoving,
   stepMomentum,
   type ScrollMomentum,
-  type MomentumOptions,
 } from '../ui/scroll-momentum';
-import type { Settings } from '../settings/Settings';
 import {
   DiffAlignment,
   type AlignedRow,
@@ -143,25 +141,6 @@ class $DiffView {
   }
   get activeChangeBlockNumber() {
     return ref(this.alignment.changeBlocks.length > 0 ? 1 : 0);
-  }
-
-  // Live scroll physics: like Workspace, the vertical momentum reads its ceiling/gain/friction from the
-  // Settings store when attached, so the diff pane's fling obeys the same Ctrl+, tuning as the editor
-  // (no restart). Unattached (tests) falls back to the tuned VERTICAL_MOMENTUM default. Horizontal stays
-  // DEFAULT_MOMENTUM (a short-throw axis, not user-tuned).
-  private settingsSource: Settings.Instance | null = null;
-  attachSettings(settings: Settings.Instance): void {
-    this.settingsSource = settings;
-  }
-  private get verticalMomentum(): MomentumOptions {
-    const settings = this.settingsSource;
-    if (!settings) return VERTICAL_MOMENTUM;
-    return {
-      impulse: settings.scrollAccelGain.value,
-      max: settings.verticalFlingCeiling.value,
-      decayPerSec: settings.scrollFriction.value,
-      stopVelocity: VERTICAL_MOMENTUM.stopVelocity,
-    };
   }
   constructor(
     public readonly renderer: CliRenderer,
@@ -283,7 +262,7 @@ class $DiffView {
     this.verticalScrollMomentum.value = addImpulse(
       this.verticalScrollMomentum.value,
       deltaRows,
-      this.verticalMomentum,
+      VERTICAL_MOMENTUM,
     );
   }
 
@@ -296,7 +275,7 @@ class $DiffView {
   }
 
   tickScrollMomentum(deltaTimeSeconds: number): boolean {
-    const verticalStep = stepMomentum(this.verticalScrollMomentum.value, deltaTimeSeconds, this.verticalMomentum);
+    const verticalStep = stepMomentum(this.verticalScrollMomentum.value, deltaTimeSeconds, VERTICAL_MOMENTUM);
     const horizontalStep = stepMomentum(this.horizontalScrollMomentum.value, deltaTimeSeconds, DEFAULT_MOMENTUM);
     this.verticalScrollMomentum.value = verticalStep.momentum;
     this.horizontalScrollMomentum.value = horizontalStep.momentum;
