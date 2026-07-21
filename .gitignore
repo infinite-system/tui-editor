@@ -5,3 +5,6 @@ artifacts/tui.log
 artifacts/terminal-captures/
 artifacts/process-snapshots/
 *.log
+
+# codex worker worktrees (own branches, not embedded in main tree)
+.claude/worktrees/
