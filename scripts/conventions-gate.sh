@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 fail=0
 
 # 1) NEW-FILE RULE: no bare exported function bags in modules (stateless behavior = Static class).
-LEGACY_STATIC_ALLOWLIST="CommandRegistry.ts|editor.coordinates.ts|scroll-momentum.ts|commands.defaults.ts|keybindings.defaults.ts|keybindings.mac.ts|RootView.ts|Static.ts"
+LEGACY_STATIC_ALLOWLIST="CommandRegistry.ts|editor.coordinates.ts|scroll-momentum.ts|keybindings.defaults.ts|keybindings.mac.ts|RootView.ts|Static.ts"
 bare_bags=$(grep -rln "^export function" src/modules --include='*.ts' | grep -vE "\.test\.ts|__tests__|($LEGACY_STATIC_ALLOWLIST)$" || true)
 if [ -n "$bare_bags" ]; then
   echo "CONVENTIONS FAIL: bare 'export function' bag(s) — new capability files are born namespace+Static:"
