@@ -4,6 +4,7 @@
 // changes → a commit's files → a file's diff, with `back()` unwinding it.
 import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
+import { AT_REST, type ScrollMomentum } from '../ui/scroll-momentum';
 
 export type GitView = 'changes' | 'commitFiles' | 'fileDiff';
 /** Which region of the top "changes" view has keyboard focus. */
@@ -33,6 +34,10 @@ class $GitPanel {
   get logScrollTop() {
     return ref(0);
   }
+  // Momentum state for the commit-log wheel glide (see ui/scroll-momentum).
+  get logMomentum() {
+    return shallowRef<ScrollMomentum>(AT_REST);
+  }
   /** Fraction of the sidebar height given to the top (changes+commit) region. */
   get splitRatio() {
     return ref(0.5);
@@ -61,6 +66,7 @@ class $GitPanel {
 
   /** Drill into a commit: show its changed files. */
   openCommit(sha: string, files: CommitFileEntry[]): void {
+    this.logMomentum.value = AT_REST; // adopt-and-stop: a jump halts any glide (One-Writer)
     this.activeCommit.value = sha;
     this.commitFiles.value = files;
     this.commitFilesIndex.value = 0;

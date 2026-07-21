@@ -11,6 +11,7 @@ import { Files } from '../system/Files';
 import { GitRepository } from '../git/GitRepository';
 import { CommitLog } from '../git/CommitLog';
 import { GitPanel } from './GitPanel';
+import { addImpulse, stepMomentum, isMoving, AT_REST } from '../ui/scroll-momentum';
 
 export type Focus = 'files' | 'editor' | 'git';
 
@@ -87,6 +88,30 @@ class $Workspace {
     const cap = Number.isFinite(end) ? Math.max(0, (end as number) - 1) : gp.logScrollTop.value + Math.max(0, delta);
     gp.logScrollTop.value = Math.max(0, Math.min(gp.logScrollTop.value + delta, cap));
     void cl?.ensureRange(gp.logScrollTop.value, 50);
+  }
+
+  /** A wheel notch: add a momentum impulse (the frame loop then glides the log). */
+  impulseGitLog(deltaRows: number): void {
+    this.gitPanel.logMomentum.value = addImpulse(this.gitPanel.logMomentum.value, deltaRows);
+  }
+
+  /** Halt the log glide immediately (keyboard paging / a jump — One-Writer-Per-Regime). */
+  haltGitLogScroll(): void {
+    this.gitPanel.logMomentum.value = AT_REST;
+  }
+
+  // invariant: One writer per scroll regime per frame (src/modules/ui/ui.invariants.md)
+  /**
+   * Advance the commit-log glide by one frame of `dtSec`. Steps the momentum, moves the window by
+   * the resulting whole rows (clamped, pages fetched/evicted), and returns whether it is still
+   * moving (the frame loop keeps requesting frames while true). Cost stays O(window).
+   */
+  tickGitLogScroll(dtSec: number): boolean {
+    const gp = this.gitPanel;
+    const { momentum, rows } = stepMomentum(gp.logMomentum.value, dtSec);
+    gp.logMomentum.value = momentum;
+    if (rows !== 0) this.scrollGitLog(rows);
+    return isMoving(momentum);
   }
 
   /** Activate the current tree selection: open a file (and focus editor) or toggle a dir. */

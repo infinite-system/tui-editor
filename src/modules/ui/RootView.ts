@@ -382,9 +382,8 @@ export function buildRootView(
   const wheelDelta = (e: { scroll?: { direction?: string } }): number =>
     (e.scroll?.direction === 'up' ? -1 : 1) * WHEEL_STEP;
   sidebar.onMouseScroll = (e) => {
-    const delta = wheelDelta(e);
-    if (ws.focus.value === 'git') ws.scrollGitLog(delta);
-    else ws.tree.moveSelection(delta);
+    if (ws.focus.value === 'git') ws.impulseGitLog(e.scroll?.direction === 'up' ? -1 : 1); // momentum glide
+    else ws.tree.moveSelection(wheelDelta(e));
   };
   editorArea.onMouseScroll = (e) => {
     const ed = ws.editor;

@@ -141,8 +141,20 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   // Frame-settle signal for the tmux harness (a frame actually rendered).
   const framePath = join(dirname(StatusChannel.Class.path), 'frame.json');
   let frame = 0;
+  // Smooth-scroll animation clock. dt is clamped so a resume from idle (a "paused clock") advances
+  // one frame's worth, not the whole idle gap — the paused-clock invariant.
+  let lastFrameMs = 0;
+  const MAX_DT = 0.1; // seconds
   const onFrame = (): void => {
     frame += 1;
+    // Drive the commit-log glide: step the momentum by real dt; keep requesting frames while it
+    // moves so the animation is self-sustaining even on frames that advance 0 whole rows.
+    const nowMs = performance.now();
+    const dt = lastFrameMs === 0 ? 1 / 30 : Math.min(MAX_DT, (nowMs - lastFrameMs) / 1000);
+    lastFrameMs = nowMs;
+    if (workspace.gitPanel.logMomentum.value.velocity !== 0) {
+      if (workspace.tickGitLogScroll(dt)) renderer.requestRender();
+    }
     StatusChannel.Class.settle(frame);
     // Exact per-cell visual snapshot for tests (env-gated; no-op otherwise).
     FrameProbe.Class.dump(renderer, framePath);
@@ -269,6 +281,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     } else if (focus === 'git') {
       const gp = workspace.gitPanel;
       const moveLog = (delta: number): void => {
+        workspace.haltGitLogScroll(); // keyboard is precise — adopt-and-stop any glide (One-Writer)
         const end = workspace.commitLog.value?.knownEnd.value ?? Number.POSITIVE_INFINITY;
         gp.logIndex.value = Math.max(0, Math.min(gp.logIndex.value + delta, Number.isFinite(end) ? end - 1 : gp.logIndex.value + delta));
         const approxVisible = 12;
