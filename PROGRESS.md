@@ -4,7 +4,7 @@ Live status ledger for the autonomous build. Updated every turn so state survive
 compaction. **If you are resuming: read this, then `HANDOFF.md`, then continue at the first
 unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
-## RESUME HERE (frontier as of commit 158ce95)
+## RESUME HERE (frontier as of commit 6f31553)
 - **State:** 11 module contracts · 128 tests pass · tsc green · checker 0 problems · end-to-end tmux
   smoke ALL-PASS. codex modules git/markdown/lsp INTEGRATED. Editor rework: reactive frame
   (established), grapheme coordinate model, native-cursor caret, selection + clipboard (model works),
@@ -99,6 +99,14 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       changes + VIRTUALIZED commit log (live-verified on this repo); keyboard log scroll; POSITION-
       ROUTED mouse-wheel scroll on editor/tree/git-log (verified headless + tmux); scroll invariants
       recorded (Container-Is-Input reality, One-Writer chosen).
+      **IN FLIGHT — retroactive de-abbreviation pass:** a general-purpose subagent
+      (id a6beb8c246efac6ec) is renaming ALL abbreviated identifiers → full names across src
+      (ed→editor, pal→palette, ws→workspace, gp→gitPanel, cl→commitLog, cur→current*, idx/i→index,
+      etc.), green-gated (tsc + `bun test` + checker). Behavior-preserving. On completion: REVIEW the
+      diff for naming quality (esp. context-sensitive sel/cur names), re-verify green, commit. Blocks
+      code edits on those files until integrated. Convention recorded (project.decisions.md; codex
+      preamble). **codex scroll-port was PULLED** (naming-convention conflict + horizontal x-mapping
+      subtlety) — scroll port is now SELF-DO after the rename lands.
       **(a) SMOOTH scroll — commit log DONE** (`scroll-momentum.ts` pure physics + 7 tests; wheel→
       impulse, onFrame steps by real dt clamped [paused-clock], halt on keyboard/jump [One-Writer],
       O(window); live-verified glide+settle). **PORT to editor(vert+horiz)+tree DELEGATED to codex**
