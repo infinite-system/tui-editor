@@ -311,9 +311,11 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
           workspace.activate();
           break;
         case 'right':
-          if (workspace.tree.selected?.isDir && !workspace.tree.selected.expanded)
-            workspace.activate();
-          else workspace.focusEditor();
+          // Right on a FILE opens it (same as Enter — user expectation); on a collapsed dir,
+          // expands it; on an expanded dir, steps into it. Focus switching stays on Tab.
+          if (workspace.tree.selected?.isDir && workspace.tree.selected.expanded)
+            workspace.tree.moveSelection(1);
+          else workspace.activate();
           break;
         case 'left':
           if (workspace.tree.selected?.isDir && workspace.tree.selected.expanded)

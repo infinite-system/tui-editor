@@ -63,6 +63,20 @@ else
   echo "  SKIP  (run with TUI_FRAME_DUMP=1 for the caret-cell check)"
 fi
 
+echo "== no soft-wrap: long line 1 stays one row; gutter 2 on the next row (human-QA regression) =="
+wrap_check="$("$BUN" -e '
+const f=JSON.parse(require("fs").readFileSync("artifacts/frame.json"));
+let qy=-1;
+for(let y=0;y<f.height && qy<0;y++){for(const ch of f.rows[y].text){if(ch==="X"){qy=y;break}}}
+if(qy<0){console.log("WRONG no typed glyph found");process.exit(0)}
+// Consecutive rows must carry CONSECUTIVE gutter numbers (one file line == one visual row). A
+// wrap tail leaves a blank gutter on the next row and shifts every number after it.
+const gutterNumber=(y)=>{const m=f.rows[y].text.slice(33,40).match(/\d+/);return m?Number(m[0]):null};
+const here=gutterNumber(qy), below=gutterNumber(qy+1);
+console.log(here!==null && below===here+1 ? "OK" : `WRONG here=${here} below=${below}`);
+')"
+if [ "$wrap_check" = "OK" ]; then echo "  PASS  one file line == one visual row (gutter aligned)"; else echo "  FAIL  wrap/gutter desync: $wrap_check"; fail=1; fi
+
 echo "== selection (Shift+Right selects; Escape clears) =="
 "$H" send "$S" S-Right >/dev/null
 chk "hasSelection after Shift+Right" "$(f hasSelection)" "true"

@@ -98,6 +98,10 @@ export function buildRootView(
     content: '',
     selectable: true,
     flexGrow: 1,
+    // An editor pane NEVER soft-wraps: one file line == one visual row, always; long lines clip at
+    // the right edge (horizontal scroll covers the rest). Wrapping desyncs the gutter (which
+    // numbers file lines) and every row-based mapping (caret Y, selection rows, click hit-testing).
+    wrapMode: 'none',
   });
   editorArea.add(gutterBody);
   editorArea.add(codeBody);
