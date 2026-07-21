@@ -21,7 +21,7 @@ import type { App } from '../app/App';
 import type { Theme } from '../theme/Theme';
 import type { CommandRegistry } from '../commands/CommandRegistry';
 import type { Palette } from '../theme/theme.palettes';
-import { highlightLine, type Role } from '../syntax/Highlighter';
+import { Highlighter, type Role } from '../syntax/Highlighter';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { displayColumn, lineWidth, graphemeAtDisplayColumn, graphemeToU16 } from '../editor/editor.coordinates';
 import { SelectableText } from './SelectableText';
@@ -441,7 +441,7 @@ export function buildRootView(
       if (editor.document.binary.value || language === 'plain') {
         codeChunks.push(fg(palette.fg)(windowText));
       } else {
-        for (const span of highlightLine(windowText, language)) {
+        for (const span of Highlighter.Class.highlightLine(windowText, language)) {
           codeChunks.push(fg(roleColor(span.role, palette))(span.text));
         }
       }
