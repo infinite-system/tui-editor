@@ -6,6 +6,17 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
 ## USER PIPELINE (durable — no user request drops; statused per item)
 
+- [ ] QA-A. **Shift+wheel horizontal scroll (REPEAT OFFENDER — FrameProbe-confirm required).** Shift+
+      vertical wheel must scroll HORIZONTALLY in the editor + any h-scrollable pane (VS Code/terminal
+      convention). User sees nothing. Suspect: SGR decoder masks the wheel button to bare 64/65 before
+      reading the shift bit (shift-wheel = 68/69), so modifiers.shift never reaches the horizontal
+      branch; check the kitty path too. Verify by DRIVING `\e[<68;col;rowM`/`\e[<69;col;rowM` and a
+      FrameProbe horizontal-offset change — "the handler looks right" does NOT count. Add a smoke.
+- [ ] QA-B. **File-list scroll-swim.** Scrolling the file tree, per-row backgrounds appear to shift
+      behind the elements instead of scrolling as one uniform surface; git-commits list scrolls
+      correctly. Root-cause file-tree row-bg positioning vs git-changes; unify. FrameProbe at ≥2
+      offsets (bg + text share per-row y; no stationary stripes) + smoke.
+
 - [x] 1. All-scrollbars geometry audit — ONE source (scrollbar-geometry.ts) + visibility predicate
       + 17 property tests + FrameProbe sweep; log-bar alignment FIXED, phantom tree bar FIXED,
       range-reaches-end FIXED (5984766, c679dad). Remaining: fold the sweep into the smoke.
