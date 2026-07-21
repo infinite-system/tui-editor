@@ -10,6 +10,7 @@ import {
   TextRenderable,
   StyledText,
   fg,
+  bg,
   type TextChunk,
   type CliRenderer,
 } from '@opentui/core';
@@ -163,29 +164,35 @@ export function buildRootView(
     return selectedIndex >= height ? selectedIndex - height + 1 : 0;
   }
 
-  function renderTree(): string {
+  function renderTree(): StyledText {
     const palette = readPalette();
     const rows = workspace.tree.rows;
     const selectedIndex = workspace.tree.selectedIndex.value;
+    const hoveredIndex = workspace.tree.hoveredIndex.value;
     const height = Math.max(1, (sidebar.height as number) - 2);
+    const innerWidth = SIDEBAR_WIDTH - 2;
     // Flyweight: only render the visible window around the selection.
     const top = treeWindowTop();
     const visible = rows.slice(top, top + height);
-    const lines = visible.map((row, visibleIndex) => {
+    const chunks: TextChunk[] = [];
+    visible.forEach((row, visibleIndex) => {
       const rowIndex = top + visibleIndex;
+      const selected = rowIndex === selectedIndex && workspace.focus.value === 'files';
+      const hovered = rowIndex === hoveredIndex;
+      const marker = selected ? '›' : ' ';
       const indent = '  '.repeat(row.depth);
       const icon = theme.icon(row.name, row.isDir, row.expanded);
-      const marker =
-        rowIndex === selectedIndex && workspace.focus.value === 'files'
-          ? '›'
-          : rowIndex === workspace.tree.hoveredIndex.value
-            ? '·'
-            : ' ';
       let label = `${marker}${indent}${icon} ${row.name}`;
-      if (label.length > SIDEBAR_WIDTH - 2) label = label.slice(0, SIDEBAR_WIDTH - 2);
-      return label;
+      if (label.length > innerWidth) label = label.slice(0, innerWidth);
+      // Pad to the pane's inner width so the row highlight spans the full row (VS Code-style).
+      label = label.padEnd(innerWidth, ' ');
+      // Two intensities: selection (stronger) over hover (subtle); bg is the primary signal.
+      const rowBackground = selected ? palette.selection : hovered ? palette.cursorLine : null;
+      const styled = fg(selected ? palette.accent : palette.fg)(label);
+      chunks.push(rowBackground ? bg(rowBackground)(styled) : styled);
+      if (visibleIndex < visible.length - 1) chunks.push(fg(palette.fg)('\n'));
     });
-    return lines.join('\n');
+    return new StyledText(chunks);
   }
 
   const EMPTY_STATE = [
@@ -479,11 +486,9 @@ export function buildRootView(
     workspace.focusFiles(); // click-to-focus
     const rowIndex = treeWindowTop() + (event.y - (sidebar.y + 1)); // +1: sidebar top border
     if (rowIndex < 0 || rowIndex >= workspace.tree.rows.length) return;
-    if (workspace.tree.selectedIndex.value === rowIndex) {
-      workspace.activate(); // second click on the selected row opens/toggles
-    } else {
-      workspace.tree.selectedIndex.value = rowIndex;
-    }
+    // Single-click activation: one click selects AND opens the file / toggles the folder.
+    workspace.tree.selectedIndex.value = rowIndex;
+    workspace.activate();
   };
 
   update();
