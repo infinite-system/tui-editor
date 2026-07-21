@@ -161,3 +161,25 @@ run the checker (`--all --refs`) on every delegated module before merge; non-con
 never merge. Adversarial-review delegates apply the IBR breaking discipline + impossibility test
 against the module's contract. Every agent in this build — coordinator, codex, subagents — governs by
 IBR + /invariants.
+
+---
+
+## D — Vendor the IBR skills into the project (self-contained, worktree-portable)
+
+**Decision:** Install the `/ibr` + `/invariants` skills into `tui-editor/.claude/skills` via the
+published package — `npx @invariantai/ibr install` (validated end-to-end; also `npx @invariantai/ibr
+check --all` runs the bundled checker). The project is now self-contained: the slash-commands work
+in-project, the checker runs from a project-local path
+(`node .claude/skills/invariants/scripts/check_invariants.mjs --all --refs`), and codex git-worktrees
+inherit the skills (they were referenced by machine-absolute `/home/parallels/dev/ibr/...` paths that
+don't exist in a worktree on another machine — now `.claude/skills/...`, portable).
+
+**Supersedes** the earlier "never copy the checker into the target repo" note: that guarded against
+ad-hoc drift between the canonical skill and stray copies. This is different — a PINNED published
+version (`@invariantai/ibr` 0.1.0), intentionally vendored, byte-identical to canonical (verified via
+`diff`), refreshed by re-running the installer. Version pinning + the release-sync workflow manage
+drift. The canonical source remains the npm package.
+
+**Applied:** codex preamble + HANDOFF + PROGRESS now point at the project-local checker/skill paths.
+
+**Status:** adopted · **Logged:** 2026-07-21

@@ -7,9 +7,9 @@ At your worktree root:
 - project.ivue-reference.md — the ivue implementation reference incl. the FLYWEIGHT pattern (copy it for any high-cardinality data). AUTHORITATIVE for ivue code.
 - project.decisions.md (the 10 ivue decisions), project.architecture.md, project.implementation-plan.md (§3 module/file conventions, §4 milestones).
 - .claude/skills/ivue/SKILL.md — the ivue skill.
-Method skills (absolute paths — read them so you write proper invariant contracts by the IBR method):
-- /home/parallels/dev/ibr/.claude/skills/invariants/SKILL.md — the /invariants skill (the contract schema, kinds, and how invariants are written/verified). Your <MODULE>.invariants.md MUST follow it.
-- /home/parallels/dev/ibr/.claude/skills/ibr/SKILL.md and /home/parallels/dev/ibr/IBR/IBR.md — the /ibr skill + framework (invariant-based reasoning: reduce to load-bearing generators, sort reality vs chosen, predict impossibilities).
+Method skills (project-local, at your worktree root — read them so you write proper invariant contracts by the IBR method):
+- .claude/skills/invariants/SKILL.md — the /invariants skill (the contract schema, kinds, and how invariants are written/verified). Your <MODULE>.invariants.md MUST follow it.
+- .claude/skills/ibr/SKILL.md — the /ibr skill + framework (invariant-based reasoning: reduce to load-bearing generators, sort reality vs chosen, predict impossibilities).
 
 == METHOD — IBR + /invariants (EMBEDDED; this governs your contract — the pointers above are the source, this inline copy is what you MUST apply even if you don't open them) ==
 You reason and write your `<MODULE>.invariants.md` by Invariant-Based Reasoning. This is not decoration — a bare-bones or vacuous contract FAILS review and gets sent back.
@@ -26,7 +26,7 @@ IBR discipline:
 - Each record: `### <name>` (a plain declarative sentence, UNNUMBERED — the name is the identifier), then fields: **Invariant** (one if-then), **Scope**, **Mechanism**, **Generates**, **Evidence** (REQUIRED — where/how it holds; do not omit), **Impossible if true**, **Verification**, **Status:** provisional, **Last refined:** 2026-07-21.
 - Record-name charset = letters, digits, spaces, hyphens ONLY. NO commas, colons, slashes, or punctuation in the name (they break the checker/annotation match).
 - Annotate the code that upholds a record with a comment: `// invariant: <exact record name> (<path-to-the-invariants-file>)` — the name must match the `###` heading EXACTLY (same words, same case, no trailing punctuation); the path resolves colocated (your module dir) or repo-root. A mismatched or comma-bearing name is an orphan annotation = failure.
-- The orchestrator runs `node /home/parallels/dev/ibr/.claude/skills/invariants/scripts/check_invariants.mjs --all --refs` on your module and REJECTS it on any problem. Self-check by reading the schema; you cannot run the checker from your worktree but your contract must pass it.
+- The checker is project-local at `.claude/skills/invariants/scripts/check_invariants.mjs` — you CAN and MUST run it in your worktree: `node .claude/skills/invariants/scripts/check_invariants.mjs --all --refs` must report 0 problems for your module before you finish. The orchestrator re-runs it and REJECTS your output on any problem.
 
 Existing code (read to learn interfaces; DO NOT modify): src/modules/{system,app,kernel,editor,workspace,theme,syntax} — Buffer/editor API, system capabilities, Theme, syntax highlighter.
 
