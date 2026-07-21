@@ -1,0 +1,26 @@
+TASK — item 9 (partitioned): convert the STABLE legacy exported-function bags to the namespace+Static shape. Work ONLY in your current directory (a git worktree). You MAY git commit here — ONE COMMIT PER FILE (the file + its call sites + its tests), so the reviewer can merge batch-wise. Do NOT delete files. No behavior change — pure shape conversion.
+
+TARGET SHAPE (exact; see src/modules/git/git.rows.ts and src/modules/ui/scrollbar-geometry.ts for freshly-converted references):
+- `class $X { static functionName = functionNameImplementation; … }` (or static methods directly)
+- `export namespace X { export const $Class = $X; export const Class = Static($X); }` (import Static from src/modules/system/Static.ts)
+- Call sites become `X.Class.functionName(...)`. Type/interface exports stay as plain exports. Private module-local helper functions may stay module-local (unexported). Update ALL call sites and tests. Keep existing `// invariant:` annotations attached.
+
+CONVERT THESE FILES ONLY (stable partition — one commit each, in this order):
+1. src/modules/git/git.window.ts  (missingRanges, evictable → GitWindow)
+2. src/modules/git/git.parsers.ts (parse functions → GitParsers; keep CommitRecord/GitFileRecord/GitStatusSnapshot type exports as-is)
+3. src/modules/syntax/Highlighter.ts (highlightLine → Highlighter namespace — CAREFUL: a namespace named Highlighter may collide with existing imports `import { highlightLine, type Role } from '../syntax/Highlighter'`; keep `Role`/`Span`/`LangId` as plain type exports)
+4. src/modules/theme/theme.icons.ts
+5. src/modules/theme/theme.palettes.ts (quantizePalette; the PALETTES/DARK/LIGHT data + Palette type stay plain exports)
+6. src/modules/commands/commands.defaults.ts (registerDefaultCommands → CommandDefaults)
+7. src/modules/commands/CommandRegistry.ts — ONLY its stray top-level `export function` (inspect; likely fuzzy scoring) moves into a Static capability (either into the CommandRegistry class as a static or a small commands.scoring.ts born Static); the Reactive CommandRegistry class itself is ALREADY correct — do not reshape it.
+
+DO NOT TOUCH (active churn / already handled): git.rows.ts, scrollbar-geometry.ts, editor.coordinates.ts, scroll-momentum.ts, RootView.ts's buildRootView shape (update only its IMPORT call sites for the files above), keybindings.defaults.ts/keybindings.mac.ts (data modules), anything under src/modules/editor/ beyond call-site updates, ContextMenu/Tooltip/editor.wrap (other workers').
+
+AFTER EACH FILE'S COMMIT run the full gate and include the output in the commit message tail:
+  bunx tsc --noEmit; echo TSC=$?   (must be 0)
+  bun test                          (all pass)
+  node .claude/skills/invariants/scripts/check_invariants.mjs --all --refs   (0 problems)
+  bash scripts/conventions-gate.sh  (PASS — and REMOVE each converted file from the LEGACY_STATIC_ALLOWLIST in scripts/conventions-gate.sh as part of its commit, so the allowlist only shrinks)
+Finish with `bash scripts/smoke-editor.sh` (ALL-PASS) once at the end.
+
+REPORT: per-file commit list (sha + files touched), any collision/naming judgment calls, the final gate outputs, anything you could not convert cleanly (leave it unconverted + explain rather than force it).

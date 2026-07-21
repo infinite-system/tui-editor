@@ -26,7 +26,11 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 - [ ] 8. Idle quiescence + perf baselines — 10s at-rest assertion (frame delta 0, CPU ~0; 14% live
       sample to disambiguate), RSS 110MB vs 100MB target itemized (PERFORMANCE_BASELINES.md),
       create/dispose lifecycle stability.
-- [ ] 9. Static-capability convention pass (single owner, mechanical, after scroll work settles).
+- [~] 9. Static-capability pass — ACCELERATED by partition: codex converting the STABLE legacy bags
+      NOW (worktree codex-static, per-file commits, gate-verified, allowlist shrinks per commit;
+      log .claude/worktrees/codex-static.log). Tail (editor.coordinates, scroll-momentum, RootView
+      shape) converts after the click/scroll/wrap churn lands. NEW-FILE RULE enforced from birth
+      (conventions-gate); git.rows + scrollbar-geometry already converted (9ea13f8).
 - [ ] 10. Milestone road: M5 diagnostics/definition + editable side-by-side diff · M6 markdown
       split-preview · multi-workspace · file search · piece-table undo · M7 plugins (ScrollPhysics
       or theme plugin demo) · 5-pass gauntlet (fuller Claude panel) · isolated blackline-worktree
@@ -46,7 +50,8 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 - Worker A (Sub-Fable): items 3-remainder + 4 — ContextMenu + right-click + Ctrl/Shift-click +
   tooltips. Worker B: item 5 — inline commit expansion. Worker C: item 6 — word-wrap mode.
 - Worker D (Sub-Fable, verification): item 8 — perf-baselines script + PERFORMANCE_BASELINES.md.
-- codex: item 7 — momentum parity port (worktree codex-momentum, log .claude/worktrees/codex-momentum.log).
+- codex #1: item 7 — momentum parity port (worktree codex-momentum, log .claude/worktrees/codex-momentum.log).
+- codex #2: item 9 stable partition — Static conversions (worktree codex-static, per-file commits).
 - COORDINATOR (me): item 11 scroll-feel regression tune (after codex lands — same code), reviews +
   merges (review gates: naming convention, contracts+checker, session-scoped verification evidence,
   RootView merge conflicts resolved by hand).
