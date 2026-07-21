@@ -98,11 +98,14 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   });
   // Word wrap toggling (command OR settings panel) switches viewport.scrollTop between LOGICAL-line and
   // VISUAL-row units. Re-anchoring on the cursor sets a valid scrollTop in the new units — no fragile
-  // conversion — so the cursor stays on screen. Depends on settings.wordWrap so BOTH toggle paths fire.
-  app.$watchEffect(() => {
-    void settings.wordWrap.value;
-    workspace.editor.revealCursor();
-  });
+  // conversion — so the cursor stays on screen. This MUST be a TARGETED watch on settings.wordWrap, NOT
+  // a $watchEffect: revealCursor() READS viewport.scrollTop, so a $watchEffect would re-run on EVERY
+  // scroll and re-reveal the cursor — snapping a wheel-scroll back to the cursor's line (the "opening a
+  // file, wheel does nothing / can't leave the top" bug: cursor at line 0 pinned the viewport at 0).
+  app.$watch(
+    () => settings.wordWrap.value,
+    () => workspace.editor.revealCursor(),
+  );
 
   // Last mouse event seen (for the observability side channel — proves the mouse path is live).
   let lastMouse: { type: string; x: number; y: number; button: number } | null = null;

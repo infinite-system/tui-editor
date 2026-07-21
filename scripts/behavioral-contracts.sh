@@ -113,6 +113,46 @@ else
 fi
 "$H" kill "$S" >/dev/null 2>&1
 
+# ---- CONTRACT: open a file → scroll reaches the true LAST line AND back to the true FIRST line ----
+# THE REAL USER PATH, both directions (user requirement, RATCHET for the focus-on-open/cursor-pin bug):
+# open a MODERATE file (a few screenfuls), then FROM THE POST-OPEN STATE — no injected focus click, no
+# driving scrollTop directly — scroll via the REAL input. Down (wheel + PageDown) must reach + render the
+# TRUE LAST line; Up (wheel + PageUp) must return + render the TRUE FIRST line. Catches THREE bug classes:
+# focus-on-open (wheel does nothing after open), a cursor-reveal that re-pins the viewport to the cursor
+# (the $watchEffect-over-tracking bug), and wrong max-scroll extent (can't reach an end).
+echo "== CONTRACT open-then-scroll: reaches the true last line AND returns to the true first line =="
+S="bc-scroll-$$"; SESSIONS="$SESSIONS $S"
+SDIR=$(mktemp -d /tmp/tui-bc-scroll.XXXXXX)
+# ~110 lines ≈ 3 screenfuls at a 40-row terminal (viewport ~36) — enough to traverse start↔end fast.
+python3 -c "open('$SDIR/doc.txt','w').write(''.join('LINE-%03d body\n'%i for i in range(110)))"
+python3 -c "import json,os;p=os.path.expanduser('$SET');d=json.load(open(p));d['wordWrap']=False;json.dump(d,open(p,'w'),indent=2)"
+"$H" launch "$S" 120x40 env TUI_FRAME_DUMP=1 bun run src/main.ts "$SDIR" >/dev/null; "$H" ready "$S" 20 >/dev/null
+open_file "$S"   # open via the tree (Enter) — DO NOT click into the editor (that would mask focus-on-open)
+# 1) From the post-open state, a WHEEL alone must MOVE the viewport (focus-on-open / cursor-pin regression).
+for _ in 1 2 3 4 5 6; do tmux send-keys -t "$S" -l "$(printf '\033[<65;60;12M')"; sleep 0.12; done; sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
+wheel_moved="$("$H" field "$S" editorScrollTop)"
+if [ "${wheel_moved:-0}" -gt 0 ] 2>/dev/null; then pass "wheel scrolls right after open, no click (scrollTop=$wheel_moved)"; else bad "wheel does NOT scroll after open (scrollTop=$wheel_moved) — focus-on-open/cursor-pin regression"; fi
+# 2) Continue to the TRUE END via keyboard; assert the LAST line renders near the bottom of the editor.
+for _ in $(seq 1 12); do "$H" send "$S" PageDown >/dev/null 2>&1; done; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
+"$H" send "$S" PageDown >/dev/null; sleep 0.2; "$H" settle "$S" >/dev/null 2>&1
+last_ok=$(python3 -c "
+import json
+rows=json.load(open('$ROOT/artifacts/frame-$S.json'))['rows']
+print('yes' if any('LINE-109' in r.get('text','') for r in rows) else 'no')
+")
+if [ "$last_ok" = "yes" ]; then pass "scrolling DOWN reaches + renders the TRUE last line (LINE-109)"; else bad "cannot reach the true last line (LINE-109 not rendered at the bottom)"; fi
+# 3) Scroll back UP via wheel + keyboard to the TRUE START; assert the FIRST line renders + scrollTop 0.
+for _ in $(seq 1 6); do tmux send-keys -t "$S" -l "$(printf '\033[<64;60;12M')"; sleep 0.1; done
+for _ in $(seq 1 12); do "$H" send "$S" PageUp >/dev/null 2>&1; done; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
+top="$("$H" field "$S" editorScrollTop)"
+first_ok=$(python3 -c "
+import json
+rows=json.load(open('$ROOT/artifacts/frame-$S.json'))['rows']
+print('yes' if any('LINE-000' in r.get('text','') for r in rows) else 'no')
+")
+if [ "$first_ok" = "yes" ] && [ "${top:-9}" = "0" ]; then pass "scrolling UP returns to + renders the TRUE first line (LINE-000, scrollTop 0)"; else bad "cannot return to the true first line (LINE-000 rendered=$first_ok, scrollTop=$top)"; fi
+"$H" kill "$S" >/dev/null 2>&1; rm -rf "$SDIR"
+
 echo ""
 if [ "$fail" = 0 ]; then echo "behavioral-contracts: ALL-PASS"; else echo "behavioral-contracts: FAILURES"; fi
 exit "$fail"

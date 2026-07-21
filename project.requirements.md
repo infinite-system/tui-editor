@@ -68,6 +68,17 @@ merge gate — `scripts/behavioral-contracts.sh`. Rules:
   feels right." The behavioral suite is the mechanical form of that check.
 - Mirror of idle-quiescence: quiescence asserts motion STOPS at rest; momentum-glide asserts motion
   CONTINUES then stops. Both are load-bearing feel-invariants, both driven, both gated.
+- **A scroll test MUST replicate the REAL USER PATH from a fresh open (user requirement).** Open a
+  MODERATE-length file (a few screenfuls — enough to traverse start↔end deterministically, not stress
+  volume). From the POST-OPEN state, scroll via the REAL input (wheel AND keyboard) — do NOT inject a
+  focus click and do NOT drive scrollTop directly (either MASKS the bug: a click focuses/moves the cursor;
+  a direct scrollTop write bypasses the input path). Assert BOTH directions: scrolling DOWN reaches +
+  renders the TRUE last line at the bottom; scrolling UP returns + renders the TRUE first line at the top.
+  This single contract catches THREE classes at once: focus-on-open (wheel does nothing after open), a
+  cursor-reveal that re-pins the viewport to the cursor line (a $watchEffect reading scrollTop re-runs on
+  every scroll → snaps back to the cursor at line 0 — the actual bug), and wrong max-scroll extent (can't
+  reach an end). The false-green that shipped it: the test had focus already set / drove scrollTop, so it
+  never exercised the real open-then-wheel path. Gated in scripts/behavioral-contracts.sh (merge-gate).
 
 ## Verification (the discipline that makes parallelism safe)
 - Verify by DRIVING — FrameProbe framebuffer / tmux / per-session `status-<session>.json` — NEVER by
