@@ -24,8 +24,11 @@ echo "records = '### <unnumbered declarative name>' with Invariant/Scope/Mechani
 echo "Impossible if true/Verification/Status/Last refined; names use letters/digits/spaces/hyphens ONLY;"
 echo "annotate code '// invariant: <exact record name> (<path>)'; checker MUST pass:"
 echo "  node .claude/skills/invariants/scripts/check_invariants.mjs --all --refs   (0 problems)"
-echo "Merge gate you must satisfy: bunx tsc --noEmit; echo TSC=\$? · bun test · bash scripts/smoke-editor.sh ·"
-echo "the checker · bash scripts/conventions-gate.sh"
+echo "Merge gate you must satisfy (ALL hard-blocking): bash scripts/merge-gate.sh — runs tsc + conventions"
+echo "+ unwired-capability + settings-meta (conventions-gate) + bun test + behavioral-contracts.sh (felt"
+echo "invariants) + the 5 driving smokes (editor/tabs/tree-scroll/wrap/git-watch) + the REAL settings"
+echo "applied-effect drives. PLUS the invariants checker (node .claude/skills/invariants/scripts/"
+echo "check_invariants.mjs --all --refs). A driving test that does not BLOCK is not a gate (MEASURED != ENFORCED)."
 echo
 for contract in "$@"; do
   echo "==================== CONTRACT: $contract ===================="
