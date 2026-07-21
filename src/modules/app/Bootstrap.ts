@@ -99,6 +99,35 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   };
 
   // --- input ---------------------------------------------------------------
+  // Accelerated arrows: terminals report key REPEAT (not down/up), so we ramp the step size
+  // when the same arrow keeps arriving quickly, and reset when the direction changes or the
+  // stream pauses. invariant: Terminals report key repeat, not key up (project.invariants.md)
+  let accelDir = '';
+  let accelRun = 0;
+  let accelLast = 0;
+  const ACCEL_WINDOW_MS = 90;
+  const movementAcceleration = (key: KeyEvent): number => {
+    const now = Date.now();
+    const dir = key.name;
+    if (dir === accelDir && now - accelLast < ACCEL_WINDOW_MS) {
+      accelRun += 1;
+    } else {
+      accelRun = 0;
+    }
+    accelDir = dir;
+    accelLast = now;
+    // 1,1,1 then ramp: after ~4 rapid repeats start accelerating, cap at 8.
+    if (accelRun < 4) return 1;
+    return Math.min(8, 1 + Math.floor((accelRun - 3) / 2));
+  };
+  const isTypedCharacter = (key: KeyEvent): boolean => {
+    if (key.ctrl || key.meta || key.option) return false;
+    const s = key.sequence;
+    if (!s || s.length !== 1) return false;
+    const code = s.charCodeAt(0);
+    return code >= 32 && code !== 127;
+  };
+
   const onKey = (key: KeyEvent): void => {
     if ((key.name === 'q' && key.ctrl) || (key.name === 'c' && key.ctrl)) {
       void shutdown();
@@ -136,40 +165,43 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     } else {
       // editor focus
       const ed = workspace.editor;
-      switch (key.name) {
-        case 'up':
-          ed.moveVertical(-1);
-          break;
-        case 'down':
-          ed.moveVertical(1);
-          break;
-        case 'left':
-          ed.moveHorizontal(-1);
-          break;
-        case 'right':
-          ed.moveHorizontal(1);
-          break;
-        case 'pageup':
-          ed.pageUp();
-          break;
-        case 'pagedown':
-          ed.pageDown();
-          break;
-        case 'home':
-          ed.moveToLineStart();
-          break;
-        case 'end':
-          ed.moveToLineEnd();
-          break;
-        case 'g':
-          if (key.shift) ed.gotoBottom();
-          else ed.gotoTop();
-          break;
-        case 'escape':
-          workspace.focusFiles();
-          break;
-        default:
-          changed = false;
+      const accel = movementAcceleration(key);
+      if (key.name === 's' && key.ctrl) {
+        ed.save();
+      } else if (key.name === 'z' && key.ctrl && !key.shift) {
+        ed.performUndo();
+      } else if ((key.name === 'z' && key.ctrl && key.shift) || (key.name === 'y' && key.ctrl)) {
+        ed.performRedo();
+      } else if (key.name === 'up') {
+        ed.moveVertical(-accel);
+      } else if (key.name === 'down') {
+        ed.moveVertical(accel);
+      } else if (key.name === 'left') {
+        ed.moveHorizontal(-accel);
+      } else if (key.name === 'right') {
+        ed.moveHorizontal(accel);
+      } else if (key.name === 'pageup') {
+        ed.pageUp();
+      } else if (key.name === 'pagedown') {
+        ed.pageDown();
+      } else if (key.name === 'home') {
+        ed.moveToLineStart();
+      } else if (key.name === 'end') {
+        ed.moveToLineEnd();
+      } else if (key.name === 'return') {
+        ed.insertNewline();
+      } else if (key.name === 'backspace') {
+        ed.backspace();
+      } else if (key.name === 'delete') {
+        ed.deleteChar();
+      } else if (key.name === 'tab' /* already handled above, but guard */) {
+        // no-op (focus switch handled earlier)
+      } else if (key.name === 'escape') {
+        workspace.focusFiles();
+      } else if (isTypedCharacter(key)) {
+        ed.insertText(key.sequence);
+      } else {
+        changed = false;
       }
     }
 

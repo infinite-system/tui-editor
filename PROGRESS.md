@@ -18,10 +18,11 @@ first unchecked item.
   Late deps via getters; no top-level `new ImportedClass()`.
 
 ## Milestones
-- [x] M0 — Setup & foundations (fork did scaffold; Bun installed; docs read; project.invariants.md exists)
-- [ ] M1 — Boot & Frame (app/kernel/system) — IN PROGRESS
-- [ ] M2 — Workspace + file browser + read-only editor + syntax + theme
-- [ ] M3 — Editing (buffer/cursor/selection/undo/movement/search/palette)
+- [x] M0 — Setup & foundations (Bun installed; docs read; project.invariants.md exists)
+- [x] M1 — Boot & Frame (app/kernel/system) — commit 2e9d42a; tmux-verified boot/render/quit
+- [x] M2 — Workspace + file tree + read-only editor + syntax + theme — commits 775b580, 038c1b0
+      (27 tests; tmux-verified tree nav, file open, colored highlighting; side-channel tracks state)
+- [ ] M3 — Editing (buffer/cursor/selection/undo/movement/search/palette) — IN PROGRESS
 - [ ] M4 — Git + diff
 - [ ] M5 — TypeScript LSP + diagnostics
 - [ ] M6 — Markdown preview

@@ -7,14 +7,20 @@ import { ref } from 'vue';
 import { TextDocument } from './TextDocument';
 import { Viewport } from './Viewport';
 import { Cursor } from './Cursor';
+import { UndoStore, type EditKind } from '../storage/UndoStore';
 import { Files } from '../system/Files';
+import { Clock } from '../system/Clock';
 
 class $Editor {
   document = new TextDocument.Class();
   viewport = new Viewport.Class();
   cursor = new Cursor.Class();
+  private undo = new UndoStore.Class();
 
   get hasDocument() {
+    return ref(false);
+  }
+  get readOnly() {
     return ref(false);
   }
 
@@ -23,6 +29,96 @@ class $Editor {
     this.cursor.set(0, 0);
     this.viewport.scrollTop.value = 0;
     this.hasDocument.value = true;
+    this.readOnly.value = this.document.binary.value;
+    this.undo.clear();
+  }
+
+  // --- editing --------------------------------------------------------------
+
+  private captureBefore(kind: EditKind): void {
+    this.undo.record(
+      {
+        lines: this.document.snapshot(),
+        cursor: { line: this.cursor.line.value, col: this.cursor.col.value },
+        kind,
+        at: Clock.Class.now(),
+      },
+      Clock.Class.now(),
+    );
+  }
+
+  insertText(str: string): void {
+    if (this.readOnly.value || !this.hasDocument.value) return;
+    this.captureBefore('insert');
+    const col = this.document.insertInline(this.cursor.line.value, this.cursor.col.value, str);
+    this.cursor.set(this.cursor.line.value, col);
+  }
+
+  insertNewline(): void {
+    if (this.readOnly.value || !this.hasDocument.value) return;
+    this.captureBefore('newline');
+    // Auto-indent: copy leading whitespace of the current line.
+    const cur = this.document.line(this.cursor.line.value);
+    const indent = cur.match(/^\s*/)?.[0] ?? '';
+    const pos = this.document.splitLine(this.cursor.line.value, this.cursor.col.value);
+    if (indent) {
+      const col = this.document.insertInline(pos.line, 0, indent);
+      this.cursor.set(pos.line, col);
+    } else {
+      this.cursor.set(pos.line, pos.col);
+    }
+    this.viewport.scrollToLine(this.cursor.line.value, this.document.lineCount);
+  }
+
+  backspace(): void {
+    if (this.readOnly.value || !this.hasDocument.value) return;
+    this.captureBefore('delete');
+    const pos = this.document.deleteBackward(this.cursor.line.value, this.cursor.col.value);
+    this.cursor.set(pos.line, pos.col);
+    this.viewport.scrollToLine(pos.line, this.document.lineCount);
+  }
+
+  deleteChar(): void {
+    if (this.readOnly.value || !this.hasDocument.value) return;
+    this.captureBefore('delete');
+    this.document.deleteForward(this.cursor.line.value, this.cursor.col.value);
+  }
+
+  performUndo(): void {
+    const current = {
+      lines: this.document.snapshot(),
+      cursor: { line: this.cursor.line.value, col: this.cursor.col.value },
+      kind: 'other' as EditKind,
+      at: Clock.Class.now(),
+    };
+    const target = this.undo.undo(current);
+    if (!target) return;
+    this.document.restore(target.lines);
+    this.document.dirty.value = true;
+    this.cursor.set(target.cursor.line, target.cursor.col);
+    this.viewport.scrollToLine(target.cursor.line, this.document.lineCount);
+  }
+
+  performRedo(): void {
+    const current = {
+      lines: this.document.snapshot(),
+      cursor: { line: this.cursor.line.value, col: this.cursor.col.value },
+      kind: 'other' as EditKind,
+      at: Clock.Class.now(),
+    };
+    const target = this.undo.redo(current);
+    if (!target) return;
+    this.document.restore(target.lines);
+    this.document.dirty.value = true;
+    this.cursor.set(target.cursor.line, target.cursor.col);
+    this.viewport.scrollToLine(target.cursor.line, this.document.lineCount);
+  }
+
+  save(): boolean {
+    if (!this.hasDocument.value || !this.document.path) return false;
+    Files.Class.write(this.document.path, this.document.text);
+    this.document.markSaved();
+    return true;
   }
 
   get title(): string {
