@@ -156,7 +156,37 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   keybindings · destructive ops need confirmation · authoritative-channel verification · delegation
   = full-parity packet, worktree/disjoint isolation, IBR+invariants embedded.
 
-## RESUME HERE (frontier as of commit 77dee65)
+## RESUME HERE (frontier as of commit c69ec4a)
+- **State:** 269 tests pass · tsc green · checker 0 · conventions-gate PASS (now hard-blocks tsc-fail) ·
+  smoke-editor + smoke-tabs + smoke-tree-scroll ALL-PASS (incl. idle frame-delta==0). `conventions @ f41a241`.
+- **LANDED SINCE THE 4-WORKER MERGES (newest first):** tooltip centered-over-cursor (A, c69ec4a) ·
+  Settings MODEL layer merged (G-model, b612f22: reactive settings.json ~/.config/fable + project
+  override, live-apply, fake-fs seam, 9 tests) · tab-bar QA — clickable right-pinned arrows (one
+  geometry source), positional cycle, hover/press states, close padding (56d2772, smoke-tabs.sh) ·
+  higher vertical fling ceiling (E, 85d4343: VERTICAL_MOMENTUM max 220/impulse 34; horizontal
+  unchanged) · git action GLYPH icons via theme ladder (#10, bc0ec26) · conventions-gate hard-blocks
+  tsc (9c3a2d5) · file-tree independent-scrollTop fix — swim + click-jump (4ce2e1d) · Option+wheel
+  horizontal (QA-A, ffbab62) · tooltip above-placement (3ec106d) · buffer TABS (10a, aeeae26).
+- **IN FLIGHT (background codex worker):** item 14 side-by-side diff CORE — `codex exec` building
+  `src/modules/diff/` (DiffAlignment aligned-row model + DiffView) in worktree `.claude/worktrees/
+  codex-diff` (branch codex-diff). NO auto-notification (launched detached); on resume: check
+  `.claude/worktrees/codex-diff/src/modules/diff/` + `/tmp/.../scratchpad/codex-diff.log`, review,
+  merge (new files, disjoint), then integrate into RootView/tabs (mine). Packet:
+  `/tmp/.../scratchpad/codex-diff-prompt.txt`.
+- **NEXT (coordinator priority order), all RootView integration = mine; delegate isolated new-file
+  capability builds to CODEX (separate budget) via `codex exec --dangerously-bypass-approvals-and-sandbox
+  -C <worktree>` — do NOT use Claude Agent worktree isolation (targets the wrong repo) and do NOT add a
+  shell `&` (double-background); one `codex exec` per worktree, poll the worktree:**
+  1. **Settings PANEL UI** (Ctrl+, pane) over the merged reactive model — seed scroll physics / h-scroll
+     modifier(Option) / fast-scroll modifier+multiplier(F, awaiting user's confirmed key) / scrollbar
+     thickness(=D avg constant) / glyph mode / theme / word-wrap; live-apply (momentum + renderers read
+     the reactive settings); migrate E's ceiling into a settings DEFAULT.
+  2. Scrollbars on EVERY overflowing pane BOTH axes (C) + UNIFY thickness to the averaged constant (D)
+     + file-tree scrollbar — reuse ScrollbarGeometry, feed each pane's scrollTop/scrollLeft+viewport.
+  3. Glyph ladder (B): checkbox CHECKMARK + git status MODIFIED/DELETED/ADDED/UPDATED (extend ThemeIcons).
+  4. Draggable Splitters (H): one reusable capability — sidebar width + git changes/log divider; sizes
+     persisted to settings.
+  5. Integrate the diff worker's output (item 14) into a diff tab; jump-nav + N-of-M + synced aligned-row scroll.
 - **State:** 256 tests pass · tsc green · checker 0 problems · conventions-gate PASS · smoke ALL-PASS
   (incl. always-run **idle frame-delta == 0**). smoke-wrap ALL-PASS. `conventions @ f41a241`.
 - **ALL 4 STALLED WORKERS NOW MERGED** (D perf-baselines b076759 · C word-wrap 23ee28f · A context
