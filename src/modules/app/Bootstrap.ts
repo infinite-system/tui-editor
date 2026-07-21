@@ -16,7 +16,7 @@ import { StatusChannel } from '../system/StatusChannel';
 import { FrameProbe } from '../system/FrameProbe';
 import { ScrollPhysics } from '../ui/ScrollPhysics';
 import { Clipboard } from '../system/Clipboard';
-import { GitRows } from '../git/git.rows';
+import { GitRows } from '../git/GitRows';
 import { KeybindingRegistry } from '../keybindings/KeybindingRegistry';
 import { canonicalBindings } from '../keybindings/keybindings.defaults';
 import { macOverlayBindings } from '../keybindings/keybindings.mac';

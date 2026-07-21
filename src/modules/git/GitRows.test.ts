@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { GitRows } from './git.rows';
+import { GitRows } from './GitRows';
 import type { GitFileRecord } from './GitParsers';
 
 function file(path: string, xy: string): GitFileRecord {

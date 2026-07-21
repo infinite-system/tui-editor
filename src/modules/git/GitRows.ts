@@ -26,7 +26,7 @@ export interface PlaceholderRow {
 export type ChangeRow = HeaderRow | FileRow | PlaceholderRow;
 
 /** Porcelain xy → one human letter for the bucket's relevant side. */
-function statusGlyphImplementation(xy: string, bucket: ChangeBucket): string {
+function $statusGlyph(xy: string, bucket: ChangeBucket): string {
   if (bucket === 'untracked') return '?';
   const staged = xy.charAt(0);
   const worktree = xy.charAt(1);
@@ -37,7 +37,7 @@ function statusGlyphImplementation(xy: string, bucket: ChangeBucket): string {
 }
 
 /** Build the flat row list: headers with counts, glyphed file rows, or a single placeholder. */
-function buildChangeRowsImplementation(
+function $buildChangeRows(
   staged: readonly GitFileRecord[],
   unstaged: readonly GitFileRecord[],
   untracked: readonly GitFileRecord[],
@@ -56,7 +56,7 @@ function buildChangeRowsImplementation(
         kind: 'file',
         bucket: section.bucket,
         path: file.path,
-        glyph: statusGlyphImplementation(file.xy, section.bucket),
+        glyph: $statusGlyph(file.xy, section.bucket),
       });
     }
   }
@@ -65,7 +65,7 @@ function buildChangeRowsImplementation(
 }
 
 /** Index of the next/previous FILE row from `fromIndex` (headers are skipped); -1 if none. */
-function nextFileRowImplementation(rows: readonly ChangeRow[], fromIndex: number, direction: 1 | -1): number {
+function $nextFileRow(rows: readonly ChangeRow[], fromIndex: number, direction: 1 | -1): number {
   for (let index = fromIndex + direction; index >= 0 && index < rows.length; index += direction) {
     if (rows[index]?.kind === 'file') return index;
   }
@@ -74,11 +74,11 @@ function nextFileRowImplementation(rows: readonly ChangeRow[], fromIndex: number
 
 class $GitRows {
   /** Porcelain xy → one human letter for the bucket's relevant side. */
-  static statusGlyph = statusGlyphImplementation;
+  static statusGlyph = $statusGlyph;
   /** Build the flat row list: headers with counts, glyphed file rows, or a single placeholder. */
-  static buildChangeRows = buildChangeRowsImplementation;
+  static buildChangeRows = $buildChangeRows;
   /** Index of the next/previous FILE row (headers skipped); -1 if none. */
-  static nextFileRow = nextFileRowImplementation;
+  static nextFileRow = $nextFileRow;
 }
 
 export namespace GitRows {

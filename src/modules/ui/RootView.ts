@@ -25,7 +25,7 @@ import { Highlighter, type Role } from '../syntax/Highlighter';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { displayColumn, lineWidth, graphemeAtDisplayColumn, graphemeToU16 } from '../editor/editor.coordinates';
 import { SelectableText } from './SelectableText';
-import { GitRows } from '../git/git.rows';
+import { GitRows } from '../git/GitRows';
 import { GitLogRows } from '../git/git.log-rows';
 import { ScrollbarGeometry } from './scrollbar-geometry';
 import { Logging } from '../system/Logging';
