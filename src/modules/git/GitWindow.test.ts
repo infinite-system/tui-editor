@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'bun:test';
-import { GitWindow } from './git.window';
+import { GitWindow } from './GitWindow';
 
 describe('missingRanges', () => {
   test('all missing → one range covering the window', () => {

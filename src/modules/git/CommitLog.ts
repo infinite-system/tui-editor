@@ -9,7 +9,7 @@ import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
 import { GitCommands } from './GitCommands';
 import { GitParsers, type CommitRecord } from './GitParsers';
-import { GitWindow } from './git.window';
+import { GitWindow } from './GitWindow';
 
 export type CommitPageFetch = (skip: number, limit: number) => Promise<CommitRecord[]>;
 

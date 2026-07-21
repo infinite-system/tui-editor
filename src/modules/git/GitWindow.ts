@@ -18,7 +18,7 @@ export interface FetchRange {
  * minimal set of git-log pages to fetch to fill the window. Merges adjacent gaps into one range so
  * a scroll fetches at most a few pages, never one call per row.
  */
-function missingRangesImplementation(loaded: ReadonlySet<number>, start: number, count: number): FetchRange[] {
+function $missingRanges(loaded: ReadonlySet<number>, start: number, count: number): FetchRange[] {
   const from = Math.max(0, start);
   const to = from + count; // exclusive
   const ranges: FetchRange[] = [];
@@ -39,7 +39,7 @@ function missingRangesImplementation(loaded: ReadonlySet<number>, start: number,
  * Loaded indices that fall OUTSIDE the keep-window `[keepStart, keepStart+keepCount)` and should be
  * dropped to bound memory. keepCount is typically the viewport height plus a margin above and below.
  */
-function evictableImplementation(loaded: Iterable<number>, keepStart: number, keepCount: number): number[] {
+function $evictable(loaded: Iterable<number>, keepStart: number, keepCount: number): number[] {
   const low = Math.max(0, keepStart);
   const high = keepStart + keepCount; // exclusive
   const evicted: number[] = [];
@@ -48,8 +48,8 @@ function evictableImplementation(loaded: Iterable<number>, keepStart: number, ke
 }
 
 class $GitWindow {
-  static missingRanges = missingRangesImplementation;
-  static evictable = evictableImplementation;
+  static missingRanges = $missingRanges;
+  static evictable = $evictable;
 }
 
 export namespace GitWindow {
