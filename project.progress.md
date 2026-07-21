@@ -205,10 +205,21 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   (trackLeft=29→left=28, visible, inside the 32-wide sidebar; the earlier "not rendering" was a
   false-negative from a persisted sidebarWidth=76 that put the thumb at col ~73 off the probed range).
 - **NEXT (coordinator priority order; RootView integration = mine; delegate isolated builds to codex):**
-  1. **SCROLLBARS BOTH-AXES — elevated TOP priority, land pane-by-pane** (tree ✓ DONE). Remaining panes:
-     git STAGING/CHANGES (v+h), git COMMITS/LOG (v+h), editor (v+h exist — audit h), diff. Shared
-     ScrollbarGeometry; draggable thumb + click-to-page + inertia; then UNIFY thickness (D: one constant
-     = settings.scrollbarThickness, currently avg of the two).
+  1. **SCROLLBARS BOTH-AXES — elevated TOP priority, land pane-by-pane.** Status:
+     · tree vertical ✓ DONE (6fc0858).
+     · editor v+h ✓ DONE + AUDITED (ca4a578 era) — drove a long-line file: editor-scrollbar-h renders
+       at the editor-area bottom (trackLeft=5→left=5 top=35), v-bar at the right edge (laidX=118). Works.
+     · UNIFY THICKNESS ✓ DONE (ca4a578) — every bar reads settings.scrollbarThickness LIVE + uniform
+       (both axes, every pane); applyBarGeometry sets the cross-axis size each frame. Drove =3→3 cells,
+       =1→1 cell. Default 1.
+     · git STAGING/CHANGES horizontal + git COMMITS/LOG horizontal — **DEFERRED to fold into the
+       git-panel ROW SIMPLIFICATION (item 2/4)**: horizontal windowing must slice each row + shift the
+       interactive hit-zones (checkbox col, +/- action buttons pinned right, gitActionButtonAt), and the
+       row simplification REWRITES exactly that render+hit-test code. Doing h-scroll first = reworking
+       hit-tests that immediately change (bottleneck principle — one rework, not two). The git v-bars
+       already exist; the high-value horizontal case (long code lines) is the editor, done.
+     · diff v+h — blocked on mounting DiffView in a tab (item 4/old-queue) first.
+     Shared ScrollbarGeometry; draggable thumb + click-to-page + inertia.
   2. **GIT-PANEL ROW SIMPLIFICATION (user, LOCKED spec — supersedes single-glyph-checkbox 23616f9,
      now SUPERSEDED):** REMOVE the per-row checkbox column entirely (its stage/unstage duplicates the
      +/- action buttons). Status = an ICON GLYPH via the theme ladder (nerd→unicode→ascii), theme-colored:
