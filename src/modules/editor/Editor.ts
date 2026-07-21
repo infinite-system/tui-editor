@@ -4,7 +4,7 @@
 // invariant: Data flows one way (project.invariants.md)
 // invariant: Selection is an anchor plus the cursor and edits replace it (editor.invariants.md)
 import { Reactive } from 'ivue';
-import { ref } from 'vue';
+import { ref, type Ref } from 'vue';
 import { TextDocument } from './TextDocument';
 import { Viewport } from './Viewport';
 import { Cursor } from './Cursor';
@@ -36,7 +36,18 @@ class $Editor {
   // Word wrap is a VIEW MODE: when on, rendering/caret/selection route through the pure
   // logical↔visual mapping in editor.wrap.ts and horizontal scroll is inert. The document model
   // is untouched by the toggle. invariant: Word wrap is a pure view mapping (editor.invariants.md)
-  get wordWrap() {
+  // Word wrap is a GLOBAL view preference: EVERY editor instance reads the SAME settings.wordWrap ref
+  // (attached via attachWordWrap), so the setting is the single source — the settings panel AND the
+  // toggle command drive the identical ref, and switching tabs never desyncs the mode. Falls back to a
+  // local ref only before a source is attached (bare unit tests).
+  private wordWrapSource: Ref<boolean> | null = null;
+  attachWordWrap(source: Ref<boolean>): void {
+    this.wordWrapSource = source;
+  }
+  get wordWrap(): Ref<boolean> {
+    return this.wordWrapSource ?? this.localWordWrap;
+  }
+  get localWordWrap() {
     return ref(false);
   }
 

@@ -40,7 +40,14 @@ class $Workspace {
   protected emptyEditor = this.createEditor();
 
   protected createTree() { return new FileTree.Class(); }
-  protected createEditor() { return new Editor.Class(); }
+  protected createEditor() {
+    const editor = new Editor.Class();
+    // Word wrap is global: every editor reads the SAME settings.wordWrap when settings are attached, so
+    // the mode is consistent across tabs + the diff/empty editors. Editors made before attachSettings
+    // (diffEditor/emptyEditor) are retro-attached there.
+    if (this.settingsSource) editor.attachWordWrap(this.settingsSource.wordWrap);
+    return editor;
+  }
   protected createGitPanel() { return new GitPanel.Class(); }
   protected createBufferSet() {
     return new OpenBufferSet.Class({
@@ -83,6 +90,13 @@ class $Workspace {
   private settingsSource: Settings.Instance | null = null;
   attachSettings(settings: Settings.Instance): void {
     this.settingsSource = settings;
+    // Retro-attach the global wordWrap source to editors already built (field-init diff/empty editors +
+    // any live buffers from session restore). Future editors get it in createEditor.
+    this.diffEditor.attachWordWrap(settings.wordWrap);
+    this.emptyEditor.attachWordWrap(settings.wordWrap);
+    for (const entry of this.buffers.entries.value) {
+      (entry.buffer as Editor.Instance | null)?.attachWordWrap(settings.wordWrap);
+    }
   }
   private get verticalMomentum(): MomentumOptions {
     const settings = this.settingsSource;
