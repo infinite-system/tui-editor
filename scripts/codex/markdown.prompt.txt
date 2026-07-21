@@ -1,7 +1,16 @@
 You are implementing ONE module of the Fable TUI code workspace: a fast terminal code editor on Bun + ivue + OpenTUI + Tree-sitter + git. You are one of several codex workers building disjoint modules in parallel, each in its own git worktree. Work ONLY in your worktree (your cwd), on your module.
 
-== READ FIRST (context; the project docs are at the repo root of your worktree) ==
-project.invariants.md, project.decisions.md (the 10 ivue architecture decisions — AUTHORITATIVE), project.architecture.md, project.implementation-plan.md (§3 module/file conventions, §4 milestones), FABLE_TUI_EDITOR_BUILD_BRIEF_FINAL.md (your module's section), and .claude/skills/ivue/SKILL.md. Also read the already-built modules under src/modules/{system,app,kernel,editor,workspace,theme} to learn the existing interfaces you depend on (Buffer/editor API, system capabilities, Theme). Do not modify them.
+== READ IN FULL BEFORE CODING (do not skim — this is the context you need to do it well) ==
+At your worktree root:
+- FABLE_TUI_EDITOR_BUILD_BRIEF_FINAL.md — the WHOLE brief (product thesis, scope, the 37 architectural invariants, verification, your module's milestone section). Read all of it.
+- project.invariants.md — ALL project invariants (the generators your module must uphold) + project.lattice.md (how they compose).
+- project.ivue-reference.md — the ivue implementation reference incl. the FLYWEIGHT pattern (copy it for any high-cardinality data). AUTHORITATIVE for ivue code.
+- project.decisions.md (the 10 ivue decisions), project.architecture.md, project.implementation-plan.md (§3 module/file conventions, §4 milestones).
+- .claude/skills/ivue/SKILL.md — the ivue skill.
+Method skills (absolute paths — read them so you write proper invariant contracts by the IBR method):
+- /home/parallels/dev/ibr/.claude/skills/invariants/SKILL.md — the /invariants skill (the contract schema, kinds, and how invariants are written/verified). Your <MODULE>.invariants.md MUST follow it.
+- /home/parallels/dev/ibr/.claude/skills/ibr/SKILL.md and /home/parallels/dev/ibr/IBR/IBR.md — the /ibr skill + framework (invariant-based reasoning: reduce to load-bearing generators, sort reality vs chosen, predict impossibilities).
+Existing code (read to learn interfaces; DO NOT modify): src/modules/{system,app,kernel,editor,workspace,theme,syntax} — Buffer/editor API, system capabilities, Theme, syntax highlighter.
 
 == ARCHITECTURE YOU MUST FOLLOW ==
 ivue owns observable state; OpenTUI owns terminal drawing/input; data flows one way: input -> model method -> mutation -> reactive invalidation -> requestRender.
