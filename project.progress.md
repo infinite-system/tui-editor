@@ -189,7 +189,37 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   keybindings · destructive ops need confirmation · authoritative-channel verification · delegation
   = full-parity packet, worktree/disjoint isolation, IBR+invariants embedded.
 
-## RESUME HERE (frontier as of commit 6fc0858 — COMPACTION CHECKPOINT)
+## AUDIT PACKAGE STATUS (3-Sonnet audit, 2026-07-21; packet in scratchpad AUDIT_FINDINGS_PACKET.md)
+Disease = build-but-don't-wire. Session frontier HEAD **c7ee4d8**. Progress:
+- **HARDENING (highest leverage) — DONE:** `scripts/check-unwired-capabilities.sh` (in conventions-gate
+  #7) fails if any namespace+Static/Reactive module is referenced only by its own file+test. Allowlist =
+  LSP/Markdown (M5/M6) + DiffView (P1 in-flight, REMOVE when mounted). Surfaced EXACTLY DiffView beyond
+  the known list — no other dead capabilities. Definition of Done + merge rule + contract-liveness
+  encoded in project.requirements.md (inherited by every worker via the packet). Commit ce869e8.
+- **P2 settings single-source — DONE (all 8, each drive-verified):** wordWrap (dbc3886) · gitSplitRatio
+  (9007476) · linesPerNotch + horizontalScrollModifier + fastScrollModifier + fastScrollMultiplier — the
+  fast-scroll GESTURE was built new (cb85111) · theme + glyphMode via Bootstrap reactive hooks (c7ee4d8).
+  Plus scrollbar-thickness unify (ca4a578) + sidebar-divider drag hit-grid fix (fd9db66) + draggable git
+  divider (15e5156). Correctly-wired-already: verticalFlingCeiling/scrollAccelGain/scrollFriction/
+  sidebarWidth/scrollbarThickness.
+- **P3 applied-effect e2e gate — NEXT (the structural lock-in):** build scripts/smoke-settings-applied.sh
+  driving EACH of the 13 settings' observable effect (recipes all proven this session — see commit
+  messages: wordWrap=MARKER row, theme=bg RGBA, glyphMode=glyph char, linesPerNotch/fastScroll=scrollTop,
+  sidebarWidth/scrollbarThickness/gitSplitRatio=frame geometry) + a schema-enumeration META-GATE (every
+  SettingsValues key MUST have a covered drive or the gate fails). Wire the meta-gate into conventions-gate.
+- **P1 DiffView — NEXT (last unwired capability):** FIRST fix DiffView.ts:262-278 hardcoded momentum ->
+  the settings-driven verticalMomentum pattern (Workspace.ts:94-104); THEN mount via
+  Workspace.openChangeAtRow/openCommitFileDiff + RootView; then REMOVE DiffView from the unwired allowlist
+  (gate then proves it wired). Add a driving test (open a diff -> DiffView tab renders).
+- **P4/P5 cleanup — LATER (fan out as DISJOINT worktrees once RootView/core quiescent):** col->column
+  (72x, touches RootView — do when not mid-RootView) · system/ manifest backfill (FrameProbe/StatusChannel/
+  Logging are MY verification substrate — do carefully/myself) · scroll-momentum->Momentum capability ·
+  palette entries git.togglePanel/settings.toggle · LSP coordinate-dup (M5-pending).
+- **DELEGATION NOTE:** codex-theme worker DEPRECATED (scope violation — touched forbidden RootView + 10
+  other files, pulled in unassigned row-simplification). Redone solo. Lesson logged: don't delegate wiring
+  near actively-edited RootView; codex ignores scope fences. See project.delegation-log.md #6.
+
+## RESUME HERE (frontier as of commit 6fc0858 — pre-audit; see AUDIT PACKAGE STATUS above for newer)
 - **READ FIRST on resume/cold-start:** `project.requirements.md` (persistent cross-cutting brief) →
   `project.conventions.md` → this file (USER PIPELINE below) → `project.invariants.md` → in-flight contracts.
 - **HEAD = 6fc0858** · git status CLEAN · tsc green · conventions-gate PASS · **0 workers in flight.**
