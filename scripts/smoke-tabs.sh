@@ -41,12 +41,25 @@ echo "== overflow arrows are at the RIGHT edge and CLICKABLE =="
 for _ in $(seq 1 "${tabs:-8}"); do [ "$(f activeBufferIndex)" = "0" ] && break; "$H" send "$S" C-PageUp >/dev/null; sleep 0.1; done
 "$H" settle "$S" >/dev/null 2>&1
 before="$(f activeBufferIndex)"
-# Rightmost non-space glyph on the tab-bar row is the '›' arrow.
-arrow_col="$("$BUN" -e 'const f=JSON.parse(require("fs").readFileSync(process.argv[1]));const cells=[...f.rows[0].text];let ns=[];for(let x=0;x<cells.length;x++)if(cells[x]!==" "&&cells[x]!=="│")ns.push(x);console.log(ns[ns.length-1]??-1);' "$DIR/../artifacts/frame-$S.json")"
-if [ "${arrow_col:-100}" -gt 80 ] 2>/dev/null; then echo "  PASS  right arrow at the right edge (col $arrow_col)"; else echo "  FAIL  right arrow not at the right edge (col $arrow_col)"; fail=1; fi
+# The COUNT BADGE (active/total digits) is the rightmost element. Assert it shows the total.
+badge_info="$("$BUN" -e 'const f=JSON.parse(require("fs").readFileSync(process.argv[1]));const cells=[...f.rows[0].text];let end=-1,start=-1;for(let x=cells.length-1;x>0;x--){if(/[0-9\/]/.test(cells[x])){if(end<0)end=x;start=x;}else if(end>=0)break;}console.log(start+" "+cells.slice(start,end+1).join(""));' "$DIR/../artifacts/frame-$S.json")"
+badge_start="$(echo "$badge_info" | cut -d' ' -f1)"; badge_text="$(echo "$badge_info" | cut -d' ' -f2)"
+if echo "$badge_text" | grep -q "/${tabs}"; then echo "  PASS  count badge shows total ($badge_text)"; else echo "  FAIL  count badge wrong ($badge_text, tabs=$tabs)"; fail=1; fi
+
+echo "== clicking the count badge opens the all-buffers dropdown; a row activates that tab =="
+"$H" click "$S" "$badge_start" 0 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
+if [ "$(f contextMenuOpen)" = "true" ]; then echo "  PASS  badge click opened the dropdown"; else echo "  FAIL  badge click did not open the dropdown"; fail=1; fi
+"$H" send "$S" Escape >/dev/null; sleep 0.2; "$H" settle "$S" >/dev/null 2>&1
+
+echo "== the » arrow PANS the strip to reveal later tabs WITHOUT changing the active tab =="
+# Ensure the active tab is the first (so the right arrow is live and active sits at the strip's left).
+for _ in $(seq 1 "${tabs:-8}"); do [ "$(f activeBufferIndex)" = "0" ] && break; "$H" send "$S" C-PageUp >/dev/null; sleep 0.1; done
+"$H" settle "$S" >/dev/null 2>&1
+active_before="$(f activeBufferIndex)"
+arrow_col=$(( ${badge_start:-100} - 2 ))
 "$H" click "$S" "$arrow_col" 0 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
-after="$(f activeBufferIndex)"
-if [ "${after:-0}" -gt "${before:-0}" ] 2>/dev/null; then echo "  PASS  right-arrow click scrolled the strip forward ($before -> $after)"; else echo "  FAIL  right-arrow click did nothing ($before -> $after)"; fail=1; fi
+active_after="$(f activeBufferIndex)"
+if [ "$active_after" = "$active_before" ]; then echo "  PASS  right-arrow panned the strip; active tab UNCHANGED ($active_before)"; else echo "  FAIL  right-arrow changed the active tab ($active_before -> $active_after) — must only pan"; fail=1; fi
 
 echo "== RESULT: $([ "$fail" = 0 ] && echo ALL-PASS || echo FAILURES) =="
 exit "$fail"

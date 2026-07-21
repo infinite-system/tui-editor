@@ -575,12 +575,16 @@ export function buildRootView(
   // overflow arrows pin to the RIGHT edge. Three visual states per target: idle → hover → pressed.
   type TabBarSegment =
     | { kind: 'tab'; index: number; start: number; end: number; closeColumn: number }
-    | { kind: 'arrowLeft' | 'arrowRight'; start: number; end: number };
+    | { kind: 'arrowLeft' | 'arrowRight' | 'badge'; start: number; end: number };
   let tabBarSegments: TabBarSegment[] = [];
-  let tabBarWindow = { startIndex: 0, endIndex: 0 };
   // Hover/press state (view-only), driven by tab-bar mouse move/press.
-  let tabBarHover: { kind: 'tab' | 'close' | 'arrowLeft' | 'arrowRight'; index: number } | null = null;
+  let tabBarHover: { kind: 'tab' | 'close' | 'arrowLeft' | 'arrowRight' | 'badge'; index: number } | null = null;
   let tabBarArrowPressed: 'arrowLeft' | 'arrowRight' | null = null;
+  // The strip's VIEWPORT PAN offset (first visible tab), INDEPENDENT of the active tab — the overflow
+  // arrows drive this and never change which buffer is active (VS Code's ‹ › pan the strip only).
+  // Changing the active tab (click / Ctrl+PageUp-Down) auto-reveals it, but panning does not snap back.
+  let tabStripScrollOffset = 0;
+  let lastRevealedActiveIndex = -1;
 
   function renderTabBar(): StyledText {
     const palette = readPalette();
@@ -598,25 +602,51 @@ export function buildRootView(
     });
     const totalWidth = measured.reduce((sum, entry) => sum + entry.width, 0);
 
-    // Overflow → reserve the right edge for the two arrows ` ‹ › `; tabs use the remaining width.
-    const overflow = totalWidth > barWidth;
-    const arrowsWidth = overflow ? 5 : 0; // ' ‹ › '
-    const tabsAreaWidth = Math.max(1, barWidth - arrowsWidth);
-
-    // Whole-tab window that fits tabsAreaWidth and always includes the active tab.
+    // Right controls, pinned to the edge: a clickable ` active/total ` COUNT BADGE (always), and when
+    // the strip overflows, an ellipsis "more" marker + two padded 3-cell ARROWS. Reserve their width.
+    const total = tabs.length;
     const activeIndex = tabs.findIndex((tab) => tab.active);
-    let startIndex = 0;
-    const activeEntry = activeIndex >= 0 ? measured[activeIndex] : undefined;
-    if (overflow && activeEntry) {
-      let usedWidth = activeEntry.width;
-      startIndex = activeIndex;
-      while (startIndex > 0) {
-        const previous = measured[startIndex - 1];
-        if (!previous || usedWidth + previous.width > tabsAreaWidth) break;
-        startIndex -= 1;
-        usedWidth += previous.width;
+    const badgeText = ` ${activeIndex + 1}/${total} `;
+    const badgeWidth = lineWidth(badgeText);
+    const arrowCellWidth = 3; // ' « ' / ' » ' — padded so the hit target is easy to click
+    const overflow = totalWidth + badgeWidth > barWidth;
+    const rightControlsWidth = badgeWidth + (overflow ? 1 /* ellipsis */ + arrowCellWidth * 2 : 0);
+    const tabsAreaWidth = Math.max(1, barWidth - rightControlsWidth);
+
+    // How many whole tabs fit when rendering forward from a given start index.
+    const windowEndFrom = (start: number): number => {
+      let used = 0;
+      let end = start;
+      for (let index = start; index < total; index += 1) {
+        const entry = measured[index];
+        if (!entry || used + entry.width > tabsAreaWidth) break;
+        used += entry.width;
+        end = index + 1;
+      }
+      return Math.max(end, start + 1); // always show at least one tab
+    };
+    // Largest pan offset that still fills the strip to the last tab (so we never pan past the end).
+    let maxScrollOffset = 0;
+    if (overflow) {
+      let used = 0;
+      maxScrollOffset = total;
+      for (let index = total - 1; index >= 0; index -= 1) {
+        const entry = measured[index];
+        if (!entry || used + entry.width > tabsAreaWidth) break;
+        used += entry.width;
+        maxScrollOffset = index;
       }
     }
+    // Clamp the user's pan; then reveal the active tab ONLY when it actually changed (click / cycle) —
+    // panning with the arrows leaves the active tab where it is, even if it scrolls out of view.
+    tabStripScrollOffset = Math.max(0, Math.min(tabStripScrollOffset, maxScrollOffset));
+    if (activeIndex >= 0 && activeIndex !== lastRevealedActiveIndex) {
+      if (activeIndex < tabStripScrollOffset || activeIndex >= windowEndFrom(tabStripScrollOffset)) {
+        tabStripScrollOffset = Math.min(activeIndex, maxScrollOffset);
+      }
+      lastRevealedActiveIndex = activeIndex;
+    }
+    const startIndex = overflow ? tabStripScrollOffset : 0;
 
     const chunks: TextChunk[] = [];
     let column = 0;
@@ -646,38 +676,47 @@ export function buildRootView(
       tabBarSegments.push({ kind: 'tab', index, start, end: column, closeColumn });
       endIndex = index + 1;
     }
-    tabBarWindow = { startIndex, endIndex };
 
-    // Fill the gap between the last tab and the arrows.
+    // Fill the gap between the last tab and the right controls.
     while (column < tabsAreaWidth) {
       chunks.push(fg(palette.fg)(' '));
       column += 1;
     }
 
     if (overflow) {
-      // ` ‹ › ` pinned right — idle/hover/pressed, disabled (border colour) when there is nothing
-      // further that way. Hit-rects are recorded at the SAME columns the glyphs are drawn.
-      const paintArrow = (which: 'arrowLeft' | 'arrowRight', enabled: boolean, glyph: string) => {
+      const moreLeft = startIndex > 0;
+      const moreRight = endIndex < total;
+      // "More →" cutoff affordance: a bright ellipsis at the edge where tabs continue (so a clean cut
+      // never reads as "no more tabs"); dim when there is nothing more that way.
+      chunks.push(fg(moreRight ? palette.accent : palette.border)(moreRight ? '…' : ' '));
+      column += 1;
+      // Bigger, easy-to-hit arrows: a bolder glyph in a padded 3-cell hit target. BRIGHT (fg/accent)
+      // only when more tabs exist that direction; DIM (border) at the end — so "more exists" reads.
+      const paintArrow = (which: 'arrowLeft' | 'arrowRight', enabled: boolean, glyph: string): void => {
         const pressed = tabBarArrowPressed === which && enabled;
         const hover = tabBarHover?.kind === which && enabled;
-        const color = !enabled ? palette.border : pressed ? palette.accent : hover ? palette.fg : palette.dim;
+        const color = !enabled ? palette.border : pressed ? palette.accent : hover ? palette.accent : palette.fg;
         const background = pressed ? palette.selection : hover ? palette.cursorLine : null;
-        return background ? bg(background)(fg(color)(glyph)) : fg(color)(glyph);
+        const paintCell = (text: string) => (background ? bg(background)(fg(color)(text)) : fg(color)(text));
+        const start = column;
+        chunks.push(paintCell(` ${glyph} `)); // 3-cell padded hit target
+        column += arrowCellWidth;
+        tabBarSegments.push({ kind: which, start, end: column });
       };
-      chunks.push(fg(palette.fg)(' '));
-      column += 1;
-      const leftStart = column;
-      chunks.push(paintArrow('arrowLeft', startIndex > 0, '‹'));
-      column += 1;
-      tabBarSegments.push({ kind: 'arrowLeft', start: leftStart, end: column });
-      chunks.push(fg(palette.fg)(' '));
-      column += 1;
-      const rightStart = column;
-      chunks.push(paintArrow('arrowRight', endIndex < measured.length, '›'));
-      column += 1;
-      tabBarSegments.push({ kind: 'arrowRight', start: rightStart, end: column });
-      chunks.push(fg(palette.fg)(' '));
+      paintArrow('arrowLeft', moreLeft, '«');
+      paintArrow('arrowRight', moreRight, '»');
     }
+
+    // COUNT BADGE ` active/total ` — always shown, pinned right; click opens the all-buffers dropdown.
+    const badgeHover = tabBarHover?.kind === 'badge';
+    const badgeStart = column;
+    chunks.push(
+      badgeHover
+        ? bg(palette.cursorLine)(fg(palette.accent)(badgeText))
+        : fg(palette.accent)(badgeText),
+    );
+    column += badgeWidth;
+    tabBarSegments.push({ kind: 'badge', start: badgeStart, end: column });
     return new StyledText(chunks);
   }
 
@@ -686,13 +725,34 @@ export function buildRootView(
     return tabBarSegments.find((segment) => localColumn >= segment.start && localColumn < segment.end) ?? null;
   }
 
-  // Left arrow scrolls the strip toward earlier tabs (activate the tab just before the window),
-  // right arrow toward later tabs — positional, so the active buffer maps 1:1 to the visible order.
+  // The arrows PAN the strip viewport only — they never change the active buffer (the render clamps
+  // the offset, so panning past an end is a no-op and the arrow reads as disabled there).
   function scrollTabsLeft(): void {
-    if (tabBarWindow.startIndex > 0) workspace.activateTab(tabBarWindow.startIndex - 1);
+    if (tabStripScrollOffset > 0) {
+      tabStripScrollOffset -= 1;
+      renderer.requestRender();
+    }
   }
   function scrollTabsRight(): void {
-    if (tabBarWindow.endIndex < workspace.buffers.count) workspace.activateTab(tabBarWindow.endIndex);
+    tabStripScrollOffset += 1; // clamped to maxScrollOffset in renderTabBar
+    renderer.requestRender();
+  }
+
+  // Clicking the count badge opens a dropdown of ALL open buffers (VS Code's overflow menu) — reusing
+  // the ContextMenu machinery (modal, keyboard-navigable, Esc to close). Selecting a row jumps to it.
+  function openTabDropdown(anchorColumn: number): void {
+    const items = workspace.buffers.tabs().map((tab, index) => ({
+      id: String(index),
+      label: `${tab.active ? '●' : ' '} ${Files.Class.basename(tab.path)}${tab.dirty ? '  ✕' : ''}`,
+      enabled: true,
+    }));
+    contextMenu.openAt(
+      items,
+      (tabBar.x as number) + anchorColumn,
+      (tabBar.y as number) + 1,
+      { width: renderer.width, height: renderer.height },
+      (itemId) => workspace.activateTab(Number(itemId)),
+    );
   }
 
   tabBar.onMouseDown = (event) => {
@@ -703,6 +763,8 @@ export function buildRootView(
     if (segment.kind === 'tab') {
       if (localColumn === segment.closeColumn) workspace.requestCloseTab(segment.index);
       else workspace.activateTab(segment.index);
+    } else if (segment.kind === 'badge') {
+      openTabDropdown(segment.start);
     } else {
       tabBarArrowPressed = segment.kind; // pressed colour shows until release
       if (segment.kind === 'arrowLeft') scrollTabsLeft();

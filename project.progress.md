@@ -56,11 +56,15 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       referenced only by their own files/tests — but those are FORWARD-milestone modules (built ahead,
       not yet integrated), not bugs; surfaced for when M5/M6 land.
 
-- [ ] TAB-BAR AFFORDANCES (user QA, 3): (1) tab COUNT badge + click-to-open DROPDOWN of all buffers
-      (reuse ContextMenu machinery; row select jumps, × closes; keyboard nav). (2) BIGGER arrows
-      (wider glyph/padded hit-target, keep 3-state). (3) CUTOFF affordance — fade/ellipsis/partial-tab
-      on the overflow edge + arrows bright-only-when-more / dimmed-at-end, so "more tabs exist" reads
-      at a glance. Verify by driving (badge shows total, dropdown lists+selects, arrows dim at ends).
+- [x] TAB-BAR AFFORDANCES (user QA): (1) COUNT badge ` active/total ` pinned right, click opens a
+      DROPDOWN of ALL buffers (reused ContextMenu; click a row → activates that tab). (2) BIGGER arrows
+      (« » in padded 3-cell hit targets), bright when more tabs exist that way, dim at the end. (3)
+      CUTOFF ellipsis … at the overflow edge so a clean cut never reads as "no more". PLUS: the arrows
+      now PAN the strip viewport (independent tabStripScrollOffset) and NEVER change the active tab
+      (VS Code behaviour); active-change auto-reveals but panning doesn't snap back. Driven-verified:
+      badge 1/8, badge-click opens dropdown, click-row activates, right-arrow pans [file-2,3,4]→[3,4,5]
+      with active UNCHANGED. smoke-tabs.sh extended (ALL-PASS). FOLLOW-UP: keyboard nav INSIDE the
+      dropdown (Down/Enter) doesn't activate (click works) — a ContextMenu keyboard-path nuance to chase.
 
 - [x] TAB-BAR QA (user): arrows CLICKABLE + pinned at the RIGHT edge (single geometry source shared by
       render + hit-test, so draw pos and hit-rect can't disagree); Ctrl+PageDown/PageUp cycle is
