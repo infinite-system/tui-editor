@@ -28,6 +28,10 @@ export interface Keybinding {
   context?: 'global' | 'editor' | 'files' | 'git' | 'palette' | 'menu' | 'settings';
   /** Named guard (host-registered predicate) that must be true for the binding to fire. */
   when?: string;
+  /** A RESERVED-GLOBAL escape hatch (e.g. quit): fires from ANY mode — even while a modal/search
+   *  input is focused — so the user is never trapped. Must be a single chord (no steps): the
+   *  pass-through check is stateless. invariant: Reserved global chords fire from any mode. */
+  reserved?: boolean;
 }
 
 /** The slice of a decoded key event that resolution needs. */
@@ -143,6 +147,26 @@ class $KeybindingRegistry {
       return { action: null, chordPending: true };
     }
     return { action: null, chordPending: false };
+  }
+
+  /**
+   * Match a RESERVED-GLOBAL escape-hatch binding (e.g. quit) against a key, STATELESSLY — no chord
+   * state is read or advanced, so this is safe to call at the top of the input router BEFORE the
+   * normal resolve(), on every key, without disturbing an in-flight chord. Returns the action id or
+   * null. Only single `chord` bindings marked `reserved` match (steps are excluded — the check must
+   * be stateless). This is how a focused modal/search input lets quit PASS THROUGH instead of
+   * swallowing it. invariant: Reserved global chords fire from any mode (keybindings.invariants.md)
+   */
+  resolveReservedGlobal(event: ChordEvent): string | null {
+    for (let layerIndex = this.layers.length - 1; layerIndex >= 0; layerIndex--) {
+      const layer = this.layers[layerIndex];
+      if (!layer) continue;
+      for (const binding of layer.bindings) {
+        if (!binding.reserved || !binding.chord) continue;
+        if (patternMatches(binding.chord, event) && this.guardPasses(binding)) return binding.action;
+      }
+    }
+    return null;
   }
 
   cancelChord(): void {

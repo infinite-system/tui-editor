@@ -8,13 +8,21 @@ import type { Keybinding } from './KeybindingRegistry';
 
 export const canonicalBindings: Keybinding[] = [
   // --- global ---
-  { chord: { key: 'q', ctrl: true }, action: 'app.quit' },
-  { chord: { key: 'f10' }, action: 'app.quit' },
+  // RESERVED escape hatches: quit fires from ANY mode (even a focused search/modal input) so the
+  // user is never trapped. `reserved` routes these ahead of modal input consumption (single chords
+  // only — the pass-through check is stateless; the Ctrl+X Ctrl+C chord below is editor-context).
+  { chord: { key: 'q', ctrl: true }, action: 'app.quit', reserved: true },
+  { chord: { key: 'f10' }, action: 'app.quit', reserved: true },
   // Emacs-style quit chord (VS Code's terminal intercepts Ctrl+Q). In the editor WITH a selection,
   // the guarded single below wins and Ctrl+X stays cut.
   { steps: [{ key: 'x', ctrl: true }, { key: 'c', ctrl: true }], action: 'app.quit' },
   { chord: { key: 'p', ctrl: true }, action: 'quickopen.open' }, // VS Code: Ctrl+P = go-to-file
   { chord: { key: 'p', ctrl: true, shift: true }, action: 'palette.open' }, // Ctrl+Shift+P = command palette
+  // F1 ALSO opens the palette (VS Code parity: F1 = Show All Commands). Ctrl+Shift+P is intercepted by
+  // VS Code's own terminal AND is unencodable on legacy (non-kitty) terminals that drop the shift bit
+  // on a control key — F1 is a single unshifted function key that always reaches the app, so the
+  // palette is never unreachable. invariant: Advertised bindings are deliverable bindings.
+  { chord: { key: 'f1' }, action: 'palette.open' },
   { chord: { key: 'g', ctrl: true }, action: 'git.togglePanel' },
   { chord: { key: 'tab' }, action: 'focus.toggle' },
   // Editor buffer tabs (item 10a) — global (work in any focus). Ctrl+Tab needs the kitty keyboard

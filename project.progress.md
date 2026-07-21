@@ -6,6 +6,62 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
 ## USER PIPELINE (durable — no user request drops; statused per item)
 
+### 🔴 ACTIVE QUEUE (coordinator-relayed, 2026-07-21 — priority order)
+
+- [~] **GATE-RED FIX (CRITICAL #1)** — full smoke suite was red for ~5 commits (since b84e700 Ctrl+P rebind).
+      Causes: (1) smoke-editor/smoke-wrap sent C-p expecting the palette (C-p is now go-to-file). FIX: added
+      F1→palette binding (Ctrl+Shift+P is VS-Code-intercepted + unencodable on legacy pty; F1 always delivers)
+      + smokes send F1. (2) smoke-wrap gutter offsets stale (tab bar shifted content down a row) → made the
+      reads FIND the gutter row. (3) smoke-wrap fixture too short to overflow when wrapped → added filler so
+      H-wheel→vertical has somewhere to scroll. smoke-editor + smoke-wrap now ALL-PASS. **My earlier "full
+      merge-gate ALL-PASS" claim (freeze-fix commit d2e1aa8) was a FALSE-GREEN — the bg run's output was empty
+      and I assumed success. LESSON: run the FULL gate to a polled log, confirm the literal ALL-PASS + exit 0.**
+      TODO after green: add a git pre-commit hook running the full gate (.git/hooks empty); run full gate before
+      every commit henceforth. Also product finding: the PALETTE was likely unreachable for real VS Code users
+      (Ctrl+Shift+P intercepted) — F1 fixes that too.
+- [x] **RESERVED-GLOBAL-CHORD quit fix** — quit chords (Ctrl+Q, F10) were SWALLOWED in search/modal modes →
+      user trapped. FIX: `reserved: true` flag on the quit bindings + `KeybindingRegistry.resolveReservedGlobal`
+      (stateless single-chord match) checked at the TOP of keyTick before every modal branch. Drive-verified:
+      Ctrl+Q + F10 quit from normal/find/quick-open; typing-only stays alive. Distilled (one rule, all modals).
+      Commit PENDING full-gate-green.
+- [ ] **CLICKPATH / CLICK-COMPLETENESS (HIGH — user: "clickpath make sure of it!")** — GUARANTEE a clickable
+      path to search + EVERY action (not shortcut-dependent). Audit: only 7 onMouseDown total, NONE open
+      palette/quick-open/find/settings. TODO: (1) activity-bar Search icon click → opens search; (2) visible
+      click affordance for palette/quick-open/find/replace/settings (activity-bar icon / status-bar button /
+      menu); (3) IMPLEMENT+ENFORCE the click-completeness GATE — enumerate CommandRegistry/effectiveBindings,
+      assert every action has a click affordance, fail if keyboard-only; wire into merge-gate. Pair with
+      tooltip-completeness gate (every clickable has a name+shortcut tooltip — today tooltip.point has ONE
+      caller). This turns the prose proxy-gates into real enforcement. Merge conductor-activitybar + shortcuts.
+- [ ] **DIRTY-DOT = CONTENT-EQUALITY (medium)** — the modified dot must clear when content == last-saved,
+      reached via undo OR redo (both directions). ROOT: dirty is event-based (set-on-edit); correct essence is
+      dirty = (currentContentHash ≠ savedContentHash), recomputed on every edit/undo/redo. On save → update
+      savedContentHash. Contract: edit→dot; undo-to-saved→clear; redo-to-saved→clear; redo-away→dot; save→clear.
+      Per-buffer in the tab bar once tabs show it. Reproduce (edit→undo→check dot) first.
+- [ ] **Alt+Delete = deletePreviousWord (medium)** — Option+Delete must delete the previous WORD everywhere
+      (editor + find/replace/quick-open/find-in-files/settings), NOT close the file. INVARIANT (user-confirmed):
+      deletePreviousWord removes EXACTLY [wordLeft(P), P] — implement AS "compute wordLeft(P), delete to P",
+      reusing the SAME boundary fn as editor.wordLeft (jump-to-X-but-delete-to-Y must be impossible). Collapse a
+      selection first if present. TODO: (1) add editor.deletePreviousWord; (2) bind Alt+Backspace/Alt+Delete in
+      editor AND all text inputs; (3) REMOVE the Alt+Delete→close binding (mac overlay keybindings.mac.ts);
+      (4) DISTILL word-delete + word-nav as ONE shared text-editing behavior across editor + inputs; (5) decode
+      Option+Backspace (\e\x7f / M-DEL) → Alt+Backspace. Contract: UNIT (deleted span == wordLeft distance over
+      varied lines: mid-word/boundary/leading-ws/punct/line-start) + DRIVEN (type "hello world", Alt+Delete →
+      "hello "; same in find bar). Same for wordRight↔deleteNextWord if forward-delete added later.
+- [ ] **DiffView regression contract (audit #2, HIGH)** — DiffView re-mounts by swapping editorArea in/out of
+      editorColumn (RootView.ts:1401-1408) — the SAME shared-container-swap that caused fae9349 scroll-corruption
+      (reverted d01873f); forbidden by "A pane is a self-contained viewport" Impossible-if-true. ZERO test covers
+      open-diff→close→editor-still-scrolls-to-true-end. ADD a driving contract: open change diff → editor pane
+      max-scroll/offset UNCHANGED before/after → close → editor still reaches true first/last line.
+- [ ] **Unwired-capability gate hole (audit #3, HIGH)** — check-unwired-capabilities.sh greps the bare
+      identifier, so "imported but never called" passes as wired (TerminalSession would've slipped — a human
+      caught it). HARDEN: require a real call-site (`${name}.Class.<method>(` or construction), not just the name.
+- [ ] **FuzzyPicker / SelectableList distillation (audit #5)** — 4 hand-rolled selectable-list models
+      (QuickOpen clamps / CommandRegistry wraps / ContextMenu skips-disabled / FileTree clamps+reveals). Build ONE
+      capability BEFORE the branch-switcher + workspace-tabs (else 2 more copies). Scoring already shared
+      (CommandScoring.fuzzyScore). Also extract a shared anchored-overlay-placement util (tooltip flip-math) for
+      the ctx-menu item. FLAGS: perf RSS 121MB vs <100MB (wire perf-baselines.sh into merge-gate as soft gate);
+      horizontalScrollModifier smoke flaky-on-timing (add retry-guard); §5.1 DoD 6/7 still PENDING.
+
 - [x] QA-A. **Horizontal scroll via Option+wheel (SGR 74/75) — confirmed on the user's terminal.**
       The earlier shift+wheel "fix" was a FALSE-GREEN: xterm-family terminals SWALLOW Shift+wheel (68/69)
       for their own scrollback and forward nothing — a tmux-injected smoke passed while the real user

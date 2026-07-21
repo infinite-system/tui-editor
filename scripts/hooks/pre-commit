@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Pre-commit gate: the FULL merge-gate must pass before a commit lands. This exists because the smoke
+# suite went red for ~5 commits (the Ctrl+P→palette rebind) while every commit claimed "gated/green" —
+# conventions-gate / FAST=1 skip the multi-launch smokes, so "MEASURED != ENFORCED" recurred. This hook
+# closes that hole: no commit without the full gate green.
+#
+# Bypass (use sparingly, e.g. a docs-only WIP checkpoint): SKIP_GATE=1 git commit ...
+# Install: bash scripts/install-hooks.sh  (symlinks .git/hooks/pre-commit → this file).
+set -uo pipefail
+
+if [ "${SKIP_GATE:-0}" = "1" ]; then
+  echo "pre-commit: SKIP_GATE=1 — skipping the full merge-gate (bypass acknowledged)." >&2
+  exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+export PATH="$HOME/.bun/bin:$PATH"
+echo "pre-commit: running the full merge-gate (SKIP_GATE=1 to bypass)…" >&2
+if bash "$REPO_ROOT/scripts/merge-gate.sh"; then
+  echo "pre-commit: merge-gate GREEN — commit allowed." >&2
+  exit 0
+fi
+echo "pre-commit: merge-gate RED — commit BLOCKED. Fix the gate or SKIP_GATE=1 to override." >&2
+exit 1

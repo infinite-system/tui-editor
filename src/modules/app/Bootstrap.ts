@@ -621,6 +621,22 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
 
   const keyTick = (key: KeyEvent): void => {
     tooltip.clear(); // any keypress hides the tooltip (display-only affordance)
+    // RESERVED GLOBAL CHORDS (quit) are escape hatches that must fire from ANY mode — checked BEFORE
+    // every modal/search branch below, or a focused find/quick-open/settings input would swallow the
+    // quit key and TRAP the user with no way out (a hard no-dead-ends / learnability failure). The
+    // check is stateless (single-chord match only), so it never disturbs the chord resolver below.
+    // invariant: Reserved global chords fire from any mode (keybindings.invariants.md)
+    const reservedGlobalAction = keybindings.resolveReservedGlobal({
+      name: key.name,
+      ctrl: key.ctrl,
+      shift: key.shift,
+      option: key.option || key.meta,
+      super: key.super,
+    });
+    if (reservedGlobalAction) {
+      actionHandlers[reservedGlobalAction]?.(key);
+      return;
+    }
     // Destructive-confirm overlay is MODAL: y confirms, anything else cancels — the context's
     // residual, not a binding.
     if (workspace.gitPanel.confirmDiscard.value) {

@@ -22,7 +22,10 @@ trap '"$H" kill "$S" >/dev/null 2>&1; rm -rf "$FIX"' EXIT
 "$BUN" -e '
 const words = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec romeo sierra tango uniform victor whiskey yankee zulu";
 const longLine = `${words} ${words} ${words}`;
-require("fs").writeFileSync(process.argv[1] + "/long.txt", [longLine, "short tail line", "q".repeat(200), "final line"].join("\n") + "\n");
+// Trailing filler makes the document OVERFLOW the viewport (even wrapped) so vertical scroll has
+// somewhere to go — the "H-wheel routes to vertical" assertion needs a scrollable document.
+const filler = Array.from({length: 60}, (_, i) => `filler body line ${String(i).padStart(3, "0")}`);
+require("fs").writeFileSync(process.argv[1] + "/long.txt", [longLine, "short tail line", "q".repeat(200), "final line", ...filler].join("\n") + "\n");
 ' "$FIX"
 
 echo "== launch on the long-line fixture =="
@@ -42,12 +45,15 @@ echo "== baseline (wrap OFF): consecutive gutters 1,2 (one line == one row) =="
 baseline="$(FRAME_FILE="$FRAME" "$BUN" -e '
 const frame=JSON.parse(require("fs").readFileSync(process.env.FRAME_FILE));
 const gutterNumber=(y)=>{const m=frame.rows[y].text.slice(33,40).match(/\d+/);return m?Number(m[0]):null};
-console.log(gutterNumber(1)===1&&gutterNumber(2)===2?"OK":`WRONG g1=${gutterNumber(1)} g2=${gutterNumber(2)}`);
+// FIND the first gutter row (content starts below the tab bar + pane border — do not hardcode the
+// row, so the check survives chrome-layout shifts) then assert the next line is consecutive.
+let base=-1;for(let y=0;y<frame.height;y++){if(gutterNumber(y)===1){base=y;break}}
+console.log(base>=0&&gutterNumber(base+1)===2?"OK":`WRONG base=${base} g=${base<0?null:gutterNumber(base)} gNext=${base<0?null:gutterNumber(base+1)}`);
 ')"
 chk "wrap-off gutter" "$baseline" "OK"
 
-echo "== toggle wrap ON via the PALETTE =="
-"$H" send "$S" C-p >/dev/null
+echo "== toggle wrap ON via the PALETTE (F1) =="
+"$H" send "$S" F1 >/dev/null   # F1 = command palette (Ctrl+P is now go-to-file)
 "$H" send "$S" -l wrap >/dev/null
 sleep 0.3
 "$H" send "$S" Enter >/dev/null
@@ -60,10 +66,13 @@ wrap_gutter="$(FRAME_FILE="$FRAME" "$BUN" -e '
 const frame=JSON.parse(require("fs").readFileSync(process.env.FRAME_FILE));
 const gutterNumber=(y)=>{const m=frame.rows[y].text.slice(33,40).match(/\d+/);return m?Number(m[0]):null};
 const codeBody=(y)=>frame.rows[y].text.slice(40).trim();
-let row2=-1;for(let y=2;y<frame.height;y++){if(gutterNumber(y)===2){row2=y;break}}
-const continuationRows=row2-2; let continuationOk=continuationRows>0;
-for(let y=2;y<row2;y++){ if(gutterNumber(y)!==null||codeBody(y).length===0) continuationOk=false; }
-console.log(gutterNumber(1)===1&&row2>2&&continuationOk?`OK rows=${1+continuationRows}`:`WRONG g1=${gutterNumber(1)} row2=${row2} contOk=${continuationOk}`);
+// Find the first line (gutter 1) wherever the chrome places it, then the gutter-2 line below it;
+// the rows between must be wrap CONTINUATIONS (no gutter number, non-empty body).
+let base=-1;for(let y=0;y<frame.height;y++){if(gutterNumber(y)===1){base=y;break}}
+let row2=-1;for(let y=base+1;y<frame.height;y++){if(gutterNumber(y)===2){row2=y;break}}
+const continuationRows=row2-base-1; let continuationOk=base>=0&&continuationRows>0;
+for(let y=base+1;y<row2;y++){ if(gutterNumber(y)!==null||codeBody(y).length===0) continuationOk=false; }
+console.log(base>=0&&row2>base+1&&continuationOk?`OK rows=${1+continuationRows}`:`WRONG base=${base} row2=${row2} contOk=${continuationOk}`);
 ')"
 case "$wrap_gutter" in OK*) echo "  PASS  wrapped rows + blank continuation gutters ($wrap_gutter)";; *) echo "  FAIL  $wrap_gutter"; fail=1;; esac
 
@@ -117,7 +126,10 @@ chk "wordWrap OFF" "$(f wordWrap)" "false"
 off_gutter="$(FRAME_FILE="$FRAME" "$BUN" -e '
 const frame=JSON.parse(require("fs").readFileSync(process.env.FRAME_FILE));
 const gutterNumber=(y)=>{const m=frame.rows[y].text.slice(33,40).match(/\d+/);return m?Number(m[0]):null};
-console.log(gutterNumber(1)===1&&gutterNumber(2)===2?"OK":`WRONG g1=${gutterNumber(1)} g2=${gutterNumber(2)}`);
+// FIND the first gutter row (content starts below the tab bar + pane border — do not hardcode the
+// row, so the check survives chrome-layout shifts) then assert the next line is consecutive.
+let base=-1;for(let y=0;y<frame.height;y++){if(gutterNumber(y)===1){base=y;break}}
+console.log(base>=0&&gutterNumber(base+1)===2?"OK":`WRONG base=${base} g=${base<0?null:gutterNumber(base)} gNext=${base<0?null:gutterNumber(base+1)}`);
 ')"
 chk "wrap-off gutter restored (one line == one row)" "$off_gutter" "OK"
 

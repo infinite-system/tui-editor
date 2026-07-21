@@ -161,8 +161,10 @@ cursor_line="$(STATUS_FILE="$STATUSF" "$BUN" -e 'console.log(JSON.parse(require(
 case "$opened_buffer" in *greeter.ts) buffer_ok=1;; *) buffer_ok=0;; esac  # y=2 = greeter.ts (src expanded by the earlier click test)
 if [ "$buffer_ok" = 1 ] && [ "$cursor_line" = "0" ]; then echo "  PASS  tree click opened a file, cursor stayed at line 0 (no double-dispatch)"; else echo "  FAIL  double-dispatch? buffer=$opened_buffer cursorLine=$cursor_line"; fail=1; fi
 
-echo "== command palette (Ctrl+P) =="
-"$H" send "$S" C-p >/dev/null
+echo "== command palette (F1) =="
+# F1 opens the palette (Ctrl+P is now go-to-file; Ctrl+Shift+P is unencodable on this legacy pty and
+# intercepted by VS Code's terminal). F1 is the always-deliverable palette key.
+"$H" send "$S" F1 >/dev/null
 chk "palette overlay" "$(f overlay)" "palette"
 echo "  info: paletteMatches=$(f paletteMatches)"
 "$H" send "$S" Escape >/dev/null
