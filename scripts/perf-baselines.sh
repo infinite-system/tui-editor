@@ -14,8 +14,11 @@
 #   4. INPUT LATENCY    keypress -> status-file cursor flush, 20 presses, p50/p95, 20ms poll grain.
 #
 # Verdicts are printed as PASS/FAIL against the brief's targets (idle CPU ~0 (<2%), frame delta 0,
-# idle memory < 100MB). The script exits 0 as long as every measurement could be TAKEN; target
-# failures are data, not script errors. Rerunnable; traps kill every tmux session it creates.
+# idle memory < 100MB). Most target misses are DATA, not script errors (they inform, they don't
+# block). The ONE exception is idle frame quiescence: frame-delta==0 is an INVARIANT ('rendering is
+# demand-driven'), so a violation makes the script EXIT NON-ZERO — a check that doesn't block is not
+# enforcement. Exit code = measurements-that-could-not-be-taken + idle-quiescence violations.
+# Rerunnable; traps kill every tmux session it creates.
 set -uo pipefail
 
 SCRIPT_DIRECTORY="$(cd "$(dirname "$0")" && pwd)"
@@ -136,6 +139,8 @@ record_spawned_bun_process() { # remember every bun pid this run creates for the
 }
 
 measurement_failures=0
+# Idle frame quiescence is an INVARIANT, not a soft target: a violation blocks (non-zero exit).
+idle_quiescence_violations=0
 echo "== perf-baselines $(date -Is) on $(uname -m) $(uname -s) · CLK_TCK=$CLOCK_TICKS_PER_SECOND · targetFps=30 =="
 bun_process_count_before="$(pgrep -c -f 'bun run src/main\.ts' || true)"
 echo "pre-existing 'bun run src/main.ts' processes: $bun_process_count_before (left untouched; other agents/demos may churn this count)"
@@ -180,7 +185,9 @@ else
     frames_per_second="$(awk -v d="$frame_delta_final_window" 'BEGIN{printf "%.1f", d/5}')"
     echo "  FAIL idle frame quiescence: $frames_per_second frames/s in the final 5s window"
     echo "        evidence: rate ~= targetFps(30) -> the RENDER LOOP itself, not a momentum/drag tick"
-    echo "        (status file is rewritten every frame by StatusChannel.settle -> continuous disk writes)"
+    # This is an INVARIANT violation ('rendering is demand-driven'), not a soft target miss: it must
+    # BLOCK (non-zero exit), otherwise a live idle loop ships as a false-green (as it once did).
+    idle_quiescence_violations=$((idle_quiescence_violations + 1))
   fi
   awk -v cpu="$cpu_percent_final_window" 'BEGIN{exit !(cpu < 2.0)}' \
     && echo "  PASS idle CPU <2% ($cpu_percent_final_window%)" \
@@ -342,5 +349,5 @@ else
   measurement_failures=$((measurement_failures + 1))
 fi
 bun_process_count_final="$(pgrep -c -f 'bun run src/main\.ts' || true)"
-echo "== wrap-up: global bun-editor count before=$bun_process_count_before final=$bun_process_count_final (informational) · measurement failures=$measurement_failures =="
-exit "$measurement_failures"
+echo "== wrap-up: global bun-editor count before=$bun_process_count_before final=$bun_process_count_final (informational) · measurement failures=$measurement_failures · idle-quiescence violations=$idle_quiescence_violations =="
+exit "$(( measurement_failures + idle_quiescence_violations ))"

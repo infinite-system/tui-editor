@@ -77,6 +77,12 @@ Change a convention → change it HERE (and note the why in decisions.md).
 - Destructive git verification runs in a SCRATCH repo under /tmp — never this repo's tree.
 - Merge gate = tsc + `bun test` + smoke ALL-PASS + invariants checker `--all --refs` 0 problems +
   `scripts/conventions-gate.sh`.
+- MEASURED ≠ ENFORCED: a check that only prints a verdict, or that runs on-demand, is not enforcement.
+  Every INVARIANT must (a) BLOCK — assert with a non-zero exit on violation, never print-FAIL-and-
+  exit-0 — and (b) ride the ALWAYS-RUN gate above, not a separate on-demand script. Corollary: pick
+  the AUTHORITATIVE signal, not a cheap proxy that happens to pass. (Idle quiescence is the frame
+  COUNTER == 0 at rest, in smoke — not idle CPU, which stays low even while the loop ticks because
+  empty frames are cheap; a CPU-only spot check shipped a live idle loop as a false-green.)
 
 ## Contracts (invariants)
 - Contract-first for new modules; records follow the /invariants schema (both section headings;

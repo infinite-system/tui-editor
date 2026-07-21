@@ -24,12 +24,23 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       selection/movement; exclusive with h-scroll; both modes regression-tested).
 - [ ] 7. Momentum parity on ALL panes (editor V+H, tree, changes) — one shared engine.
 - [x] 8. Idle quiescence — DEMAND-DRIVEN rendering (renderer.auto() + live-request on animations,
-      dropLive at quiescence) → measured frame delta 0 over 9-10s at rest, ~0 CPU, RSS 99.6MB (prod
-      profile: NODE_ENV=production default + TUI_OBSERVE-gated I/O). Wheel glide advances past input
-      then re-quiesces. (68f897e). BUILD TARGET: `bun run build:prod` -> dist/fable standalone
-      (--external web-tree-sitter unblocks --compile; lazy wasm never fires as tree-sitter is
-      unwired; BUILD.md documents run modes + the ship-wasm-when-wired follow-up) (bae00b7).
-      Worker D's PERFORMANCE_BASELINES.md (startup vs <150ms, RSS, idle CPU) folds in on merge. — 10s at-rest assertion (frame delta 0, CPU ~0; 14% live
+      dropLive at quiescence). OpenTUI's loop reschedules itself at targetFps for as long as
+      liveRequestCount>0; at rest our only live-holder (syncAnimationLiveness) drops to 0, so the
+      loop STOPS. Prod profile: NODE_ENV=production default + TUI_OBSERVE-gated I/O. (68f897e).
+      NOW ENFORCED, not just measured: smoke-editor.sh asserts idle FRAME DELTA == 0 over 5s
+      untouched (the authoritative signal — the always-run gate, HARD FAIL); perf-baselines.sh's
+      idle assertion now exits non-zero on violation too. Re-verified on current HEAD: frame delta 0
+      over 5s untouched via the status frame counter (clean env, no instrumentation).
+      NOTE on Worker D's 142/145-frame "FAIL": that was measured against the perfbaselines worktree
+      BASE (f8771ab), which PREDATES the demand-driven fix (68f897e) — at f8771ab Bootstrap had NO
+      dropLive logic, so ~28fps at rest was real THEN and is fixed NOW. The measurement was correct
+      for a stale build; it was not a false-green in shipped code. The real gap it exposed — that
+      quiescence was measured-once, not enforced-always — is now closed by the smoke assertion.
+      BUILD TARGET: `bun run build:prod` -> dist/fable standalone (--external web-tree-sitter unblocks
+      --compile; lazy wasm never fires as tree-sitter is unwired; BUILD.md documents run modes +
+      the ship-wasm-when-wired follow-up) (bae00b7). Worker D's PERFORMANCE_BASELINES.md folds in on
+      merge (its idle numbers are the stale pre-fix build; other metrics — RSS itemization, lifecycle,
+      latency-at-30fps — stand and should be re-measured on current HEAD). — 10s at-rest assertion (frame delta 0, CPU ~0; 14% live
       sample to disambiguate), RSS 110MB vs 100MB target itemized (PERFORMANCE_BASELINES.md),
       create/dispose lifecycle stability.
 - [~] 9. Static-capability pass — ACCELERATED by partition: codex converting the STABLE legacy bags

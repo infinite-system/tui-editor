@@ -153,6 +153,24 @@ echo "  info: paletteMatches=$(f paletteMatches)"
 "$H" send "$S" Escape >/dev/null
 chk "palette closed" "$(f overlay)" "null"
 
+echo "== idle quiescence: rendering is demand-driven; the loop STOPS at rest (frame delta == 0) =="
+# Authoritative signal is the FRAME COUNTER, not CPU (empty frames are cheap, so a CPU check passes
+# even while the loop ticks — the false-green that a pre-fix build shipped). After a settle, the
+# status frame counter must not advance at all over a fully-untouched window.
+"$H" send "$S" Escape >/dev/null   # clear any lingering overlay/selection -> true rest
+"$H" settle "$S" >/dev/null 2>&1
+sleep 1
+idle_frame_start="$(f frame)"
+sleep 5   # 5s FULLY untouched — no input, no harness sends
+idle_frame_end="$(f frame)"
+idle_frame_delta=$(( idle_frame_end - idle_frame_start ))
+if [ "$idle_frame_delta" -eq 0 ]; then
+  echo "  PASS  idle frame delta == 0 over 5s untouched (frame stayed $idle_frame_start)"
+else
+  echo "  FAIL  idle loop still ticking: frame $idle_frame_start -> $idle_frame_end (+$idle_frame_delta over 5s, ~$((idle_frame_delta / 5))fps) — rendering is NOT demand-driven"
+  fail=1
+fi
+
 echo "== quit (Ctrl+Q) + terminal restore =="
 "$H" send "$S" C-q >/dev/null
 if "$H" capture "$S" 2>/dev/null | grep -q "Command Palette"; then
