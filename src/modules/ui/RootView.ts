@@ -19,6 +19,7 @@ import type { CommandRegistry } from '../commands/CommandRegistry';
 import type { Palette } from '../theme/theme.palettes';
 import { highlightLine, type Role } from '../syntax/Highlighter';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
+import { displayColumn } from '../editor/editor.coordinates';
 
 function roleColor(role: Role, pal: Palette): string {
   switch (role) {
@@ -245,6 +246,24 @@ export function buildRootView(
             .join('\n')
         : '  (no matching commands)';
       paletteList.fg = pal.dim;
+    }
+
+    // Native terminal caret at the cursor's DISPLAY column (tab/wide aware). Shown only when the
+    // editor is focused, has a document, no palette overlay, and the cursor line is on screen.
+    // invariant: The caret renders at the cursor display column (ui.invariants.md)
+    const ed = ws.editor;
+    const scrollTop = ed.viewport.scrollTop.value;
+    const vh = editorViewportHeight();
+    const cl = ed.cursor.line.value;
+    if (ed.hasDocument.value && ws.focus.value === 'editor' && !open && cl >= scrollTop && cl < scrollTop + vh) {
+      const dc = displayColumn(ed.document.line(cl), ed.cursor.col.value);
+      const gutterW = String(ed.document.lineCount).length + 1;
+      // x: sidebar + editorArea left border + gutter("NN ") + the current-line marker cell + display col.
+      const x = SIDEBAR_W + 1 + gutterW + 2 + dc;
+      const y = 1 + (cl - scrollTop); // mainRow top + editorArea top border
+      renderer.setCursorPosition(x, y, true);
+    } else {
+      renderer.setCursorPosition(0, 0, false);
     }
   }
 

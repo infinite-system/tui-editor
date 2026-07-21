@@ -75,13 +75,15 @@ distinct coordinates* (editor).
 
 **Generates:** a real caret; correct visual position on lines with tabs/wide chars.
 
-**Evidence:** currently VIOLATED — `RootView.ts:185` draws a `▏` bar in a fixed gutter cell on the
-current line; the column appears only in the status bar. No display-column caret.
+**Evidence:** IMPLEMENTED — `RootView.ts` `update()` calls `renderer.setCursorPosition(x, y, true)`
+with `x` derived from `displayColumn(line, cursor.col)` (tab/wide aware, via `editor.coordinates`)
+and hides the cursor when unfocused/off-screen/palette-open. Uses OpenTUI's native terminal cursor.
+Pending a tmux visual confirmation of the x/y offset math.
 
 **Impossible if true:** a caret drawn in a fixed gutter cell regardless of the cursor column; a
 caret whose cell disagrees with the character beneath it on a line with tabs or wide glyphs.
 
-**Open question:** lands with the coordinate rework + selection highlight.
+**Open question:** the selection highlight (shift/mouse) lands with the selection rework.
 
 **Verification:** a harness capture asserting the caret cell matches the cursor's display column
 on lines with a leading tab and a wide (CJK) glyph.
