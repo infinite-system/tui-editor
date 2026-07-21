@@ -20,6 +20,8 @@ export interface GitLogOptions {
   branch?: string;
   limit?: number;
   cursor?: string;
+  /** Offset paging: skip this many commits before the page (for a virtualized window). */
+  skip?: number;
 }
 
 class $GitCommands {
@@ -61,7 +63,11 @@ class $GitCommands {
       `--format=${LOG_FORMAT}`,
     ];
 
-    if (options.cursor) {
+    if (options.skip && options.skip > 0) {
+      // Offset window: skip N from the branch/HEAD tip (for a virtualized commit list).
+      arguments_.push(`--skip=${Math.floor(options.skip)}`);
+      if (options.branch) arguments_.push(options.branch);
+    } else if (options.cursor) {
       arguments_.push('--skip=1', options.cursor);
     } else if (options.branch) {
       arguments_.push(options.branch);
