@@ -4,8 +4,8 @@ Live status ledger for the autonomous build. Updated every turn so state survive
 compaction. **If you are resuming: read this, then `HANDOFF.md`, then continue at the first
 unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
-## RESUME HERE (frontier as of commit 43cb602)
-- **State:** 11 module contracts · 108 tests pass · tsc green · checker 0 problems · end-to-end tmux
+## RESUME HERE (frontier as of commit b283cd5)
+- **State:** 11 module contracts · 114 tests pass · tsc green · checker 0 problems · end-to-end tmux
   smoke ALL-PASS. codex modules git/markdown/lsp INTEGRATED. Editor rework: reactive frame
   (established), grapheme coordinate model, native-cursor caret, selection + clipboard (model works),
   editor split into gutter + `SelectableText` code renderable. **FrameProbe visual-observation
@@ -34,9 +34,10 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   - **Bottom region:** the commit log as a **virtualized** list (render only the visible window; do
     NOT materialize 10k commits) — backed by a compact paged git-log source, one lightweight record
     per row, evicted outside the window. Realizes *Cost tracks the actively observed set*.
-    DONE (foundation): `git.window.ts` (`missingRanges` + `evictable`, pure, 9 tests) +
-    `GitCommands.log` offset paging (`--skip=N`). TODO: the reactive `CommitLog` window model
-    (sparse cache + `ensureRange` via the paged source, stale-superseded by revision) + the list UI.
+    DONE: `git.window.ts` (`missingRanges` + `evictable`, pure, 9 tests) + `GitCommands.log` offset
+    paging (`--skip=N`) + **reactive `CommitLog` window model** (`CommitLog.ts`: sparse cache,
+    `ensureRange` batched fetch, stale-supersede via loadId, eviction, `knownEnd`; fetch injectable;
+    6 tests). TODO: the list UI consuming `CommitLog.rows(start,count)`.
   - **Commit drill-down (VSCode-style):** click/open a commit in the log → show that commit's
     CHANGED FILES (`git show --name-status <sha>` / `diff-tree`) → open a file → show its DIFF in the
     editor area (reuse the planned `diff` module: DiffEngine/DiffModel/DiffView, or `git show <sha>
@@ -87,7 +88,15 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       established; gutter/code split + native selection + FrameProbe 4-lane fix); (e) multi-workspace;
       (f) search; (g) piece-table undo.
       tmux harness (`scripts/tui-harness.sh`) + smoke (`scripts/smoke-editor.sh`) built, ALL-PASS.
-      **NEXT (M4): reactive `CommitLog` window model → mouse-event input path → git sidebar UI.**
+      **NEXT (M4): mouse-event input path → git sidebar UI (consuming `CommitLog`).**
+      Mouse path = OpenTUI is handler-based: set `useMouse:true` in `createCliRenderer` (Bootstrap)
+      + attach `onMouseDown`/`onMouseDrag`/`onMouseUp` to renderables (called with `this`=renderable,
+      hit-tested by x,y, has `isDragging`). Enabling mouse changes terminal behavior (captures mouse
+      from tmux text-select) — do it WITH handlers + verify a click actually arrives under tmux
+      (publish mouse hits to status.json or a log; drive a click via `tmux send-keys` SGR mouse or the
+      harness). Then sidebar UI: changes+commit-box top, virtualized log bottom via
+      `CommitLog.rows(scrollTop, viewportH)` + `ensureRange`, commit→files→diff drill-down, draggable
+      width/separator (divider renderable `onMouseDrag` → reactive split-ratio → yoga relayout).
 - [~] M4 — git module INTEGRATED (b5cf988, 7 tests). Remaining: `diff` module (DiffEngine/DiffModel/
       DiffView/DiffRenderable) + the git sidebar UI (staged/unstaged, stage/unstage) + the
       split editable-diff view (left read-only blob, right live buffer).
