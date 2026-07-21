@@ -19,8 +19,8 @@ import type { CommandRegistry } from '../commands/CommandRegistry';
 import type { Palette } from '../theme/theme.palettes';
 import { highlightLine, type Role } from '../syntax/Highlighter';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
-import { displayColumn } from '../editor/editor.coordinates';
-import { buildSelectedSpans, lineSelectionRange, type SpanColor } from './ui.selection';
+import { displayColumn, lineWidth } from '../editor/editor.coordinates';
+import { SelectableText } from './SelectableText';
 
 function roleColor(role: Role, pal: Palette): string {
   switch (role) {
@@ -86,12 +86,21 @@ export function buildRootView(
     height: '100%',
     border: true,
     borderStyle: 'rounded',
+    flexDirection: 'row',
     title: 'Editor',
   });
-  const editorBody = new TextRenderable(renderer, { id: 'editor-body', content: '' });
-  editorArea.add(editorBody);
-  // Empty-state text is plain; file content is a StyledText (colored spans).
-  let editorStyled: StyledText | null = null;
+  // Gutter (line numbers + current-line marker) and code are SEPARATE renderables so the code
+  // buffer holds only code — OpenTUI's native selection then never shades the gutter on a
+  // multi-line span, and code-local selection coords are pure display columns.
+  const gutterBody = new TextRenderable(renderer, { id: 'editor-gutter', content: '' });
+  const codeBody = new SelectableText(renderer, {
+    id: 'editor-code',
+    content: '',
+    selectable: true,
+    flexGrow: 1,
+  });
+  editorArea.add(gutterBody);
+  editorArea.add(codeBody);
 
   mainRow.add(sidebar);
   mainRow.add(editorArea);
@@ -165,9 +174,13 @@ export function buildRootView(
     '',
   ].join('\n');
 
-  // Builds a StyledText of the visible window with syntax colors + gutter. Only the visible
-  // lines are tokenized (flyweight). Returns null for the empty state (plain string).
-  function renderEditorStyled(): StyledText | null {
+  // Gutter width in cells for the current document: "NN " (line number + space) + 1 marker cell.
+  const gutterWidth = () => String(ws.editor.document.lineCount).length + 1 + 2;
+
+  // Builds the visible window as two aligned StyledTexts — the gutter (line numbers + current-line
+  // marker) and the code (syntax colors only, NO gutter). Only the visible lines are tokenized
+  // (flyweight). Returns null for the empty state.
+  function renderEditor(): { gutter: StyledText; code: StyledText } | null {
     const ed = ws.editor;
     if (!ed.hasDocument.value) return null;
     const pal = p();
@@ -175,29 +188,62 @@ export function buildRootView(
     const height = editorViewportHeight();
     const top = ed.viewport.scrollTop.value;
     const win = ed.document.slice(top, height);
-    const gutterW = String(ed.document.lineCount).length + 1;
+    const gw = String(ed.document.lineCount).length + 1;
     const curLine = ed.cursor.line.value;
     const focused = ws.focus.value === 'editor';
-    const sel = ed.cursor.selectionRange();
-    const chunks: TextChunk[] = [];
+    const gutterChunks: TextChunk[] = [];
+    const codeChunks: TextChunk[] = [];
     win.forEach((text, i) => {
       const lineNo = top + i;
       const isCur = lineNo === curLine;
-      const num = String(lineNo + 1).padStart(gutterW, ' ');
-      chunks.push(fg(isCur ? pal.accent : pal.dim)(`${num} `));
-      chunks.push(fg(pal.accent)(isCur && focused ? '▏' : ' '));
-
-      const spans: SpanColor[] =
-        ed.document.binary.value || lang === 'plain'
-          ? [{ text, color: pal.fg }]
-          : highlightLine(text, lang).map((sp) => ({ text: sp.text, color: roleColor(sp.role, pal) }));
-
-      // invariant: The selected range renders with a background (ui.invariants.md)
-      const selRange = lineSelectionRange(sel, lineNo, text);
-      for (const chunk of buildSelectedSpans(spans, selRange, pal.selection)) chunks.push(chunk);
-      if (i < win.length - 1) chunks.push(fg(pal.fg)('\n'));
+      const num = String(lineNo + 1).padStart(gw, ' ');
+      gutterChunks.push(fg(isCur ? pal.accent : pal.dim)(`${num} `));
+      gutterChunks.push(fg(pal.accent)(isCur && focused ? '▏' : ' '));
+      if (ed.document.binary.value || lang === 'plain') {
+        codeChunks.push(fg(pal.fg)(text));
+      } else {
+        for (const span of highlightLine(text, lang)) {
+          codeChunks.push(fg(roleColor(span.role, pal))(span.text));
+        }
+      }
+      if (i < win.length - 1) {
+        gutterChunks.push(fg(pal.fg)('\n'));
+        codeChunks.push(fg(pal.fg)('\n'));
+      }
     });
-    return new StyledText(chunks);
+    return { gutter: new StyledText(gutterChunks), code: new StyledText(codeChunks) };
+  }
+
+  // Drive OpenTUI's native selection on the code renderable from the model selection, mapped into
+  // code-local coords (x = display column, y = visible-line index). Clamps to the visible window.
+  // invariant: The selected range renders with a background (ui.invariants.md)
+  function applySelection(): void {
+    const ed = ws.editor;
+    const sel = ed.hasDocument.value ? ed.cursor.selectionRange() : null;
+    const top = ed.viewport.scrollTop.value;
+    const vh = editorViewportHeight();
+    if (!sel || sel.end.line < top || sel.start.line >= top + vh) {
+      codeBody.clearSelectionRange();
+      return;
+    }
+    const anchorY = Math.max(0, sel.start.line - top);
+    const anchorX = sel.start.line >= top ? displayColumn(ed.document.line(sel.start.line), sel.start.col) : 0;
+    const focusY = Math.min(vh - 1, sel.end.line - top);
+    const focusX =
+      sel.end.line < top + vh
+        ? displayColumn(ed.document.line(sel.end.line), sel.end.col)
+        : lineWidth(ed.document.line(Math.min(top + vh - 1, ed.document.lineCount - 1)));
+    // NOTE: OpenTUI's setLocalSelection currently mis-maps our local (col,row) coords — a fixed
+    // (0,0,5,0) probe shaded y=5, x=28..46 in period-4 groups (a ~4x scale + offset), and a real
+    // selection on doc line N lands ~4N rows too low. The selection MODEL is correct (copy/cut/
+    // paste/select-all work); only this visual shading is affected. Gated OFF by default until the
+    // coordinate space setLocalSelection expects is pinned down (see ui.invariants.md). Verify a fix
+    // with the FrameProbe frame-diff (scripts + artifacts/frame.json).
+    if (process.env.TUI_SEL_RENDER === '1') {
+      codeBody.setSelectionRange(anchorX, anchorY, focusX, focusY);
+    } else {
+      codeBody.clearSelectionRange();
+    }
   }
 
   function renderStatus(): string {
@@ -227,9 +273,19 @@ export function buildRootView(
 
     sidebarBody.content = renderTree();
     sidebarBody.fg = pal.fg;
-    editorStyled = renderEditorStyled();
-    editorBody.content = editorStyled ?? EMPTY_STATE;
-    editorBody.fg = pal.fg;
+    const rendered = renderEditor();
+    if (rendered) {
+      gutterBody.width = gutterWidth();
+      gutterBody.content = rendered.gutter;
+      codeBody.content = rendered.code;
+    } else {
+      gutterBody.width = 0;
+      gutterBody.content = '';
+      codeBody.content = EMPTY_STATE;
+    }
+    codeBody.fg = pal.fg;
+    codeBody.selectionBg = pal.selection;
+    applySelection(); // after content is set, so selection maps onto the current buffer
     statusText.content = renderStatus();
     statusText.fg = pal.dim;
 

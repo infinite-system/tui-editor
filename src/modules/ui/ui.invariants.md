@@ -92,45 +92,44 @@ on lines with a leading tab and a wide (CJK) glyph.
 
 ### The selected range renders with a background
 
-**Invariant:** If a non-empty selection exists, then exactly the selected grapheme range on each
-covered line is drawn with a selection background, while each character keeps its foreground
-(syntax) color; splits fall only on grapheme boundaries.
+**Invariant:** If a non-empty selection exists, then exactly the selected range is drawn with a
+selection background, aligned to the model's `selectionRange()`, on the cursor's content row(s).
 
-**Scope:** the editor body rendering in `RootView` via `ui.selection.ts`.
+**Scope:** the editor code renderable in `RootView` (`SelectableText` + `applySelection`).
 
-**Mechanism:** `lineSelectionRange` maps the normalized selection to each line's `[start, end)`
-grapheme columns (first line from `start.col`, last line to `end.col`, middle lines full content);
-`buildSelectedSpans` splits each syntax span at those boundaries (`graphemeToU16`) and wraps the
-selected slice with `bg(pal.selection)` over its existing `fg` (OpenTUI `applyStyle` merges fg+bg).
-Stands on *A cursor position resolves to three distinct coordinates* (editor) and *Selection is an
-anchor plus the cursor* (editor).
+**Mechanism (architecture — DONE):** the editor is split into a **gutter** renderable (line numbers
++ current-line marker) and a **code** renderable (`SelectableText`, syntax only) so the code buffer
+holds no gutter — OpenTUI's native selection then never shades a gutter on a multi-line span, and
+code-local selection coords are pure display columns. `applySelection` maps the model
+`selectionRange()` into code-local coords (`x = displayColumn`, `y = docLine − scrollTop`, clamped to
+the visible window) and drives `SelectableText.setSelectionRange` →
+`TextBufferView.setLocalSelection`. Stands on *A cursor position resolves to three distinct
+coordinates* (editor) and *Selection is an anchor plus the cursor* (editor).
 
-**Generates:** a visible selection block; multi-line selection shading; correct highlight on lines
-with tabs, CJK, and combined (ZWJ) emoji.
+**Generates:** a visible selection block that tracks the model; multi-line shading without touching
+the gutter.
 
-**Evidence:** `ui.selection.ts` + `RootView.renderEditorStyled`; deterministically unit-tested in
-`ui.selection.test.ts` (12 cases incl. `a中文👨‍👩‍👧b` grapheme-boundary split, multi-span, multi-line
-ranges) and exercised end-to-end by `scripts/smoke-editor.sh` (Shift+Right → `hasSelection`, Escape
-clears). Chunk-level bg is asserted directly (not via pane-scrape — `tmux capture-pane -e` proved
-lossy for truecolor bg).
+**BLOCKED — OpenTUI coordinate mismatch (found by FrameProbe 2026-07-21):** `setLocalSelection`
+does NOT interpret coords as the local cell grid. A fixed `(0,0,5,0)` probe (select first 5 cols of
+row 0) shaded `y=5, x=28..46` in period-4 groups (a ~4× scale + offset); a real selection on doc
+line N lands ~`5 + 4N` rows too low. The visual shading is therefore **gated OFF by default**
+(`TUI_SEL_RENDER=1` to experiment) so we ship no highlight rather than a mis-placed one. The
+selection MODEL is unaffected and fully working (copy/cut/paste/select-all, `hasSelection`,
+`selectionRange`). **Next:** pin down the coordinate space `setLocalSelection` expects (likely a
+viewport/`setViewport`/`setFirstLineOffset` or a logical-vs-visual-line issue) using the FrameProbe
+frame-diff; the gutter/code split + `SelectableText` are the right substrate and stay.
 
-**Impossible if true:** a selected slice that loses its syntax color; a highlight that starts or
-ends inside a surrogate pair or a combined emoji; a shaded range that disagrees with the model's
-`selectionRange()` columns.
+**Impossible if true (once unblocked):** a shaded range that disagrees with `selectionRange()`; a
+multi-line selection that shades the gutter; a highlight offset from the cursor's content row.
 
-**Verification:** `bun test src/modules/ui/ui.selection.test.ts` (chunk fg/bg + grapheme boundaries);
-smoke selection assertions. Per-cell visual verified with `FrameProbe` (`TUI_FRAME_DUMP=1` dumps the
-OpenTUI render buffer to `artifacts/frame.json`) — the authoritative visual channel, since
-`tmux capture-pane -e` is lossy for truecolor bg.
+**Verification:** FrameProbe frame-diff (before/after a selection; the changed `bg` cells must land
+on the cursor's content row at the selected display columns — the frame-diff is noise-free, proven
+by a no-action control). Selection MODEL: `scripts/smoke-editor.sh` (Shift+Right → `hasSelection`,
+Escape clears) + editor unit tests.
 
-**KNOWN RENDER BUG (found by FrameProbe 2026-07-21):** the span-splitting LOGIC is correct
-(unit-proven), but embedding `bg` chunks in a multi-line `StyledText` mis-positions the shaded cells
-— the frame probe shows the selection bg painted on the wrong buffer row (e.g. selection on doc
-line 2 paints near y=13, not the cursor's content row). OpenTUI lays out bg chunks differently from
-text chunks. **Fix path:** drive OpenTUI's native text selection instead — `TextBufferRenderable`
-(`selectionBg`/`selectionFg` + `onSelectionChanged`, backed by `TextBufferView.setLocalSelection`),
-mapping the model selection to LOCAL text-buffer coords (account for the per-line gutter/marker
-prefix and the visible window). Self-do (editor-core); see PROGRESS RESUME HERE.
+**Status:** provisional (blocked on the OpenTUI coordinate mismatch; model works, visual gated off)
+
+**Last refined:** 2026-07-21
 
 **Status:** provisional (logic proven; render integration to be reworked to native selection)
 
