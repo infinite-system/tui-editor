@@ -23,7 +23,10 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 - [ ] 6. Word-wrap toggleable mode (palette + Alt+Z; logical-line gutter, wrap-aware caret/
       selection/movement; exclusive with h-scroll; both modes regression-tested).
 - [ ] 7. Momentum parity on ALL panes (editor V+H, tree, changes) — one shared engine.
-- [ ] 8. Idle quiescence + perf baselines — 10s at-rest assertion (frame delta 0, CPU ~0; 14% live
+- [x] 8. Idle quiescence — DEMAND-DRIVEN rendering (renderer.auto() + live-request on animations,
+      dropLive at quiescence) → measured frame delta 0 over 9-10s at rest, ~0 CPU, RSS 99.6MB (prod
+      profile: NODE_ENV=production default + TUI_OBSERVE-gated I/O). Wheel glide advances past input
+      then re-quiesces. (68f897e) Worker D's PERFORMANCE_BASELINES.md still to fold in on merge. — 10s at-rest assertion (frame delta 0, CPU ~0; 14% live
       sample to disambiguate), RSS 110MB vs 100MB target itemized (PERFORMANCE_BASELINES.md),
       create/dispose lifecycle stability.
 - [~] 9. Static-capability pass — ACCELERATED by partition: codex converting the STABLE legacy bags
@@ -35,7 +38,11 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       split-preview · multi-workspace · file search · piece-table undo · M7 plugins (ScrollPhysics
       or theme plugin demo) · 5-pass gauntlet (fuller Claude panel) · isolated blackline-worktree
       acceptance test · §5.1 gate all-six-green.
-- [ ] 11. REGRESSION (user): commit-log wheel scroll "not smooth now" — verify wheel still feeds
+- [x] 11. Scroll-feel regression ROOT-CAUSED + fixed (68f897e): the glide halted every frame because
+      applyBarGeometry's programmatic scrollPosition sync fired the scrollbar onChange -> halt;
+      guarded with applyingBarGeometry (onChange acts only on real thumb drags). Glide now
+      self-sustains + settles. FEEL TUNE (bigger impulse/snappier) still open as polish.
+- [ ] 11b. (was 11) commit-log wheel scroll FEEL tune — bigger impulse, snappier decay; compare
       IMPULSES (not direct steps) after the per-region routing rework; tick self-sustaining; dt
       clamp unchanged; then tune FASTER (bigger impulse, snappier decay); compare 158ce95 feel;
       verify post-input glide cadence under tmux.
