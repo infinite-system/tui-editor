@@ -26,7 +26,7 @@ import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { displayColumn, lineWidth, graphemeAtDisplayColumn, graphemeToU16 } from '../editor/editor.coordinates';
 import { SelectableText } from './SelectableText';
 import { GitRows } from '../git/GitRows';
-import { GitLogRows } from '../git/git.log-rows';
+import { GitLogRows } from '../git/GitLogRows';
 import { ScrollbarGeometry } from './scrollbar-geometry';
 import { Logging } from '../system/Logging';
 

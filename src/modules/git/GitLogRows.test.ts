@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { GitLogRows, type ExpandedCommit } from './git.log-rows';
+import { GitLogRows, type ExpandedCommit } from './GitLogRows';
 import type { CommitRecord } from './GitParsers';
 
 const {

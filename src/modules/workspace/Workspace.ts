@@ -14,7 +14,7 @@ import { CommitExpansion } from '../git/CommitExpansion';
 import { GitPanel } from './GitPanel';
 import { addImpulse, stepMomentum, isMoving, AT_REST } from '../ui/scroll-momentum';
 import { GitRows } from '../git/GitRows';
-import { GitLogRows, type CommitLogRow } from '../git/git.log-rows';
+import { GitLogRows, type CommitLogRow } from '../git/GitLogRows';
 import { GitCommands } from '../git/GitCommands';
 import { Logging } from '../system/Logging';
 
