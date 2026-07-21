@@ -18,9 +18,9 @@ test('registry filters by query and runs the selected command', () => {
   const r = new CommandRegistry.Class();
   let ran = '';
   r.registerAll([
-    { id: 'a', title: 'File: Save', run: () => (ran = 'save') },
-    { id: 'b', title: 'Edit: Undo', run: () => (ran = 'undo') },
-    { id: 'c', title: 'View: Toggle Theme', run: () => (ran = 'theme') },
+    { id: 'a', title: 'File: Save', run: () => { ran = 'save'; } },
+    { id: 'b', title: 'Edit: Undo', run: () => { ran = 'undo'; } },
+    { id: 'c', title: 'View: Toggle Theme', run: () => { ran = 'theme'; } },
   ]);
   r.openPalette();
   expect(r.filtered.length).toBe(3);
