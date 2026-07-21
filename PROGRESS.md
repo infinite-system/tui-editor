@@ -4,33 +4,38 @@ Live status ledger for the autonomous build. Updated every turn so state survive
 compaction. **If you are resuming: read this, then `HANDOFF.md`, then continue at the first
 unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
-## RESUME HERE (frontier as of commit 79b14fc)
-- **State:** 10 module contracts · 96 tests pass · tsc green · checker 0 problems · end-to-end tmux
-  smoke ALL-PASS. codex modules git/markdown/lsp INTEGRATED. Editor rework done: reactive frame
-  (established), grapheme coordinate model, native-cursor caret, selection + clipboard (functional).
+## RESUME HERE (frontier as of commit a48c36b)
+- **State:** 11 module contracts · 110 tests pass · tsc green · checker 0 problems · end-to-end tmux
+  smoke ALL-PASS. codex modules git/markdown/lsp INTEGRATED. Editor rework: reactive frame
+  (established), grapheme coordinate model, native-cursor caret, selection + clipboard, selection
+  span-split LOGIC (`ui.selection.ts` + 12 unit tests — proven). **FrameProbe visual-observation
+  channel built + tested** (`TUI_FRAME_DUMP=1` → `artifacts/frame.json`, per-cell char/fg/bg/attrs).
+- **OBSERVATION TOOLING (answered):** `tmux capture-pane -e` is LOSSY for truecolor bg (verified —
+  even Box backgroundColors don't round-trip). Correct model: drive with tmux, assert STATE from
+  status.json (authoritative), assert VISUAL from the app's own render buffer via `FrameProbe`
+  (built). Only reach for a headless xterm emulator (xterm-headless / MS `tui-test`) to verify the
+  SGR *encoder* end-to-end — low priority. Frame-diff (before/after) isolates a change's cells with
+  no offset/color math — that's the gold-standard visual assertion.
+- **IMMEDIATE NEXT TASK — fix the selection RENDER bug (self-do, editor-core):** FrameProbe proved
+  the bg-chunk approach mis-positions — selection on doc line 2 paints near buffer row y=13, not the
+  cursor's content row (OpenTUI lays out bg chunks differently in a multi-line StyledText). The LOGIC
+  is fine; the integration is wrong. **Fix:** drive OpenTUI's NATIVE text selection instead of bg
+  chunks — `TextBufferRenderable.selectionBg`/`selectionFg` + `onSelectionChanged`, backed by
+  `TextBufferView.setLocalSelection(anchorX,anchorY,focusX,focusY,bgColor,fgColor)` (see
+  `node_modules/@opentui/core/text-buffer-view.d.ts` + `renderables/TextBufferRenderable.d.ts`). Map
+  the model `selectionRange()` to LOCAL text-buffer coords: account for the per-line gutter+marker
+  prefix (`"NN ▏"`) and the visible-window offset (`scrollTop`). Re-verify with a FrameProbe
+  before/after frame-diff asserting the shaded run lands on the cursor's content row at the selected
+  display columns. Keep `ui.selection.ts` if still useful, or retire it. Then promote the selection +
+  caret invariants toward established.
+- **Then, in order:** multi-workspace (WorkspaceManager + outer tabs + per-workspace snapshot
+  restore) → file search → piece-table undo.
 - **Verify the app end-to-end:** `bash scripts/smoke-editor.sh` (drives the real TUI via
   `scripts/tui-harness.sh`; asserts from `artifacts/status.json`). Harness verbs: launch/ready/
   settle/send/capture/status/field/kill (internal `sleep` works inside the invoked script).
   status.json fields: ready, frame (settle counter), renderQuiescent, activeWorkspace, activeBuffer,
   bufferRevision, dirty, cursor{line,col}, focus, treeRows, treeSelected, overlay, paletteQuery,
   paletteMatches, width, height, git*. Assert STATE from here; pane-capture for visual only.
-- **IMMEDIATE NEXT TASK — selection highlight render** in `src/modules/ui/RootView.ts`
-  `renderEditorStyled()`:
-  1. `const sel = ws.editor.cursor.selectionRange()` → `{start:{line,col}, end:{line,col}}` (grapheme
-     cols) or null.
-  2. For each visible line `lineNo`, if `sel` and `lineNo` in `[sel.start.line, sel.end.line]`,
-     the selected grapheme range on it is `startCol = lineNo===sel.start.line ? sel.start.col : 0`,
-     `endCol = lineNo===sel.end.line ? sel.end.col : graphemeCount(line)` (extend past EOL for
-     mid-selection lines if you want the newline shaded).
-  3. Split the line at `graphemeToU16(text, startCol/endCol)` (from `../editor/editor.coordinates`);
-     render the selected slice with a background. OpenTUI: check `node_modules/@opentui/core/lib/
-     styled-text.d.ts` — `StyleAttrs{fg,bg,bold,reverse}`; there are named helpers + likely a `bg`.
-     Simplest robust style = a `reverse:true` chunk over the selection (or `bg(selColor)(fg(fgColor)(t))`
-     if composable). First pass may drop syntax highlight on the selected slice; refine later.
-  4. Add a `selection` field to `publish()` in `Bootstrap.ts` (e.g. `hasSelection`, `selStart`,
-     `selEnd`) so the smoke can assert it. Then extend `scripts/smoke-editor.sh` with a
-     shift+Right → assert hasSelection=true step. Then promote the caret + selection invariants
-     (`ui.invariants.md` caret, `editor.invariants.md` selection) to `established`.
 - **Then, in order:** multi-workspace (WorkspaceManager + outer tabs + per-workspace snapshot
   restore) → file search → piece-table undo (replace the full-document snapshot undo) → M4 `diff`
   module + git sidebar UI + split editable-diff view → M5 lsp editor wiring (diagnostics render +
@@ -112,6 +117,6 @@ selection-highlight render in `RootView.renderEditorStyled()`, then re-smoke wit
 assertion and promote caret/selection invariants.
 
 ## Last commit
-79b14fc — Bootstrap editor keys → two switches (ctrl/non-ctrl); frame-effect invariant established.
-(Chain: 6cae817 markdown, f0f5334 lsp, b5cf988 git; editor rework 3b244b2 reactive frame,
-2a06da1 grapheme coordinates, e560996 native-cursor caret, d9a91b8 selection+clipboard.)
+a48c36b — Harden delegation (embed IBR+/invariants in codex preamble; hard compliance gate).
+(Chain: df9627d delegation standard, a462265 FrameProbe + selection-render-bug finding,
+06c55a6 selection highlight logic, 79b14fc two-switch keys / frame-effect established.)
