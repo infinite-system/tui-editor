@@ -94,6 +94,19 @@ export function buildRootView(
   const readPalette = () => theme.palette;
   const settings = settingsPanel.settings;
 
+  // OpenTUI captures a drag target only on the FIRST drag event, resolved at the pointer's CURRENT
+  // cell — so a thin (1-cell) grab strip is abandoned the instant the pointer moves off it and
+  // onMouseDrag never fires. Grabbing the capture explicitly on mousedown (via the same `_ctx` mouse
+  // context the tooltip masks addToHitGrid through) routes EVERY subsequent drag to that renderable
+  // regardless of where the pointer travels — the robust pattern for any thin divider/thumb. OpenTUI
+  // releases the capture itself on the up event (firing drag-end), so no manual clear is needed.
+  const captureDragTarget = (target: object): void => {
+    const withContext = target as {
+      _ctx?: { setCapturedRenderable?: (renderable: unknown) => void };
+    };
+    withContext._ctx?.setCapturedRenderable?.(target);
+  };
+
   // Sidebar↔editor width divider: a vertical SplitterModel in CELLS whose size IS the sidebar width,
   // bound to settings.sidebarWidth so a drag persists + live-applies. onSizeChange writes the setting.
   const sidebarSplitter = new SplitterModel.Class({
@@ -195,6 +208,7 @@ export function buildRootView(
   });
   let sidebarDividerHover = false;
   sidebarDivider.onMouseDown = (event) => {
+    captureDragTarget(sidebarDivider); // capture on down so a 1-cell divider survives the drag
     sidebarSplitter.size.value = settings.sidebarWidth.value; // anchor from the live width
     sidebarSplitter.beginDrag(event.x);
     renderer.requestRender();
