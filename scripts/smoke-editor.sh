@@ -53,6 +53,12 @@ chkne "selection range published" "$(f selection)"
 "$H" send "$S" Escape >/dev/null
 chk "selection cleared after Escape" "$(f hasSelection)" "false"
 
+echo "== mouse input path (real SGR click arrives) =="
+"$H" click "$S" 40 5 >/dev/null
+"$H" settle "$S" >/dev/null 2>&1
+mouse="$(f mouse)"
+if [ -n "$mouse" ] && [ "$mouse" != "null" ]; then echo "  PASS  mouse click registered ($mouse)"; else echo "  FAIL  mouse click did not register"; fail=1; fi
+
 echo "== command palette (Ctrl+P) =="
 "$H" send "$S" C-p >/dev/null
 chk "palette overlay" "$(f overlay)" "palette"

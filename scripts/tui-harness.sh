@@ -53,6 +53,15 @@ case "$cmd" in
     tmux send-keys -t "$session" "$@"
     sleep 0.25
     ;;
+  click)
+    # click <session> <x> <y> [button]  — send an SGR left-button press+release at 0-based (x,y).
+    # SGR mouse is 1-based, so add 1; the app reports the 0-based (x,y) back.
+    session="$1"; x="$2"; y="$3"; button="${4:-0}"
+    tmux send-keys -t "$session" -l "$(printf '\033[<%d;%d;%dM' "$button" "$((x+1))" "$((y+1))")"
+    sleep 0.1
+    tmux send-keys -t "$session" -l "$(printf '\033[<%d;%d;%dm' "$button" "$((x+1))" "$((y+1))")"
+    sleep 0.2
+    ;;
   capture)
     session="$1"
     tmux capture-pane -t "$session" -p

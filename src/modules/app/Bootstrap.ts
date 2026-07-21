@@ -36,7 +36,7 @@ export interface BootedApp {
 export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   Logging.Class.info('Boot start');
 
-  const renderer = await createCliRenderer({ exitOnCtrlC: false, targetFps: 30 });
+  const renderer = await createCliRenderer({ exitOnCtrlC: false, targetFps: 30, useMouse: true });
 
   Kernel.instance.seal();
   Kernel.instance.assertSealed();
@@ -52,10 +52,14 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
 
   const view = buildRootView(renderer, workspace, theme, commands);
 
+  // Last mouse event seen (for the observability side channel — proves the mouse path is live).
+  let lastMouse: { type: string; x: number; y: number; button: number } | null = null;
+
   // Publish model state to the observability side channel (read-only over model state).
   const publish = (): void => {
     const ed = workspace.editor;
     StatusChannel.Class.update({
+      mouse: lastMouse,
       activeWorkspace: workspace.name.value,
       workspaces: [workspace.name.value],
       activeBuffer: ed.hasDocument.value ? ed.document.path : null,
@@ -300,6 +304,18 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   };
   renderer.keyInput.on('keypress', onKey);
   app.onDispose(() => renderer.keyInput.off('keypress', onKey));
+
+  // Global mouse capture: events bubble to the root renderable. Records the last event to the
+  // status channel (verification) and repaints. Per-region handlers (tree, sidebar, dividers) are
+  // attached on their own renderables and run before this via propagation.
+  const onMouse = (event: { type: string; x: number; y: number; button: number }): void => {
+    lastMouse = { type: event.type, x: event.x, y: event.y, button: event.button };
+    paint();
+  };
+  renderer.root.onMouse = onMouse;
+  app.onDispose(() => {
+    if (renderer.root.onMouse === onMouse) renderer.root.onMouse = undefined;
+  });
 
   const onResize = (): void => {
     void render();
