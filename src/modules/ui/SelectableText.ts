@@ -4,10 +4,12 @@
 // `lastLocalSelection` (local text-buffer coords) and re-applies it via the protected
 // `refreshLocalSelection()` whenever content changes; we set that field and refresh.
 //
-// Coordinates are LOCAL to the rendered text buffer: x = display column, y = visual line index
-// within the currently-rendered window (the editor renders only the visible window, so
-// y = documentLine - scrollTop). The code buffer holds ONLY code (no gutter), so a multi-line
-// selection never shades a gutter.
+// Coordinates are viewport-local cells: x = display column, y = visual line index within the
+// currently-rendered window (the editor renders only the visible window, so y = documentLine -
+// scrollTop). TextBufferRenderable synchronizes its TextBufferView viewport in onResize();
+// setLocalSelection then adds that viewport's scroll offsets when resolving the cell to a text
+// offset. The code buffer holds ONLY code (no gutter), so a multi-line selection never shades a
+// gutter.
 import { TextRenderable } from '@opentui/core';
 
 export class SelectableText extends TextRenderable {

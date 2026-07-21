@@ -233,17 +233,7 @@ export function buildRootView(
       sel.end.line < top + vh
         ? displayColumn(ed.document.line(sel.end.line), sel.end.col)
         : lineWidth(ed.document.line(Math.min(top + vh - 1, ed.document.lineCount - 1)));
-    // NOTE: OpenTUI's setLocalSelection currently mis-maps our local (col,row) coords — a fixed
-    // (0,0,5,0) probe shaded y=5, x=28..46 in period-4 groups (a ~4x scale + offset), and a real
-    // selection on doc line N lands ~4N rows too low. The selection MODEL is correct (copy/cut/
-    // paste/select-all work); only this visual shading is affected. Gated OFF by default until the
-    // coordinate space setLocalSelection expects is pinned down (see ui.invariants.md). Verify a fix
-    // with the FrameProbe frame-diff (scripts + artifacts/frame.json).
-    if (process.env.TUI_SEL_RENDER === '1') {
-      codeBody.setSelectionRange(anchorX, anchorY, focusX, focusY);
-    } else {
-      codeBody.clearSelectionRange();
-    }
+    codeBody.setSelectionRange(anchorX, anchorY, focusX, focusY);
   }
 
   function renderStatus(): string {

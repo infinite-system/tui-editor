@@ -97,37 +97,37 @@ selection background, aligned to the model's `selectionRange()`, on the cursor's
 
 **Scope:** the editor code renderable in `RootView` (`SelectableText` + `applySelection`).
 
-**Mechanism (architecture — DONE):** the editor is split into a **gutter** renderable (line numbers
-+ current-line marker) and a **code** renderable (`SelectableText`, syntax only) so the code buffer
-holds no gutter — OpenTUI's native selection then never shades a gutter on a multi-line span, and
-code-local selection coords are pure display columns. `applySelection` maps the model
-`selectionRange()` into code-local coords (`x = displayColumn`, `y = docLine − scrollTop`, clamped to
-the visible window) and drives `SelectableText.setSelectionRange` →
-`TextBufferView.setLocalSelection`. Stands on *A cursor position resolves to three distinct
-coordinates* (editor) and *Selection is an anchor plus the cursor* (editor).
+**Mechanism:** the editor is split into a **gutter** renderable (line numbers + current-line marker)
+and a **code** renderable (`SelectableText`, syntax only) so the code buffer holds no gutter —
+OpenTUI's native selection then never shades a gutter on a multi-line span, and code-local selection
+coords are pure display columns. `applySelection` maps the model `selectionRange()` into
+viewport-local cells (`x = displayColumn`, `y = docLine − scrollTop`, clamped to the visible window)
+and drives `SelectableText.setSelectionRange` → `TextBufferView.setLocalSelection`
+(TextBufferRenderable syncs its view's viewport in `onResize`, so those coords resolve directly).
+Stands on *A cursor position resolves to three distinct coordinates* (editor) and *Selection is an
+anchor plus the cursor* (editor).
 
 **Generates:** a visible selection block that tracks the model; multi-line shading without touching
 the gutter.
 
-**BLOCKED — OpenTUI coordinate mismatch (found by FrameProbe 2026-07-21):** `setLocalSelection`
-does NOT interpret coords as the local cell grid. A fixed `(0,0,5,0)` probe (select first 5 cols of
-row 0) shaded `y=5, x=28..46` in period-4 groups (a ~4× scale + offset); a real selection on doc
-line N lands ~`5 + 4N` rows too low. The visual shading is therefore **gated OFF by default**
-(`TUI_SEL_RENDER=1` to experiment) so we ship no highlight rather than a mis-placed one. The
-selection MODEL is unaffected and fully working (copy/cut/paste/select-all, `hasSelection`,
-`selectionRange`). **Next:** pin down the coordinate space `setLocalSelection` expects (likely a
-viewport/`setViewport`/`setFirstLineOffset` or a logical-vs-visual-line issue) using the FrameProbe
-frame-diff; the gutter/code split + `SelectableText` are the right substrate and stay.
+**Evidence:** VERIFIED by FrameProbe frame-diff (`TUI_FRAME_DUMP=1`). Selection on doc line 3, cols
+[1,4) → exactly 3 contiguous bg-changed cells on buffer row **y=4** (line 3's content row), x=38..40
+in the code area, bg `95,95,95,255`, no gutter cells; multi-line selection spans rows 4–5. The
+earlier "~4× scale/offset" was NOT a render bug — it was a FrameProbe defect (it read `bg` as one
+value per cell; OpenTUI stores fg/bg as FOUR Uint16 RGBA lanes per cell, so stride-1 reads aliased
+one cell's change across four). FrameProbe now decodes 4 lanes (`FrameProbe.read`, regression-tested
+in `FrameProbe.test.ts`); the native selection was correctly positioned all along. Confirmed
+independently by a scoped codex worker (cross-check).
 
-**Impossible if true (once unblocked):** a shaded range that disagrees with `selectionRange()`; a
-multi-line selection that shades the gutter; a highlight offset from the cursor's content row.
+**Impossible if true:** a shaded range that disagrees with `selectionRange()`; a multi-line selection
+that shades the gutter; a highlight offset from the cursor's content row.
 
-**Verification:** FrameProbe frame-diff (before/after a selection; the changed `bg` cells must land
-on the cursor's content row at the selected display columns — the frame-diff is noise-free, proven
-by a no-action control). Selection MODEL: `scripts/smoke-editor.sh` (Shift+Right → `hasSelection`,
-Escape clears) + editor unit tests.
+**Verification:** FrameProbe frame-diff (before/after a selection; the changed `bg` cells land on the
+cursor's content row at the selected display columns — noise-free, proven by a no-action control).
+Selection MODEL: `scripts/smoke-editor.sh` (Shift+Right → `hasSelection`, Escape clears) + editor
+unit tests.
 
-**Status:** provisional (blocked on the OpenTUI coordinate mismatch; model works, visual gated off)
+**Status:** established
 
 **Last refined:** 2026-07-21
 

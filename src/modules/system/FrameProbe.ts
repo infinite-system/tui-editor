@@ -10,8 +10,11 @@ import { Static } from './Static';
 export interface FrameRow {
   y: number;
   text: string;
-  bg: number[];
-  fg: number[];
+  // Per cell: `"r,g,b,a"`. OpenTUI stores fg/bg as FOUR Uint16 lanes per cell (RGBA), not one —
+  // so a per-cell colour is 4 lanes joined. Equality/diff on these strings is what visual
+  // assertions need (a stable per-cell key), without decoding to a real colour.
+  bg: string[];
+  fg: string[];
   attrs: number[];
 }
 
@@ -51,17 +54,18 @@ class $FrameProbe {
     const rows: FrameRow[] = [];
     for (let y = 0; y < height; y++) {
       let text = '';
-      const bgRow: number[] = [];
-      const fgRow: number[] = [];
+      const bgRow: string[] = [];
+      const fgRow: string[] = [];
       const attrRow: number[] = [];
       for (let x = 0; x < width; x++) {
-        const i = y * width + x;
+        const cell = y * width + x; // char/attributes: 1 lane per cell
+        const c4 = cell * 4; // fg/bg: 4 Uint16 lanes (r,g,b,a) per cell
         // `char` packs metadata (glyph width) in high bits; the codepoint is the low 21 bits.
-        const cp = (char[i] ?? 0) & 0x1fffff;
+        const cp = (char[cell] ?? 0) & 0x1fffff;
         text += cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : ' ';
-        bgRow.push(bg[i] ?? 0);
-        fgRow.push(fg[i] ?? 0);
-        attrRow.push(attributes[i] ?? 0);
+        bgRow.push(`${bg[c4] ?? 0},${bg[c4 + 1] ?? 0},${bg[c4 + 2] ?? 0},${bg[c4 + 3] ?? 0}`);
+        fgRow.push(`${fg[c4] ?? 0},${fg[c4 + 1] ?? 0},${fg[c4 + 2] ?? 0},${fg[c4 + 3] ?? 0}`);
+        attrRow.push(attributes[cell] ?? 0);
       }
       rows.push({ y, text: text.replace(/\s+$/, ''), bg: bgRow, fg: fgRow, attrs: attrRow });
     }
