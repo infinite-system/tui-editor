@@ -45,6 +45,16 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
         fast-scroll modifier+multiplier, scrollbar thickness (default = D's averaged constant), glyph mode
         (auto/nerd/unicode/ascii), theme/palette, word-wrap. Migrate E's ceiling into a DEFAULT the panel overrides.
 
+- [x] Cmd+Left/Right → line-start/line-end (user QA). Already bound (mac overlay super forms + Home/End
+      + Ctrl+Home/End doc-start/end); this was a VERIFICATION task. Driven+confirmed: Home→col 0,
+      End→line-end, and the escape sequences mac terminals emit for Cmd+arrow — `\e[H`/`\eOH`→col 0,
+      `\e[F`/`\eOF`→line-end (OpenTUI parses them to home/end). Cmd works via terminal Home/End
+      translation; super-field path wired (untestable on Linux); Home/End the canonical fallback.
+- [ ] SYMLINK node_modules ignore-robustness (LOW priority, defensive): a top-level `node_modules`/`.git`
+      that is a SYMLINK isn't matched by the `node_modules/` (dir) gitignore pattern, so it surfaces as
+      `?? node_modules` in the demo worktree. Make the watcher-skip AND panel-hide treat a top-level
+      node_modules/.git as ignored whether dir or symlink (match the name); keep git's ignore semantics
+      for everything else. Verify in a symlinked-node_modules worktree (panel omits it, no watch through it).
 - [x] GIT LIVE-REFRESH BUG (user, priority): the git panel ignored EXTERNAL working-tree changes.
       Root cause: GitWatcher existed + passed its own tests but was NEVER wired (built-but-unwired —
       its isolated tests were green precisely because they never checked the app uses it). FIX: wired

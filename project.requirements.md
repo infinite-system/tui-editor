@@ -43,6 +43,10 @@ NOTHING decided is lost across compaction or a cold restart, and so EVERY spawne
 - Native horizontal tilt (66/67) is not forwarded by the user's terminal.
 - Fast-scroll modifier [F]: AWAITING the user's `cat -v` capture. The setting is present; default it
   UNSET until the confirmed key + SGR code is relayed.
+- Cmd+Left/Right → line-start/line-end: WORKS via the terminal's Home/End translation. Driven +
+  confirmed: `\e[H`/`\eOH` → col 0, `\e[F`/`\eOF` → line-end (OpenTUI parses these to home/end →
+  editor.lineStart/lineEnd). The mac overlay also has the kitty `super`-field forms (Cmd as super),
+  untestable on Linux but wired. Home/End keys are the always-working canonical fallback (verified).
 
 ## Behavioural requirements
 - RESPECT `.gitignore` in BOTH the git panel display AND the GitWatcher recursion — never
