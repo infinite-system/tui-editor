@@ -1,0 +1,109 @@
+// A virtualized, reactive window over a repository's commit history. Holds only a sparse cache of
+// the commits near the visible window (never the whole 10k+ log), fetched in batched pages and
+// evicted outside a keep-margin. Realizes "cost tracks the actively observed set" and, like the
+// rest of the git module, "only the newest request mutates state" (stale supersession).
+//
+// The page fetch is injectable (constructor `fetch`) so the windowing/caching logic is unit-testable
+// with no git; the default fetch shells out via GitCommands + parseLog.
+import { Reactive } from 'ivue';
+import { ref, shallowRef } from 'vue';
+import { GitCommands } from './GitCommands';
+import { parseLog, type CommitRecord } from './git.parsers';
+import { missingRanges, evictable } from './git.window';
+
+export type CommitPageFetch = (skip: number, limit: number) => Promise<CommitRecord[]>;
+
+export interface CommitLogOptions {
+  branch?: string;
+  fetch?: CommitPageFetch;
+}
+
+class $CommitLog {
+  constructor(
+    readonly cwd: string,
+    readonly options: CommitLogOptions = {},
+  ) {}
+
+  // Late-read dependency (never snapshot at construction).
+  protected get GitCommands() {
+    return GitCommands.Class;
+  }
+
+  // invariant: Cost tracks the actively observed set (project.invariants.md)
+  // Sparse cache: commit index -> record. Identity is replaced on every write so observers re-run.
+  get cache() {
+    return shallowRef(new Map<number, CommitRecord>());
+  }
+
+  // One past the last existing commit once discovered (a short page marks the end); Infinity until.
+  get knownEnd() {
+    return ref(Number.POSITIVE_INFINITY);
+  }
+
+  // Stale-supersession token — only the newest ensureRange may mutate state.
+  private loadId = 0;
+
+  get loadedCount(): number {
+    return this.cache.value.size;
+  }
+
+  /** Records for `[start, start+count)`; `undefined` = not yet loaded (render a placeholder row). */
+  rows(start: number, count: number): (CommitRecord | undefined)[] {
+    const c = this.cache.value; // subscribe
+    const out: (CommitRecord | undefined)[] = [];
+    for (let i = start; i < start + count; i++) out.push(i >= 0 ? c.get(i) : undefined);
+    return out;
+  }
+
+  /** Fetch one page `[skip, skip+limit)`. Overridable via constructor `fetch` (tests inject a fake). */
+  protected async fetchPage(skip: number, limit: number): Promise<CommitRecord[]> {
+    if (this.options.fetch) return this.options.fetch(skip, limit);
+    const result = await this.GitCommands.log({ cwd: this.cwd, branch: this.options.branch, skip, limit });
+    if (result.code !== 0) return [];
+    return parseLog(result.stdout);
+  }
+
+  // invariant: Only the newest Git request mutates state (src/modules/git/git.invariants.md)
+  /**
+   * Ensure `[start, count)` is present: fetch only the missing contiguous ranges (batched, not one
+   * call per row), evict cache entries outside the keep-margin, and — since a stale fetch is
+   * discarded — never let an out-of-date page overwrite newer state.
+   */
+  async ensureRange(start: number, count: number, keepMargin = count): Promise<void> {
+    const id = ++this.loadId;
+    const gaps = missingRanges(new Set(this.cache.value.keys()), start, count);
+    for (const { offset, length } of gaps) {
+      const page = await this.fetchPage(offset, length);
+      if (id !== this.loadId) return; // superseded by a newer ensureRange — discard
+      const next = new Map(this.cache.value);
+      page.forEach((rec, k) => next.set(offset + k, rec));
+      if (page.length < length) this.knownEnd.value = offset + page.length; // reached the end
+      this.cache.value = next;
+    }
+    this.evict(start, count, keepMargin);
+  }
+
+  private evict(start: number, count: number, margin: number): void {
+    const keepStart = Math.max(0, start - margin);
+    const keepCount = count + margin * 2;
+    const drop = evictable(this.cache.value.keys(), keepStart, keepCount);
+    if (drop.length === 0) return;
+    const next = new Map(this.cache.value);
+    for (const i of drop) next.delete(i);
+    this.cache.value = next;
+  }
+
+  /** Drop everything (e.g. after a commit/refresh changes history). */
+  reset(): void {
+    this.loadId++;
+    this.cache.value = new Map();
+    this.knownEnd.value = Number.POSITIVE_INFINITY;
+  }
+}
+
+export namespace CommitLog {
+  export const $Class = $CommitLog;
+  export let Class = Reactive($Class);
+  export type Model = InstanceType<typeof Class>;
+  export type Instance = typeof Class.Instance;
+}
