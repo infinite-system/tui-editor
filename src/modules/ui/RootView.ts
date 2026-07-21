@@ -550,82 +550,173 @@ export function buildRootView(
     return { rowIndex, column: displayColumn(lineText, column) - (segment?.startDisplayColumn ?? 0) };
   }
 
-  // Tab-bar hit map (cell spans per tab), rebuilt each render so a click maps x -> tab / close glyph.
-  let tabHitTargets: Array<{ startColumn: number; endColumn: number; closeColumn: number; index: number }> = [];
+  // The editor tab bar. ONE geometry source: a layout pass produces positioned SEGMENTS that BOTH the
+  // renderer and the click/hover hit-test consume — so a drawn cell and its hit-rect can never
+  // disagree (the arrows-not-clickable bug was exactly that mismatch). Tabs fill from the left; the
+  // overflow arrows pin to the RIGHT edge. Three visual states per target: idle → hover → pressed.
+  type TabBarSegment =
+    | { kind: 'tab'; index: number; start: number; end: number; closeColumn: number }
+    | { kind: 'arrowLeft' | 'arrowRight'; start: number; end: number };
+  let tabBarSegments: TabBarSegment[] = [];
+  let tabBarWindow = { startIndex: 0, endIndex: 0 };
+  // Hover/press state (view-only), driven by tab-bar mouse move/press.
+  let tabBarHover: { kind: 'tab' | 'close' | 'arrowLeft' | 'arrowRight'; index: number } | null = null;
+  let tabBarArrowPressed: 'arrowLeft' | 'arrowRight' | null = null;
 
-  // The editor tab bar: one row of open-buffer tabs (name + dirty dot + close ✕; active highlighted).
-  // WHOLE-TAB windowing keeps the active tab visible when the strip overflows (no mid-tab slice); a
-  // ‹ / › marker shows there are more tabs off that edge. View-only — never touches a live document.
   function renderTabBar(): StyledText {
     const palette = readPalette();
     const tabs = workspace.buffers.tabs();
-    tabHitTargets = [];
+    tabBarSegments = [];
     if (tabs.length === 0) return new StyledText([fg(palette.dim)('  no open files')]);
     const barWidth = Math.max(1, tabBar.width as number);
 
-    // Measure each tab: label ' name ●|␠ ' + close '✕' + trailing separator ' '.
+    // Each tab lays out as ` name <dirty> ✕ ` — the ✕ has a space BEFORE and AFTER so it is never
+    // flush against the tab edge, and the padding is identical regardless of label length.
     const measured = tabs.map((tab) => {
-      const label = ` ${Files.Class.basename(tab.path)} ${tab.dirty ? '●' : ' '} `;
-      const labelWidth = lineWidth(label);
-      return { tab, label, labelWidth, width: labelWidth + 2 }; // + close glyph + separator
+      const name = Files.Class.basename(tab.path);
+      const labelWidth = 1 + lineWidth(name) + 1 + 1 + 1; // ' ' + name + ' ' + dirtyGlyph + ' '
+      return { tab, name, labelWidth, width: labelWidth + 2 }; // + '✕' + trailing ' '
     });
+    const totalWidth = measured.reduce((sum, entry) => sum + entry.width, 0);
 
-    // Choose a window of whole tabs that fits barWidth and always includes the active tab.
+    // Overflow → reserve the right edge for the two arrows ` ‹ › `; tabs use the remaining width.
+    const overflow = totalWidth > barWidth;
+    const arrowsWidth = overflow ? 5 : 0; // ' ‹ › '
+    const tabsAreaWidth = Math.max(1, barWidth - arrowsWidth);
+
+    // Whole-tab window that fits tabsAreaWidth and always includes the active tab.
     const activeIndex = tabs.findIndex((tab) => tab.active);
     let startIndex = 0;
     const activeEntry = activeIndex >= 0 ? measured[activeIndex] : undefined;
-    if (activeEntry) {
+    if (overflow && activeEntry) {
       let usedWidth = activeEntry.width;
       startIndex = activeIndex;
       while (startIndex > 0) {
-        const previousEntry = measured[startIndex - 1];
-        if (!previousEntry || usedWidth + previousEntry.width > barWidth) break;
+        const previous = measured[startIndex - 1];
+        if (!previous || usedWidth + previous.width > tabsAreaWidth) break;
         startIndex -= 1;
-        usedWidth += previousEntry.width;
+        usedWidth += previous.width;
       }
     }
 
     const chunks: TextChunk[] = [];
     let column = 0;
-    if (startIndex > 0) {
-      chunks.push(fg(palette.dim)('‹'));
-      column += 1;
-    }
     let endIndex = startIndex;
     for (let index = startIndex; index < measured.length; index += 1) {
       const entry = measured[index];
-      if (!entry) break;
-      const { tab, label, labelWidth } = entry;
-      if (column + labelWidth + 2 > barWidth) break; // whole-tab clip at the right edge
-      const startColumn = column;
-      const paintLabel = tab.active
-        ? (text: string) => bg(palette.selection)(fg(palette.fg)(text))
-        : (text: string) => fg(palette.dim)(text);
-      chunks.push(paintLabel(label));
-      column += labelWidth;
+      if (!entry || column + entry.width > tabsAreaWidth) break;
+      const isActive = entry.tab.active;
+      const isTabHover = tabBarHover?.kind === 'tab' && tabBarHover.index === index;
+      const isCloseHover = tabBarHover?.kind === 'close' && tabBarHover.index === index;
+      const rowBackground = isActive ? palette.selection : isTabHover ? palette.cursorLine : null;
+      const labelColor = isActive ? palette.fg : palette.dim;
+      const paint = (text: string, color: string) =>
+        rowBackground ? bg(rowBackground)(fg(color)(text)) : fg(color)(text);
+      const start = column;
+      chunks.push(paint(` ${entry.name} `, labelColor));
+      chunks.push(paint(entry.tab.dirty ? '●' : ' ', isActive ? palette.warning : palette.accent));
+      chunks.push(paint(' ', labelColor));
+      column += entry.labelWidth;
       const closeColumn = column;
-      chunks.push(tab.active ? bg(palette.selection)(fg(palette.warning)('✕')) : fg(palette.dim)('✕'));
+      const closeColor = isCloseHover ? palette.warning : labelColor;
+      const closeBackground = isCloseHover ? palette.selection : rowBackground;
+      chunks.push(closeBackground ? bg(closeBackground)(fg(closeColor)('✕')) : fg(closeColor)('✕'));
       column += 1;
-      chunks.push(fg(palette.border)(' '));
+      chunks.push(paint(' ', labelColor)); // trailing pad — ✕ never touches the edge
       column += 1;
-      tabHitTargets.push({ startColumn, endColumn: column, closeColumn, index });
+      tabBarSegments.push({ kind: 'tab', index, start, end: column, closeColumn });
       endIndex = index + 1;
     }
-    if (endIndex < measured.length) chunks.push(fg(palette.dim)('›'));
+    tabBarWindow = { startIndex, endIndex };
+
+    // Fill the gap between the last tab and the arrows.
+    while (column < tabsAreaWidth) {
+      chunks.push(fg(palette.fg)(' '));
+      column += 1;
+    }
+
+    if (overflow) {
+      // ` ‹ › ` pinned right — idle/hover/pressed, disabled (border colour) when there is nothing
+      // further that way. Hit-rects are recorded at the SAME columns the glyphs are drawn.
+      const paintArrow = (which: 'arrowLeft' | 'arrowRight', enabled: boolean, glyph: string) => {
+        const pressed = tabBarArrowPressed === which && enabled;
+        const hover = tabBarHover?.kind === which && enabled;
+        const color = !enabled ? palette.border : pressed ? palette.accent : hover ? palette.fg : palette.dim;
+        const background = pressed ? palette.selection : hover ? palette.cursorLine : null;
+        return background ? bg(background)(fg(color)(glyph)) : fg(color)(glyph);
+      };
+      chunks.push(fg(palette.fg)(' '));
+      column += 1;
+      const leftStart = column;
+      chunks.push(paintArrow('arrowLeft', startIndex > 0, '‹'));
+      column += 1;
+      tabBarSegments.push({ kind: 'arrowLeft', start: leftStart, end: column });
+      chunks.push(fg(palette.fg)(' '));
+      column += 1;
+      const rightStart = column;
+      chunks.push(paintArrow('arrowRight', endIndex < measured.length, '›'));
+      column += 1;
+      tabBarSegments.push({ kind: 'arrowRight', start: rightStart, end: column });
+      chunks.push(fg(palette.fg)(' '));
+    }
     return new StyledText(chunks);
   }
 
-  // Tab-bar click: the ✕ cell closes the tab (dirty → confirm), anywhere else on the tab activates it.
-  // Coords are absolute; subtract the bar's laid-out x (no border) to get the local column.
+  // Resolve a local column to a tab-bar segment (shared by click + hover — one geometry source).
+  function tabBarSegmentAt(localColumn: number): TabBarSegment | null {
+    return tabBarSegments.find((segment) => localColumn >= segment.start && localColumn < segment.end) ?? null;
+  }
+
+  // Left arrow scrolls the strip toward earlier tabs (activate the tab just before the window),
+  // right arrow toward later tabs — positional, so the active buffer maps 1:1 to the visible order.
+  function scrollTabsLeft(): void {
+    if (tabBarWindow.startIndex > 0) workspace.activateTab(tabBarWindow.startIndex - 1);
+  }
+  function scrollTabsRight(): void {
+    if (tabBarWindow.endIndex < workspace.buffers.count) workspace.activateTab(tabBarWindow.endIndex);
+  }
+
   tabBar.onMouseDown = (event) => {
     tooltip.clear();
     const localColumn = event.x - (tabBar.x as number);
-    const target = tabHitTargets.find(
-      (hit) => localColumn >= hit.startColumn && localColumn < hit.endColumn,
-    );
-    if (!target) return;
-    if (localColumn === target.closeColumn) workspace.requestCloseTab(target.index);
-    else workspace.activateTab(target.index);
+    const segment = tabBarSegmentAt(localColumn);
+    if (!segment) return;
+    if (segment.kind === 'tab') {
+      if (localColumn === segment.closeColumn) workspace.requestCloseTab(segment.index);
+      else workspace.activateTab(segment.index);
+    } else {
+      tabBarArrowPressed = segment.kind; // pressed colour shows until release
+      if (segment.kind === 'arrowLeft') scrollTabsLeft();
+      else scrollTabsRight();
+      renderer.requestRender();
+    }
+  };
+  tabBar.onMouseUp = () => {
+    if (tabBarArrowPressed) {
+      tabBarArrowPressed = null;
+      renderer.requestRender();
+    }
+  };
+  tabBar.onMouseMove = (event) => {
+    const localColumn = event.x - (tabBar.x as number);
+    const segment = tabBarSegmentAt(localColumn);
+    let next: typeof tabBarHover = null;
+    if (segment?.kind === 'tab') {
+      next = { kind: localColumn === segment.closeColumn ? 'close' : 'tab', index: segment.index };
+    } else if (segment) {
+      next = { kind: segment.kind, index: -1 };
+    }
+    if (JSON.stringify(next) !== JSON.stringify(tabBarHover)) {
+      tabBarHover = next;
+      renderer.requestRender();
+    }
+  };
+  tabBar.onMouseOut = () => {
+    if (tabBarHover || tabBarArrowPressed) {
+      tabBarHover = null;
+      tabBarArrowPressed = null;
+      renderer.requestRender();
+    }
   };
 
   // Builds the visible window as two aligned StyledTexts — the gutter (line numbers + current-line

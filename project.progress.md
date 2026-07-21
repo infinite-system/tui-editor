@@ -25,6 +25,33 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       0→23 with selection at 0; click a visible row keeps scrollTop 23 and opens the clicked file.
       Locked: 4 FileTree unit tests + scripts/smoke-tree-scroll.sh (ALL-PASS).
 
+- [ ] QA-BATCH (scroll/scrollbar/glyph/settings — user, approved). Reuse scrollbar-geometry; verify by
+      DRIVING; tsc-green gate. Items:
+  - [ ] A. Tooltip CENTERED horizontally over the cursor/anchor (midpoint aligns to cursor column),
+        still above-by-default with the near-top flip + h-clamp (3ec106d).
+  - [ ] B. Glyph ladder (merge w/ #10): nerd→unicode→ascii glyphs for checkbox CHECKMARK + git status
+        MODIFIED/DELETED/ADDED/UPDATED + the o/d/+ action buttons. Keep in the theme; degrade cleanly.
+  - [ ] C. Scrollbars on EVERY overflowing pane, BOTH axes (git commits + files + all): vertical AND
+        horizontal when that axis overflows; inertia; draggable thumb + click-to-page; via scrollbar-geometry.
+  - [ ] D. UNIFY scrollbar thickness: vertical & horizontal same; for now = average of the two current
+        thickness values, one hardcoded constant everywhere (later a setting).
+  - [ ] E. Higher vertical fling ceiling (again) — much faster hard fling; keep decel + gentle precision
+        + One-Writer halt. (In flight: VERTICAL_MOMENTUM profile.)
+  - [ ] F. Fast-scroll MODIFIER (velocity/step multiplier on top of E), modifier read from SETTINGS
+        (not hardwired — Ctrl+wheel is terminal-swallowed like shift; awaiting user's confirmed key+SGR).
+  - [ ] G. SETTINGS PANEL (approved): reactive settings.json (~/.config/fable/ + project override),
+        ivue reactive state so changes LIVE-APPLY (no restart); Ctrl+, opens it as a pane. Seeds: scroll
+        physics (fling ceiling/accel/friction/lines-per-notch), h-scroll modifier (default Option/Meta),
+        fast-scroll modifier+multiplier, scrollbar thickness (default = D's averaged constant), glyph mode
+        (auto/nerd/unicode/ascii), theme/palette, word-wrap. Migrate E's ceiling into a DEFAULT the panel overrides.
+
+- [x] TAB-BAR QA (user): arrows CLICKABLE + pinned at the RIGHT edge (single geometry source shared by
+      render + hit-test, so draw pos and hit-rect can't disagree); Ctrl+PageDown/PageUp cycle is
+      DETERMINISTIC positional (advance one, wrap; active index maps 1:1 to visible order); close ✕ has
+      consistent padding (never flush); tab hover-highlight + close-hover + arrow idle/hover/pressed
+      states, all from the palette. Driven+confirmed: right-arrow click 0→5, cycle 7→0 wrap, hover bg
+      change. Lock: scripts/smoke-tabs.sh (ALL-PASS).
+
 - [x] 1. All-scrollbars geometry audit — ONE source (scrollbar-geometry.ts) + visibility predicate
       + 17 property tests + FrameProbe sweep; log-bar alignment FIXED, phantom tree bar FIXED,
       range-reaches-end FIXED (5984766, c679dad). Remaining: fold the sweep into the smoke.
