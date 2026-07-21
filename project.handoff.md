@@ -5,8 +5,21 @@ Files on disk survive context compaction; this file + `project.progress.md` are 
 
 ## RESUME ANCHOR — 2026-07-21 (compaction checkpoint) — FULL-POWER build in flight
 
-- **HEAD 3451999** · tree clean · tsc + conventions-gate PASS · **0 workers in flight** (the conductor-*
-  worktrees are the COORDINATOR's, not mine — see adoption queue).
+- **2 INVARIANTS WORKERS IN FLIGHT (mine, spawned post-checkpoint):** general-purpose agents bootstrapping
+  `src/modules/theme/theme.invariants.md` (agent a30a1f3d79bafd368) + `src/modules/commands/commands.invariants.md`
+  (agent ade4f0f8fa08ff9fb). They write the invariants.md + code annotations + run check_invariants.mjs;
+  they do NOT commit or touch scripts/. **ON RESUME:** look for their UNCOMMITTED output (theme.invariants.md
+  / commands.invariants.md + `// invariant:` annotations in those modules); REVIEW for LOAD-BEARING quality
+  (reject decorative — each needs a real Impossible-if-true); run `node .claude/skills/invariants/scripts/
+  check_invariants.mjs --all --refs` (0 problems); then REMOVE that module from ALLOWLIST_NAMES in
+  scripts/check-map-coherence.sh + verify `bash scripts/check-map-coherence.sh` PASS; commit crediting the
+  agent. If output is missing/sub-par, redo or re-spawn. Continue-an-agent via SendMessage(to: <agentId>).
+- **🔴 HIGH-PRIORITY: render-pump FREEZE resilience** — see project.progress.md top ("HIGH-PRIORITY
+  ROBUSTNESS BUG"). An unhandled exception in a frame/input handler stalled the demand-driven loop → froze.
+  Wrap onFrame + reactive paint + input handlers in try/catch (log to file, NOT TTY, keep loop alive) +
+  gated contract. Do EARLY.
+- **HEAD (docs commit follows this)** · tsc + conventions-gate PASS · adoption + freeze + invariants-review
+  are the resume queue.
 - **THE GOVERNING PRINCIPLE:** the PRODUCT NORTH STAR in `project.requirements.md` (learnable in ~15 min,
   zero prior knowledge, kid-to-grandpa) — the acceptance lens on EVERY UI feature + its 3 proxy gates
   (click/tooltip/palette-shortcuts completeness). Read it FIRST for any UI work.

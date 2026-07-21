@@ -189,6 +189,30 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   keybindings · destructive ops need confirmation · authoritative-channel verification · delegation
   = full-parity packet, worktree/disjoint isolation, IBR+invariants embedded.
 
+## 🔴 HIGH-PRIORITY ROBUSTNESS BUG — render-pump FREEZE (do EARLY; a freeze hard-violates the north star)
+
+**Symptom (user's COMPILED binary from 713623f, HAS today's fixes): the app FROZE.** Main diagnosed the
+process ALIVE, 0% CPU, sleeping in ep_poll — NOT crashed/spinning/deadlocked. → a DEMAND-DRIVEN
+RENDER-PUMP STALL: a frame or input handler threw an UNHANDLED exception (printed to the TTY, garbling the
+display) and the demand-driven loop did not recover → stopped requesting frames → never repaints → frozen.
+
+**FIX (resilience — ONE bad frame must NEVER freeze the app):**
+1. WRAP the frame/render callback (Bootstrap onFrame + the reactive paint effect) AND every input-event
+   handler (renderer.keyInput 'keypress' onKey; the renderable onMouse* handlers) in try/catch — a thrown
+   error degrades ONE frame (log + continue), it does NOT kill the pump. After a caught error, KEEP THE
+   LOOP ALIVE (requestRender / reschedule) so the app stays responsive.
+2. Errors go to a LOG FILE (reuse Logging.Class / StatusChannel), NEVER to the TTY/stderr while the TUI
+   owns the screen (stderr currently corrupts the display). Route/guard the process-level handlers too.
+3. GATED CONTRACT (ratchet, add to behavioral-contracts.sh): "a thrown exception in a frame or input
+   handler degrades that frame + is logged, but the render loop keeps running and the app stays
+   responsive — a single error never freezes the editor." Driven test: inject a handler that throws (an
+   env-gated test hook), send input, assert the frame counter ADVANCES on the next input (still repaints)
+   + the error is in the LOG not on screen.
+4. This makes the immediate-layer / one-writer resilience REAL: the immediate render layer must survive a
+   failing handler. Root-cause the SPECIFIC trigger too (coordinator asking the user what they did) — but
+   the resilience fix is correct regardless + turns a freeze into a logged blip.
+Priority: HIGH — do after adopting the ready queue but before the longer tail; a freeze is the worst UX.
+
 ## FULL-POWER BLOCK (user greenlit everything, 2026-07-21) — priority order
 
 **PRIORITY (search suite + discoverability; RootView integration = mine, conductor feeds capabilities):**
