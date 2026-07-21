@@ -1,6 +1,6 @@
 # Implementation Plan — Fable TUI Code Workspace
 
-Governing spec: [`FABLE_TUI_EDITOR_BUILD_BRIEF_FINAL.md`](./FABLE_TUI_EDITOR_BUILD_BRIEF_FINAL.md).
+Governing spec: [`project.brief.md`](./project.brief.md).
 Governing method: IBR + the `/invariants` skill. This document is the build plan; the
 enforceable contracts live in `project.invariants.md`, `project.lattice.md`, and each
 module's colocated `<module>.invariants.md`.

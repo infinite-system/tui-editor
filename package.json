@@ -16,6 +16,15 @@
     "web-tree-sitter": "^0.26.11"
   },
   "scripts": {
-    "build:prod": "bun build --compile --minify --external web-tree-sitter src/main.ts --outfile dist/fable"
+    "start": "bun src/main.ts .",
+    "dev": "bun src/main.ts",
+    "build": "bun build --compile --minify --external web-tree-sitter src/main.ts --outfile dist/fable",
+    "build:prod": "bun run build",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "gate": "bash scripts/merge-gate.sh",
+    "contracts": "bash scripts/behavioral-contracts.sh",
+    "smoke": "bash scripts/smoke-editor.sh",
+    "check": "bash scripts/conventions-gate.sh"
   }
 }

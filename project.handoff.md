@@ -21,7 +21,7 @@ Files on disk survive context compaction; this file + `project.progress.md` are 
 
 ## What this is
 A terminal code workspace on Bun + ivue + OpenTUI + Tree-sitter + git, built to
-`FABLE_TUI_EDITOR_BUILD_BRIEF_FINAL.md`, governed by the IBR `/invariants` method.
+`project.brief.md`, governed by the IBR `/invariants` method.
 
 ## Your role
 Sole builder + governor. You own the critical editor core and ALL review/integration/verification.

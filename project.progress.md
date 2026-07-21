@@ -116,7 +116,7 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       for a stale build; it was not a false-green in shipped code. The real gap it exposed — that
       quiescence was measured-once, not enforced-always — is now closed by the smoke assertion.
       BUILD TARGET: `bun run build:prod` -> dist/fable standalone (--external web-tree-sitter unblocks
-      --compile; lazy wasm never fires as tree-sitter is unwired; BUILD.md documents run modes +
+      --compile; lazy wasm never fires as tree-sitter is unwired; project.build.md documents run modes +
       the ship-wasm-when-wired follow-up) (bae00b7). Worker D's project.performance-baselines.md folds in on
       merge (its idle numbers are the stale pre-fix build; other metrics — RSS itemization, lifecycle,
       latency-at-30fps — stand and should be re-measured on current HEAD). — 10s at-rest assertion (frame delta 0, CPU ~0; 14% live
