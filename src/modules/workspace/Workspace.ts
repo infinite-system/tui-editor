@@ -4,21 +4,29 @@
 //
 // invariant: Workspace and file navigation are separate layers (workspace.invariants.md)
 import { Reactive } from 'ivue';
-import { ref } from 'vue';
+import { ref, shallowRef } from 'vue';
 import { FileTree } from './FileTree';
 import { Editor } from '../editor/Editor';
 import { Files } from '../system/Files';
+import { GitRepository } from '../git/GitRepository';
+import { CommitLog } from '../git/CommitLog';
+import { GitPanel } from './GitPanel';
 
-export type Focus = 'files' | 'editor';
+export type Focus = 'files' | 'editor' | 'git';
 
 class $Workspace {
   root = '';
   // invariant: Construction goes through overridable seams (project.invariants.md)
   tree = this.createTree();
   editor = this.createEditor();
+  gitPanel = this.createGitPanel();
 
   protected createTree() { return new FileTree.Class(); }
   protected createEditor() { return new Editor.Class(); }
+  protected createGitPanel() { return new GitPanel.Class(); }
+  // Git repository + commit log need the root, so they are created in open() (not field-init).
+  protected createGit(root: string) { return new GitRepository.Class(root); }
+  protected createCommitLog(root: string) { return new CommitLog.Class(root); }
 
   get focus() {
     return ref<Focus>('files');
@@ -26,12 +34,25 @@ class $Workspace {
   get name() {
     return ref('');
   }
+  // The repository + commit-log window for the current root (null until open()).
+  get git() {
+    return shallowRef<GitRepository.Instance | null>(null);
+  }
+  get commitLog() {
+    return shallowRef<CommitLog.Instance | null>(null);
+  }
 
   open(root: string): void {
     this.root = root;
     this.name.value = Files.Class.basename(root) || root;
     this.tree.open(root);
     this.focus.value = 'files';
+    // Live-wire git: create the repository + log for this root and kick a non-blocking refresh.
+    this.git.value = this.createGit(root);
+    this.commitLog.value = this.createCommitLog(root);
+    this.gitPanel.back();
+    this.gitPanel.back();
+    void this.git.value.refresh();
   }
 
   toggleFocus(): void {
@@ -43,6 +64,13 @@ class $Workspace {
   }
   focusFiles(): void {
     this.focus.value = 'files';
+  }
+  focusGit(): void {
+    this.focus.value = 'git';
+  }
+  /** Cycle the sidebar between the files tree and the git panel (Ctrl+G style toggle). */
+  toggleGit(): void {
+    this.focus.value = this.focus.value === 'git' ? 'files' : 'git';
   }
 
   /** Activate the current tree selection: open a file (and focus editor) or toggle a dir. */

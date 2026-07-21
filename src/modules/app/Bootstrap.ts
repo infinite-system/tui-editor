@@ -111,6 +111,22 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     void ed.viewport.scrollTop.value;
     void workspace.focus.value;
     void workspace.tree.selectedIndex.value;
+    // Git state is produced asynchronously (refresh/log outlive boot); observe it so the sidebar
+    // repaints — and the status side-channel flushes — when git data arrives.
+    const git = workspace.git.value;
+    if (git) {
+      void git.branch.value;
+      void git.staged.value;
+      void git.unstaged.value;
+      void git.untracked.value;
+      void git.refreshing.value;
+    }
+    const gp = workspace.gitPanel;
+    void gp.view.value;
+    void gp.changesIndex.value;
+    void gp.logIndex.value;
+    void gp.logScrollTop.value;
+    void gp.splitRatio.value;
     void commands.open.value;
     void commands.query.value;
     void commands.selectedIndex.value;
