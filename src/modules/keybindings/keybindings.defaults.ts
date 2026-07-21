@@ -16,6 +16,13 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 'p', ctrl: true }, action: 'palette.open' },
   { chord: { key: 'g', ctrl: true }, action: 'git.togglePanel' },
   { chord: { key: 'tab' }, action: 'focus.toggle' },
+  // Editor buffer tabs (item 10a) — global (work in any focus). Ctrl+Tab needs the kitty keyboard
+  // protocol; Ctrl+PageUp/PageDown are the widely-supported equivalents.
+  { chord: { key: 'w', ctrl: true }, action: 'buffer.close' },
+  { chord: { key: 'tab', ctrl: true, shift: false }, action: 'buffer.next' },
+  { chord: { key: 'tab', ctrl: true, shift: true }, action: 'buffer.previous' },
+  { chord: { key: 'pagedown', ctrl: true }, action: 'buffer.next' },
+  { chord: { key: 'pageup', ctrl: true }, action: 'buffer.previous' },
 
   // --- palette (captures input while open) ---
   { chord: { key: 'escape' }, action: 'palette.close', context: 'palette' },

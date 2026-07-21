@@ -110,6 +110,12 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       gitSelectedPaths: [...workspace.gitPanel.selectedPaths.value],
       contextMenuOpen: contextMenu.open.value,
       tooltipVisible: tooltip.visible.value,
+      // Editor buffer tabs (item 10a). liveBufferCount proves the FLYWEIGHT: it must stay far below
+      // tabCount (only the active + any dirty background buffer holds a live document).
+      bufferTabCount: workspace.buffers.count,
+      bufferLiveCount: workspace.buffers.liveCount,
+      activeBufferIndex: workspace.buffers.activeIndex.value,
+      pendingCloseTab: workspace.pendingCloseTabIndex.value,
     });
   };
 
@@ -378,6 +384,9 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     'palette.next': () => commands.moveSelection(1),
     'palette.erase': () => commands.backspaceQuery(),
     'focus.toggle': () => workspace.toggleFocus(),
+    'buffer.close': () => workspace.closeActiveTab(),
+    'buffer.next': () => workspace.cycleTab(1),
+    'buffer.previous': () => workspace.cycleTab(-1),
     'git.togglePanel': () => {
       workspace.toggleGit();
       if (workspace.focus.value === 'git') {
@@ -520,6 +529,12 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     if (workspace.gitPanel.confirmDiscard.value) {
       if (key.name === 'y') void workspace.confirmDiscard();
       else workspace.cancelDiscard();
+      return;
+    }
+    // Same MODAL contract for closing a tab with unsaved edits.
+    if (workspace.pendingCloseTabIndex.value >= 0) {
+      if (key.name === 'y') workspace.confirmCloseTab();
+      else workspace.cancelCloseTab();
       return;
     }
 

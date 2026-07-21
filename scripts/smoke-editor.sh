@@ -108,7 +108,7 @@ mouse="$(f mouse)"
 if [ -n "$mouse" ] && [ "$mouse" != "null" ]; then echo "  PASS  mouse click registered ($mouse)"; else echo "  FAIL  mouse click did not register"; fail=1; fi
 
 echo "== h-scroll range: End reveals the long line's end (scrollbar geometry regression) =="
-"$H" click "$S" 40 1 >/dev/null   # put the cursor ON the long line (row y=1 = doc line 0)
+"$H" click "$S" 40 2 >/dev/null   # put the cursor ON the long line (row y=2 = doc line 0; the tab bar occupies y=0)
 tmux send-keys -t "$S" End; sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
 end_visible="$(FRAME_FILE="$FRAME" "$BUN" -e '
 const f=JSON.parse(require("fs").readFileSync(process.env.FRAME_FILE));
@@ -119,11 +119,11 @@ if [ "$end_visible" = "OK" ]; then echo "  PASS  line end visible at max scrollL
 tmux send-keys -t "$S" Home; sleep 0.3
 
 echo "== drag-edge auto-scroll: hold at right edge scrolls + extends selection =="
-tmux send-keys -t "$S" -l "$(printf '\033[<0;50;2M')"; sleep 0.1     # press on line 0 (long line)
-tmux send-keys -t "$S" -l "$(printf '\033[<32;118;2M')"; sleep 0.1   # drag to right edge, HOLD
+tmux send-keys -t "$S" -l "$(printf '\033[<0;50;3M')"; sleep 0.1     # press on line 0 (long line; y=3 with the tab bar at y=0)
+tmux send-keys -t "$S" -l "$(printf '\033[<32;118;3M')"; sleep 0.1   # drag to right edge, HOLD
 sleep 0.9; "$H" settle "$S" >/dev/null 2>&1
 edge_scroll="$(f editorScrollLeft)"
-tmux send-keys -t "$S" -l "$(printf '\033[<0;118;2m')"; sleep 0.3    # release
+tmux send-keys -t "$S" -l "$(printf '\033[<0;118;3m')"; sleep 0.3    # release
 if [ -n "$edge_scroll" ] && [ "$edge_scroll" -gt 5 ] 2>/dev/null; then echo "  PASS  edge hold auto-scrolled (scrollLeft=$edge_scroll)"; else echo "  FAIL  no edge auto-scroll (scrollLeft=$edge_scroll)"; fail=1; fi
 "$H" send "$S" Escape >/dev/null
 tmux send-keys -t "$S" Home; sleep 0.2   # reset horizontal scroll for later checks
@@ -152,6 +152,34 @@ chk "palette overlay" "$(f overlay)" "palette"
 echo "  info: paletteMatches=$(f paletteMatches)"
 "$H" send "$S" Escape >/dev/null
 chk "palette closed" "$(f overlay)" "null"
+
+echo "== editor buffer tabs (item 10a): open ADDS tabs; flyweight keeps live docs < tab count =="
+# Files are already open from earlier sections; open more clean tabs to exercise dehydration.
+tabs_before="$(f bufferTabCount)"
+target=$(( ${tabs_before:-1} + 2 ))
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [ "$(f bufferTabCount)" -ge "$target" ] 2>/dev/null && break
+  [ "$(f focus)" = "files" ] || "$H" send "$S" Tab >/dev/null
+  "$H" send "$S" Down >/dev/null
+  "$H" send "$S" Enter >/dev/null
+  "$H" settle "$S" >/dev/null 2>&1
+done
+tabs_after_open="$(f bufferTabCount)"
+live_after_open="$(f bufferLiveCount)"
+if [ "${tabs_after_open:-0}" -gt "${tabs_before:-0}" ] 2>/dev/null; then echo "  PASS  opening files ADDS tabs ($tabs_before->$tabs_after_open)"; else echo "  FAIL  opening files did not add tabs ($tabs_before->$tabs_after_open)"; fail=1; fi
+# FLYWEIGHT: with clean background tabs open, fewer documents are LIVE than there are tabs (only the
+# active + any dirty background buffer stays hydrated; clean background tabs dehydrate).
+if [ "${live_after_open:-99}" -lt "${tabs_after_open:-0}" ] 2>/dev/null; then echo "  PASS  flyweight: liveDocs($live_after_open) < tabs($tabs_after_open)"; else echo "  FAIL  flyweight broke: liveDocs($live_after_open) not < tabs($tabs_after_open)"; fail=1; fi
+# Ctrl+W closes the active tab; if the active tab is dirty it opens a close-confirm — answer y.
+"$H" send "$S" C-w >/dev/null
+"$H" settle "$S" >/dev/null 2>&1
+if [ "$(f pendingCloseTab)" -ge 0 ] 2>/dev/null; then
+  echo "  info: active tab was dirty -> close confirmation shown; answering y"
+  "$H" send "$S" y >/dev/null
+  "$H" settle "$S" >/dev/null 2>&1
+fi
+tabs_after_close="$(f bufferTabCount)"
+if [ "${tabs_after_close:-9}" -lt "${tabs_after_open:-0}" ] 2>/dev/null; then echo "  PASS  Ctrl+W closed a tab ($tabs_after_open->$tabs_after_close)"; else echo "  FAIL  Ctrl+W did not close a tab ($tabs_after_open->$tabs_after_close)"; fail=1; fi
 
 echo "== idle quiescence: rendering is demand-driven; the loop STOPS at rest (frame delta == 0) =="
 # Authoritative signal is the FRAME COUNTER, not CPU (empty frames are cheap, so a CPU check passes

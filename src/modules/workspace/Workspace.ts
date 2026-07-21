@@ -444,24 +444,47 @@ class $Workspace {
     this.focus.value = 'editor';
   }
 
+  /** Pending dirty-tab-close confirmation: the tab index awaiting y/N, or -1 when none. */
+  get pendingCloseTabIndex() {
+    return ref(-1);
+  }
+
   /** Whether closing tab `index` needs a dirty-discard confirmation first. */
   tabNeedsCloseConfirm(index: number): boolean {
     return this.buffers.tabs()[index]?.dirty ?? false;
   }
 
-  /** Close tab `index`, fully disposing its buffer (document/undo/syntax). Caller confirms if dirty. */
+  /** Close tab `index`, fully disposing its buffer (document/undo/syntax). Clean-close path. */
   closeTab(index: number): void {
     this.buffers.close(index);
     if (this.buffers.count === 0) this.focus.value = 'files';
   }
 
-  /** Close the ACTIVE tab (Ctrl+W). Returns true if it needs a dirty-discard confirmation first. */
-  closeActiveTab(): boolean {
-    const index = this.buffers.activeIndex.value;
-    if (index < 0) return false;
-    if (this.tabNeedsCloseConfirm(index)) return true;
+  /** Close tab `index`, prompting first if it has unsaved edits (dirty → modal confirm). */
+  requestCloseTab(index: number): void {
+    if (index < 0 || index >= this.buffers.count) return;
+    if (this.tabNeedsCloseConfirm(index)) {
+      this.pendingCloseTabIndex.value = index;
+      return;
+    }
     this.closeTab(index);
-    return false;
+  }
+
+  /** Close the ACTIVE tab (Ctrl+W), prompting if dirty. */
+  closeActiveTab(): void {
+    this.requestCloseTab(this.buffers.activeIndex.value);
+  }
+
+  /** Confirm the pending dirty-tab close (modal 'y'). */
+  confirmCloseTab(): void {
+    const index = this.pendingCloseTabIndex.value;
+    this.pendingCloseTabIndex.value = -1;
+    if (index >= 0) this.closeTab(index);
+  }
+
+  /** Cancel the pending dirty-tab close (modal anything-but-'y'). */
+  cancelCloseTab(): void {
+    this.pendingCloseTabIndex.value = -1;
   }
 }
 

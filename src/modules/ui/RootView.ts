@@ -23,6 +23,7 @@ import type { Theme } from '../theme/Theme';
 import type { CommandRegistry } from '../commands/CommandRegistry';
 import type { Palette } from '../theme/ThemePalettes';
 import { Highlighter, type Role } from '../syntax/Highlighter';
+import { Files } from '../system/Files';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { displayColumn, lineWidth, graphemeAtDisplayColumn, graphemeToU16 } from '../editor/editor.coordinates';
 import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
@@ -117,10 +118,20 @@ export function buildRootView(
   const sidebarBody = new TextRenderable(renderer, { id: 'sidebar-body', content: '' });
   sidebar.add(sidebarBody);
 
+  // The editor column stacks a 1-row TAB BAR above the bordered editor area. Wrapping (rather than
+  // adding the tab bar INSIDE editorArea) leaves editorArea's border, gutter/code layout, scrollbar
+  // geometry, and layout-anchored caret coords (codeBody.x/y) completely unchanged.
+  const editorColumn = new BoxRenderable(renderer, {
+    id: 'editor-column',
+    flexGrow: 1,
+    height: '100%',
+    flexDirection: 'column',
+  });
+  const tabBar = new TextRenderable(renderer, { id: 'editor-tab-bar', content: '', height: 1, width: '100%' });
   const editorArea = new BoxRenderable(renderer, {
     id: 'editor-area',
     flexGrow: 1,
-    height: '100%',
+    width: '100%',
     border: true,
     borderStyle: 'rounded',
     flexDirection: 'row',
@@ -150,9 +161,11 @@ export function buildRootView(
   });
   editorArea.add(gutterBody);
   editorArea.add(codeBody);
+  editorColumn.add(tabBar);
+  editorColumn.add(editorArea);
 
   mainRow.add(sidebar);
-  mainRow.add(editorArea);
+  mainRow.add(editorColumn);
 
   const statusBar = new BoxRenderable(renderer, {
     id: 'status-bar',
@@ -534,6 +547,84 @@ export function buildRootView(
     return { rowIndex, column: displayColumn(lineText, column) - (segment?.startDisplayColumn ?? 0) };
   }
 
+  // Tab-bar hit map (cell spans per tab), rebuilt each render so a click maps x -> tab / close glyph.
+  let tabHitTargets: Array<{ startColumn: number; endColumn: number; closeColumn: number; index: number }> = [];
+
+  // The editor tab bar: one row of open-buffer tabs (name + dirty dot + close ✕; active highlighted).
+  // WHOLE-TAB windowing keeps the active tab visible when the strip overflows (no mid-tab slice); a
+  // ‹ / › marker shows there are more tabs off that edge. View-only — never touches a live document.
+  function renderTabBar(): StyledText {
+    const palette = readPalette();
+    const tabs = workspace.buffers.tabs();
+    tabHitTargets = [];
+    if (tabs.length === 0) return new StyledText([fg(palette.dim)('  no open files')]);
+    const barWidth = Math.max(1, tabBar.width as number);
+
+    // Measure each tab: label ' name ●|␠ ' + close '✕' + trailing separator ' '.
+    const measured = tabs.map((tab) => {
+      const label = ` ${Files.Class.basename(tab.path)} ${tab.dirty ? '●' : ' '} `;
+      const labelWidth = lineWidth(label);
+      return { tab, label, labelWidth, width: labelWidth + 2 }; // + close glyph + separator
+    });
+
+    // Choose a window of whole tabs that fits barWidth and always includes the active tab.
+    const activeIndex = tabs.findIndex((tab) => tab.active);
+    let startIndex = 0;
+    const activeEntry = activeIndex >= 0 ? measured[activeIndex] : undefined;
+    if (activeEntry) {
+      let usedWidth = activeEntry.width;
+      startIndex = activeIndex;
+      while (startIndex > 0) {
+        const previousEntry = measured[startIndex - 1];
+        if (!previousEntry || usedWidth + previousEntry.width > barWidth) break;
+        startIndex -= 1;
+        usedWidth += previousEntry.width;
+      }
+    }
+
+    const chunks: TextChunk[] = [];
+    let column = 0;
+    if (startIndex > 0) {
+      chunks.push(fg(palette.dim)('‹'));
+      column += 1;
+    }
+    let endIndex = startIndex;
+    for (let index = startIndex; index < measured.length; index += 1) {
+      const entry = measured[index];
+      if (!entry) break;
+      const { tab, label, labelWidth } = entry;
+      if (column + labelWidth + 2 > barWidth) break; // whole-tab clip at the right edge
+      const startColumn = column;
+      const paintLabel = tab.active
+        ? (text: string) => bg(palette.selection)(fg(palette.fg)(text))
+        : (text: string) => fg(palette.dim)(text);
+      chunks.push(paintLabel(label));
+      column += labelWidth;
+      const closeColumn = column;
+      chunks.push(tab.active ? bg(palette.selection)(fg(palette.warning)('✕')) : fg(palette.dim)('✕'));
+      column += 1;
+      chunks.push(fg(palette.border)(' '));
+      column += 1;
+      tabHitTargets.push({ startColumn, endColumn: column, closeColumn, index });
+      endIndex = index + 1;
+    }
+    if (endIndex < measured.length) chunks.push(fg(palette.dim)('›'));
+    return new StyledText(chunks);
+  }
+
+  // Tab-bar click: the ✕ cell closes the tab (dirty → confirm), anywhere else on the tab activates it.
+  // Coords are absolute; subtract the bar's laid-out x (no border) to get the local column.
+  tabBar.onMouseDown = (event) => {
+    tooltip.clear();
+    const localColumn = event.x - (tabBar.x as number);
+    const target = tabHitTargets.find(
+      (hit) => localColumn >= hit.startColumn && localColumn < hit.endColumn,
+    );
+    if (!target) return;
+    if (localColumn === target.closeColumn) workspace.requestCloseTab(target.index);
+    else workspace.activateTab(target.index);
+  };
+
   // Builds the visible window as two aligned StyledTexts — the gutter (line numbers + current-line
   // marker) and the code (syntax colors only, NO gutter). Only the visible lines are tokenized
   // (flyweight). Returns null for the empty state.
@@ -840,6 +931,7 @@ export function buildRootView(
     editorArea.borderColor = workspace.focus.value === 'editor' ? palette.borderActive : palette.border;
     editorArea.title = workspace.editor.hasDocument.value ? workspace.editor.title : 'Editor';
     editorArea.titleColor = workspace.focus.value === 'editor' ? palette.accent : palette.dim;
+    tabBar.content = renderTabBar();
     statusBar.backgroundColor = palette.statusBg;
 
     sidebarBody.content = gitView ? renderGitPanel() : renderTree();
@@ -880,7 +972,8 @@ export function buildRootView(
     }
 
     const pendingDiscard = workspace.gitPanel.confirmDiscard.value;
-    confirmBox.visible = pendingDiscard !== null;
+    const pendingCloseTabIndex = workspace.pendingCloseTabIndex.value;
+    confirmBox.visible = pendingDiscard !== null || pendingCloseTabIndex >= 0;
     if (pendingDiscard) {
       confirmBox.borderColor = palette.deleted;
       confirmBox.titleColor = palette.deleted;
@@ -889,6 +982,14 @@ export function buildRootView(
         pendingDiscard.paths.length === 1
           ? ` Discard changes to ${pendingDiscard.paths[0]}?  [y/N]`
           : ` Discard changes to ${pendingDiscard.paths.length} files (${pendingDiscard.paths.join(', ').slice(0, 60)}…)?  [y/N]`;
+      confirmText.fg = palette.fg;
+    } else if (pendingCloseTabIndex >= 0) {
+      // Same modal, for closing a tab with unsaved edits.
+      const tabPath = workspace.buffers.tabs()[pendingCloseTabIndex]?.path ?? '';
+      confirmBox.borderColor = palette.warning;
+      confirmBox.titleColor = palette.warning;
+      confirmBox.backgroundColor = palette.panel;
+      confirmText.content = ` Close ${Files.Class.basename(tabPath)} with unsaved changes?  [y/N]`;
       confirmText.fg = palette.fg;
     }
 
