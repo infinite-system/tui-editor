@@ -1,6 +1,6 @@
 import { test, expect } from 'bun:test';
 import { DARK, ThemePalettes } from '../theme.palettes';
-import { ThemeIcons } from '../theme.icons';
+import { ThemeIcons } from '../ThemeIcons';
 
 test('truecolor quantization is identity', () => {
   const palette = ThemePalettes.Class.quantizePalette(DARK, 'truecolor');

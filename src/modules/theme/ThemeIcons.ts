@@ -49,12 +49,12 @@ const SETS: Record<GlyphLevel, IconSet> = {
   ascii: ASCII,
 };
 
-function iconSetForImplementation(level: GlyphLevel): IconSet {
+function $iconSetFor(level: GlyphLevel): IconSet {
   return SETS[level];
 }
 
 /** Resolve an icon for a filename against a set (extension keyed, with folder/file default). */
-function iconForImplementation(set: IconSet, name: string, isDirectory: boolean, open = false): string {
+function $iconFor(set: IconSet, name: string, isDirectory: boolean, open = false): string {
   if (isDirectory) return open ? set.folderOpen : set.folderClosed;
   const dotIndex = name.lastIndexOf('.');
   const extension = dotIndex >= 0 ? name.slice(dotIndex + 1).toLowerCase() : '';
@@ -63,8 +63,8 @@ function iconForImplementation(set: IconSet, name: string, isDirectory: boolean,
 }
 
 class $ThemeIcons {
-  static iconSetFor = iconSetForImplementation;
-  static iconFor = iconForImplementation;
+  static iconSetFor = $iconSetFor;
+  static iconFor = $iconFor;
 }
 
 export namespace ThemeIcons {

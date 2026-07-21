@@ -6,7 +6,7 @@ import { Reactive } from 'ivue';
 import { ref } from 'vue';
 import { TerminalCapabilities, type ColorDepth, type GlyphLevel } from './TerminalCapabilities';
 import { PALETTES, DARK, ThemePalettes, type Palette } from './theme.palettes';
-import { ThemeIcons, type IconSet } from './theme.icons';
+import { ThemeIcons, type IconSet } from './ThemeIcons';
 
 class $Theme {
   get paletteName() {
