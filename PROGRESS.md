@@ -4,8 +4,8 @@ Live status ledger for the autonomous build. Updated every turn so state survive
 compaction. **If you are resuming: read this, then `HANDOFF.md`, then continue at the first
 unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
-## RESUME HERE (frontier as of commit f3671b7)
-- **State:** 11 module contracts · 121 tests pass · tsc green · checker 0 problems · end-to-end tmux
+## RESUME HERE (frontier as of commit 158ce95)
+- **State:** 11 module contracts · 128 tests pass · tsc green · checker 0 problems · end-to-end tmux
   smoke ALL-PASS. codex modules git/markdown/lsp INTEGRATED. Editor rework: reactive frame
   (established), grapheme coordinate model, native-cursor caret, selection + clipboard (model works),
   editor split into gutter + `SelectableText` code renderable. **FrameProbe visual-observation
@@ -99,7 +99,17 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       changes + VIRTUALIZED commit log (live-verified on this repo); keyboard log scroll; POSITION-
       ROUTED mouse-wheel scroll on editor/tree/git-log (verified headless + tmux); scroll invariants
       recorded (Container-Is-Input reality, One-Writer chosen).
-      **NEXT (M4 remaining):** (a) SMOOTH animated scroll — animate scrollTop over frames via the
+      **(a) SMOOTH scroll — commit log DONE** (`scroll-momentum.ts` pure physics + 7 tests; wheel→
+      impulse, onFrame steps by real dt clamped [paused-clock], halt on keyboard/jump [One-Writer],
+      O(window); live-verified glide+settle). **PORT to editor(vert+horiz)+tree DELEGATED to codex**
+      (worktree `codex/scroll`, bg `b3perok2j`, log `.claude/worktrees/codex-scroll.log`,
+      prompt `scripts/codex/scroll-port.prompt.txt`). On completion: REVIEW hard — esp. editor
+      HORIZONTAL (scrollLeft applied in `renderEditor` display-col-aware + caret/selection x shifted
+      by scrollLeft WITHOUT regressing the established x-mapping) — re-verify with FrameProbe
+      frame-diff (text shifts left, gutter fixed, caret under cursor) + tmux; merge only if it passes,
+      else redo the subtle parts myself. codex told NOT to modify scroll-momentum.ts.
+      **Superseded plan text below (a) is stale for the smooth-scroll bullet only.**
+      (a-legacy) SMOOTH animated scroll — animate scrollTop over frames via the
       reactive frame effect + inertia (OpenTUI `LinearScrollAccel` in lib/scroll-acceleration);
       regular line-crossing cadence (reparameterized crossing-regularity: device-px→cell-row; sub-cell
       is impossible, don't chase); the animation loop MUST reset its dt clock on resume (paused-clock
