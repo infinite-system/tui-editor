@@ -97,6 +97,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       focus: workspace.focus.value,
       treeRows: workspace.tree.rows.length,
       treeSelected: workspace.tree.selectedIndex.value,
+      treeScrollTop: workspace.tree.scrollTop.value,
       treeHovered: workspace.tree.hoveredIndex.value,
       editorScrollTop: editor.viewport.scrollTop.value,
       editorScrollLeft: editor.viewport.scrollLeft.value,

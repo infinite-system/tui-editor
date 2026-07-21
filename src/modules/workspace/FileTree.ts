@@ -97,6 +97,28 @@ class $FileTree {
     return this.rows[this.selectedIndex.value] ?? null;
   }
 
+  /** The clamped first visible row (the window top). Independent of the selection. */
+  windowTop(): number {
+    const maxTop = Math.max(0, this.rows.length - this.viewportHeight.value);
+    const clamped = Math.max(0, Math.min(this.scrollTop.value, maxTop));
+    if (clamped !== this.scrollTop.value) this.scrollTop.value = clamped;
+    return clamped;
+  }
+
+  /** Scroll the window by whole rows (wheel/momentum), clamped. Does NOT move the selection. */
+  scrollBy(delta: number): void {
+    const maxTop = Math.max(0, this.rows.length - this.viewportHeight.value);
+    this.scrollTop.value = Math.max(0, Math.min(this.scrollTop.value + delta, maxTop));
+  }
+
+  /** Bring the selection into view with the MINIMUM scroll (only when it is off-screen). */
+  private revealSelection(): void {
+    const height = this.viewportHeight.value;
+    const index = this.selectedIndex.value;
+    if (index < this.scrollTop.value) this.scrollTop.value = index;
+    else if (index >= this.scrollTop.value + height) this.scrollTop.value = index - height + 1;
+  }
+
   moveSelection(delta: number): void {
     const rowCount = this.rows.length;
     if (rowCount === 0) return;
@@ -104,12 +126,14 @@ class $FileTree {
     if (index < 0) index = 0;
     if (index >= rowCount) index = rowCount - 1;
     this.selectedIndex.value = index;
+    this.revealSelection(); // keyboard nav follows the selection; wheel/click do not
   }
 
   setSelection(index: number): void {
     const rowCount = this.rows.length;
     if (rowCount === 0) return;
     this.selectedIndex.value = Math.max(0, Math.min(index, rowCount - 1));
+    // NOTE: no reveal — clicking a visible row must leave the scroll position exactly where it is.
   }
 
   toggleExpand(path: string): void {

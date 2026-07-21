@@ -6,16 +6,19 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
 ## USER PIPELINE (durable — no user request drops; statused per item)
 
-- [ ] QA-A. **Shift+wheel horizontal scroll (REPEAT OFFENDER — FrameProbe-confirm required).** Shift+
-      vertical wheel must scroll HORIZONTALLY in the editor + any h-scrollable pane (VS Code/terminal
-      convention). User sees nothing. Suspect: SGR decoder masks the wheel button to bare 64/65 before
-      reading the shift bit (shift-wheel = 68/69), so modifiers.shift never reaches the horizontal
-      branch; check the kitty path too. Verify by DRIVING `\e[<68;col;rowM`/`\e[<69;col;rowM` and a
-      FrameProbe horizontal-offset change — "the handler looks right" does NOT count. Add a smoke.
-- [ ] QA-B. **File-list scroll-swim.** Scrolling the file tree, per-row backgrounds appear to shift
-      behind the elements instead of scrolling as one uniform surface; git-commits list scrolls
-      correctly. Root-cause file-tree row-bg positioning vs git-changes; unify. FrameProbe at ≥2
-      offsets (bg + text share per-row y; no stationary stripes) + smoke.
+- [x] QA-A. **Shift+wheel horizontal scroll.** RESOLVED — it was already working in the current tree
+      (the momentum merge 77dee65 added the `event.modifiers.shift` horizontal branch to the editor
+      wheel handler; the user's report predated that merge). FrameProbe-confirmed by DRIVING it:
+      SGR shift+wheel-down `\e[<69;…M` shifts content `ABC…`→`345…` (scrollLeft 0→33) and shift+wheel-up
+      `\e[<68;…M` reverses to 0. Locked with a smoke assertion in smoke-editor.sh.
+- [x] QA-B. **File-list scroll-swim** + **QA-C click-jumps-to-top** (same root cause). The tree window
+      was DERIVED from the selection index (`treeWindowTop = selectedIndex - height + 1`), pinning the
+      highlight to a screen edge (swim) and snapping to top when a click set a low selection index.
+      FIX: FileTree now has an INDEPENDENT scroll offset (scrollTop + viewportHeight) like git-changes —
+      wheel scrolls the window (selection stays put), click (setSelection) leaves the scroll untouched,
+      keyboard (moveSelection) reveals minimally only when off-screen. Verified live: wheel scrollTop
+      0→23 with selection at 0; click a visible row keeps scrollTop 23 and opens the clicked file.
+      Locked: 4 FileTree unit tests + scripts/smoke-tree-scroll.sh (ALL-PASS).
 
 - [x] 1. All-scrollbars geometry audit — ONE source (scrollbar-geometry.ts) + visibility predicate
       + 17 property tests + FrameProbe sweep; log-bar alignment FIXED, phantom tree bar FIXED,

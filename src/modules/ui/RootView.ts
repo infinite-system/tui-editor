@@ -358,9 +358,12 @@ export function buildRootView(
   // First visible tree row (the render window slides to keep the selection on screen); shared by
   // the renderer and the mouse hit-test so clicks land on the row the user actually sees.
   function treeWindowTop(): number {
-    const selectedIndex = workspace.tree.selectedIndex.value;
+    // Publish the live viewport height so the model can clamp its independent scroll offset + reveal
+    // the selection minimally; the window top is that offset (NOT derived from the selection index,
+    // which used to snap the list to the selection on every click/open).
     const height = Math.max(1, (sidebar.height as number) - 2);
-    return selectedIndex >= height ? selectedIndex - height + 1 : 0;
+    workspace.tree.viewportHeight.value = height;
+    return workspace.tree.windowTop();
   }
 
   // Every bar's placement + mapping comes from the ONE geometry source (scrollbar-geometry.ts):
@@ -1448,8 +1451,9 @@ export function buildRootView(
     workspace.haltTreeScroll();
     const rowIndex = treeWindowTop() + (event.y - (sidebar.y + 1)); // +1: sidebar top border
     if (rowIndex < 0 || rowIndex >= workspace.tree.rows.length) return;
-    // Single-click activation: one click selects AND opens the file / toggles the folder.
-    workspace.tree.selectedIndex.value = rowIndex;
+    // Single-click activation: one click selects AND opens the file / toggles the folder. setSelection
+    // does NOT reveal/scroll, so clicking a visible row leaves the scroll position exactly where it is.
+    workspace.tree.setSelection(rowIndex);
     workspace.activate();
   };
 

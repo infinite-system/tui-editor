@@ -299,7 +299,9 @@ class $Workspace {
 
     const treeStep = stepMomentum(this.tree.selectionMomentum.value, dtSeconds);
     this.tree.selectionMomentum.value = treeStep.momentum;
-    if (treeStep.rows !== 0) this.tree.moveSelection(treeStep.rows);
+    // Wheel scrolls the tree WINDOW (independent offset), not the selection — so the list scrolls as
+    // one uniform surface and the selection highlight travels with its row (git-changes behaviour).
+    if (treeStep.rows !== 0) this.tree.scrollBy(treeStep.rows);
 
     const changesStep = stepMomentum(gitPanel.changesMomentum.value, dtSeconds);
     gitPanel.changesMomentum.value = changesStep.momentum;

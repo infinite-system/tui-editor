@@ -118,6 +118,17 @@ console.log(ok?"OK":"CUT");
 if [ "$end_visible" = "OK" ]; then echo "  PASS  line end visible at max scrollLeft"; else echo "  FAIL  line end cut off at max scrollLeft"; fail=1; fi
 tmux send-keys -t "$S" Home; sleep 0.3
 
+echo "== SHIFT+wheel scrolls HORIZONTALLY (SGR 69/68; repeat-offender QA regression) =="
+"$H" settle "$S" >/dev/null 2>&1
+shift_wheel_before="$(f editorScrollLeft)"
+for _ in 1 2 3 4 5 6; do tmux send-keys -t "$S" -l "$(printf '\033[<69;40;2M')"; sleep 0.12; done  # shift+wheel-down
+sleep 0.5; "$H" settle "$S" >/dev/null 2>&1
+shift_wheel_after="$(f editorScrollLeft)"
+if [ "${shift_wheel_after:-0}" -gt "${shift_wheel_before:-0}" ] 2>/dev/null; then echo "  PASS  shift+wheel scrolled horizontally ($shift_wheel_before->$shift_wheel_after)"; else echo "  FAIL  shift+wheel did not scroll horizontally ($shift_wheel_before->$shift_wheel_after)"; fail=1; fi
+for _ in 1 2 3 4 5 6 7 8; do tmux send-keys -t "$S" -l "$(printf '\033[<68;40;2M')"; sleep 0.1; done  # shift+wheel-up reverses
+sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
+tmux send-keys -t "$S" Home; sleep 0.3
+
 echo "== drag-edge auto-scroll: hold at right edge scrolls + extends selection =="
 tmux send-keys -t "$S" -l "$(printf '\033[<0;50;3M')"; sleep 0.1     # press on line 0 (long line; y=3 with the tab bar at y=0)
 tmux send-keys -t "$S" -l "$(printf '\033[<32;118;3M')"; sleep 0.1   # drag to right edge, HOLD

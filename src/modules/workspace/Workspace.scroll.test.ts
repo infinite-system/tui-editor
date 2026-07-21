@@ -95,7 +95,9 @@ describe('Workspace.tickScrollAnimations', () => {
       expect(workspace.gitPanel.logScrollTop.value).toBe(2);
       expect(workspace.editor.viewport.scrollTop.value).toBe(2);
       expect(workspace.editor.viewport.scrollLeft.value).toBe(2);
-      expect(workspace.tree.selectedIndex.value).toBe(2);
+      // Tree wheel scrolls the WINDOW (independent offset), not the selection (12 rows, so 2 fits).
+      expect(workspace.tree.scrollTop.value).toBe(2);
+      expect(workspace.tree.selectedIndex.value).toBe(0);
       expect(workspace.gitPanel.changesScrollTop.value).toBe(2);
     } finally {
       removeSync(treeRoot, { recursive: true, force: true });
