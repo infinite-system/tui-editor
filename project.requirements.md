@@ -12,6 +12,35 @@ NOTHING decided is lost across compaction or a cold restart, and so EVERY spawne
 - The live per-item checklist is `project.progress.md` (USER PIPELINE); this file holds the durable
   cross-cutting rules, that file holds the work items.
 
+## PRODUCT NORTH STAR — learnable in ~15 minutes, zero prior knowledge (governs ALL UI)
+
+**A user who knows NOTHING can learn this editor in ~15 minutes and use it at almost full power — "kid
+to grandpa."** Every UI decision serves this. It is the acceptance lens on EVERY UI feature (activity
+bar, Ctrl+P, Search view, shortcuts page, workspace tabs, find/replace, git panel, status bar): each must
+be usable by a first-timer by LOOKING + CLICKING, with tooltips, findable in the palette. This is the
+product expression of the [No action requires a memorized motion] invariant.
+
+Load-bearing sub-invariants (apply to everything):
+1. **Every action has a VISIBLE, CLICKABLE affordance** — never keyboard-only. Discoverable by looking,
+   not by knowing.
+2. **Every affordance SELF-EXPLAINS** — hover → tooltip with what-it-does + its shortcut (the UI teaches
+   its own shortcuts).
+3. **Any action is FINDABLE** — command palette (search all actions) + the shortcuts page (full map). No
+   hidden actions.
+4. **Current STATE is always visible** — status bar: file, mode, cursor position, context.
+5. **Forgiving + immediate FEEDBACK** — hover/active/press states, destructive-action confirmations, clear results.
+
+**WIRE-AND-DISCOVER RULE (like wire-and-drive):** when you add an ACTION, add its click affordance +
+tooltip + palette/shortcuts-page entry in the SAME change. A keyboard-only action is not done.
+
+**PROXY GATES (turn "learnable" from hope into enforcement — add to the merge-gate as each becomes real;
+you can't gate "grandpa learns it" but you CAN gate these):**
+- **CLICK-COMPLETENESS** — every action in the command registry has a click affordance somewhere
+  (button/menu/palette). Enumerate actions; assert each is reachable by click. No keyboard-only actions.
+- **TOOLTIP-COMPLETENESS** — every interactive/clickable element exposes a tooltip (name + shortcut).
+- **PALETTE + SHORTCUTS-PAGE COMPLETENESS** — every bound action appears in BOTH the command palette AND
+  the shortcuts page (KeybindingRegistry.effectiveBindings). (This also finally wires effectiveBindings.)
+
 ## Conventions (also in project.conventions.md — the canonical WHAT)
 - FULL descriptive identifier names, NO abbreviations, ever, in all code.
 - ivue namespace pattern: `class $X {}` + `export namespace X { export const $Class=$X; export const
