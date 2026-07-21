@@ -41,6 +41,16 @@ test('unicode icon set resolves known extension and falls back for unknown', () 
   expect(ThemeIcons.Class.iconFor(unicodeSet, 'weird.zzz', false)).toBe(unicodeSet.file);
 });
 
+test('checkbox icons ladder: real glyphs on nerd/unicode, single-cell, ascii degrades', () => {
+  expect(ThemeIcons.Class.checkboxIconsFor('ascii')).toEqual({ unchecked: ' ', checked: 'x' });
+  for (const level of ['unicode', 'nerd'] as const) {
+    const box = ThemeIcons.Class.checkboxIconsFor(level);
+    expect([...box.unchecked].length).toBe(1); // single cell so the click hit-column stays fixed
+    expect([...box.checked].length).toBe(1);
+    expect(box.unchecked).not.toBe(box.checked); // the two states are visually distinct
+  }
+});
+
 test('git action icons ladder: real glyphs on nerd/unicode, letters as the ascii fallback', () => {
   // Ascii is the graceful degrade: o / d / + / - so a no-nerd-font terminal still reads.
   expect(ThemeIcons.Class.actionIconsFor('ascii')).toEqual({ open: 'o', discard: 'd', stage: '+', unstage: '-' });

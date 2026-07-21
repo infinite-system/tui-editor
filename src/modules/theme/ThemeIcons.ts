@@ -19,6 +19,12 @@ export interface ActionIconSet {
   unstage: string;
 }
 
+/** Single-cell staging checkbox glyphs (unchecked ↔ checked) for the git changes rows. */
+export interface CheckboxIconSet {
+  unchecked: string;
+  checked: string;
+}
+
 const NERD: IconSet = {
   ext: {
     ts: '', tsx: '', js: '', jsx: '',
@@ -65,12 +71,24 @@ const ACTION_ICONS: Record<GlyphLevel, ActionIconSet> = {
   ascii: { open: 'o', discard: 'd', stage: '+', unstage: '-' },
 };
 
+// Staging-checkbox glyph ladder. nerd = fa square / check-square; unicode = ballot box ☐/☑;
+// ascii = blank / x so a no-nerd-font terminal still degrades to the classic ` ` / `x`.
+const CHECKBOX_ICONS: Record<GlyphLevel, CheckboxIconSet> = {
+  nerd: { unchecked: '\u{f0c8}', checked: '\u{f14a}' },
+  unicode: { unchecked: '☐', checked: '☑' },
+  ascii: { unchecked: ' ', checked: 'x' },
+};
+
 function $iconSetFor(level: GlyphLevel): IconSet {
   return SETS[level];
 }
 
 function $actionIconsFor(level: GlyphLevel): ActionIconSet {
   return ACTION_ICONS[level];
+}
+
+function $checkboxIconsFor(level: GlyphLevel): CheckboxIconSet {
+  return CHECKBOX_ICONS[level];
 }
 
 /** Resolve an icon for a filename against a set (extension keyed, with folder/file default). */
@@ -85,6 +103,7 @@ function $iconFor(set: IconSet, name: string, isDirectory: boolean, open = false
 class $ThemeIcons {
   static iconSetFor = $iconSetFor;
   static actionIconsFor = $actionIconsFor;
+  static checkboxIconsFor = $checkboxIconsFor;
   static iconFor = $iconFor;
 }
 

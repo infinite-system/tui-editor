@@ -1015,9 +1015,9 @@ export function buildRootView(
         // intensity than the focused row's `selection` bg — until the palette grows a third token.
         const multiSelected = gitPanel.selectedPaths.value.has(row.path);
         const background = selected ? palette.selection : multiSelected || hovered ? palette.cursorLine : null;
-        // ` [x] M path…            o d ±` — checkbox = staging state (click toggles); buttons
-        // (open / discard / stage-unstage) appear on hover/selection, right-aligned.
-        const checkbox = row.bucket === 'staged' ? '[x]' : '[ ]';
+        // ` ☑ M path…            o d ±` — ONE-glyph staging checkbox (theme ladder; click toggles);
+        // the git-status letter (M/D/?) stays separate; action buttons appear on hover/selection.
+        const checkbox = row.bucket === 'staged' ? theme.checkboxIcons.checked : theme.checkboxIcons.unchecked;
         const label = ` ${checkbox} ${row.glyph} ${row.path}`;
         if (selected || hovered) {
           // Action buttons: real glyphs from the theme icon ladder (nerd → unicode → ascii letter),
@@ -1664,8 +1664,8 @@ export function buildRootView(
         const relativeX = event.x - (sidebar.x + 1);
         const actionButton = gitActionButtonAt(relativeX);
         const buttonsShowing = wasCurrent || workspace.gitPanel.changesHovered.value === hit.index;
-        if (relativeX >= 1 && relativeX <= 3) {
-          void workspace.toggleStageAtRow(hit.index); // the CHECKBOX is the staging control
+        if (relativeX === 1) {
+          void workspace.toggleStageAtRow(hit.index); // the single-glyph CHECKBOX cell is the staging control
         } else if (buttonsShowing && actionButton === 'open') {
           void workspace.openChangeAtRow(hit.index); // [o]pen
         } else if (buttonsShowing && actionButton === 'discard') {

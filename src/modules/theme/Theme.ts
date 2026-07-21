@@ -6,7 +6,7 @@ import { Reactive } from 'ivue';
 import { ref } from 'vue';
 import { TerminalCapabilities, type ColorDepth, type GlyphLevel } from './TerminalCapabilities';
 import { PALETTES, DARK, ThemePalettes, type Palette } from './ThemePalettes';
-import { ThemeIcons, type IconSet, type ActionIconSet } from './ThemeIcons';
+import { ThemeIcons, type IconSet, type ActionIconSet, type CheckboxIconSet } from './ThemeIcons';
 
 class $Theme {
   get paletteName() {
@@ -30,6 +30,10 @@ class $Theme {
   /** Git changes-row action button glyphs at the current glyph level (nerd → unicode → ascii). */
   get actionIcons(): ActionIconSet {
     return ThemeIcons.Class.actionIconsFor(this.glyphLevel.value);
+  }
+  /** Staging-checkbox glyphs (unchecked/checked) at the current glyph level. */
+  get checkboxIcons(): CheckboxIconSet {
+    return ThemeIcons.Class.checkboxIconsFor(this.glyphLevel.value);
   }
 
   icon(name: string, isDir: boolean, open = false): string {
