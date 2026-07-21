@@ -10,6 +10,7 @@ import { Editor } from '../editor/Editor';
 import { OpenBufferSet } from './OpenBufferSet';
 import { Files } from '../system/Files';
 import { GitRepository } from '../git/GitRepository';
+import { GitWatcher } from '../git/GitWatcher';
 import { CommitLog } from '../git/CommitLog';
 import { CommitExpansion } from '../git/CommitExpansion';
 import { GitPanel } from './GitPanel';
@@ -68,6 +69,12 @@ class $Workspace {
   // Git repository + commit log need the root, so they are created in open() (not field-init).
   protected createGit(root: string) { return new GitRepository.Class(root); }
   protected createCommitLog(root: string) { return new CommitLog.Class(root); }
+  // Watches the working tree so EXTERNAL changes (editor saves elsewhere, other processes, branch
+  // switches, on-disk edits) live-refresh the git panel + tree decorations — not just our own actions.
+  protected createGitWatcher(root: string, repository: GitRepository.Instance) {
+    return new GitWatcher.Class(root, repository);
+  }
+  private gitWatcher: GitWatcher.Model | null = null;
   protected createCommitExpansion(root: string) { return new CommitExpansion.Class(root); }
 
   get focus() {
@@ -102,6 +109,16 @@ class $Workspace {
     this.commitLog.value = this.createCommitLog(root);
     this.commitExpansion.value = this.createCommitExpansion(root);
     void this.git.value.refresh();
+    // Watch the working tree so external changes refresh the panel WITHOUT any in-app action.
+    this.gitWatcher?.dispose();
+    this.gitWatcher = this.createGitWatcher(root, this.git.value);
+  }
+
+  /** Tear down owned resources with effects/handles (the working-tree watcher + open buffers). */
+  dispose(): void {
+    this.gitWatcher?.dispose();
+    this.gitWatcher = null;
+    this.buffers.disposeAll();
   }
 
   toggleFocus(): void {

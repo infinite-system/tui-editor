@@ -120,6 +120,14 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       tooltipVisible: tooltip.visible.value,
       settingsOpen: settingsPanel.open.value,
       settingsSelected: settingsPanel.selectedIndex.value,
+      // Total working-tree changes — proves the GitWatcher live-refreshes on EXTERNAL fs changes.
+      gitChangedCount: (() => {
+        const repository = workspace.git.value;
+        if (!repository) return 0;
+        return (
+          repository.staged.value.length + repository.unstaged.value.length + repository.untracked.value.length
+        );
+      })(),
       // Editor buffer tabs (item 10a). liveBufferCount proves the FLYWEIGHT: it must stay far below
       // tabCount (only the active + any dirty background buffer holds a live document).
       bufferTabCount: workspace.buffers.count,
@@ -269,6 +277,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   };
   renderer.on('frame', onFrame);
   app.onDispose(() => renderer.off('frame', onFrame));
+  app.onDispose(() => workspace.dispose()); // stop the working-tree watcher + dispose open buffers
 
   // Awaitable render for boot/resize/harness determinism: sync size, paint, wait one frame.
   const render = async (): Promise<void> => {

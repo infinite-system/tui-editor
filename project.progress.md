@@ -45,6 +45,23 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
         fast-scroll modifier+multiplier, scrollbar thickness (default = D's averaged constant), glyph mode
         (auto/nerd/unicode/ascii), theme/palette, word-wrap. Migrate E's ceiling into a DEFAULT the panel overrides.
 
+- [x] GIT LIVE-REFRESH BUG (user, priority): the git panel ignored EXTERNAL working-tree changes.
+      Root cause: GitWatcher existed + passed its own tests but was NEVER wired (built-but-unwired —
+      its isolated tests were green precisely because they never checked the app uses it). FIX: wired
+      GitWatcher into Workspace.open() (callback → git.refresh(), disposed on teardown via
+      workspace.dispose() ← app.onDispose). Bun's recursive fs.watch DOES fire for nested files on
+      Linux (verified by driving — no fallback needed). Enforcement: scripts/smoke-git-watch.sh drives
+      the whole app — external nested modify+add+delete → panel 0→3 with NO in-app action → revert →0
+      (ALL-PASS). AUDIT for other built-but-unwired: MarkdownRenderable (M6) + LanguageClient (M5) are
+      referenced only by their own files/tests — but those are FORWARD-milestone modules (built ahead,
+      not yet integrated), not bugs; surfaced for when M5/M6 land.
+
+- [ ] TAB-BAR AFFORDANCES (user QA, 3): (1) tab COUNT badge + click-to-open DROPDOWN of all buffers
+      (reuse ContextMenu machinery; row select jumps, × closes; keyboard nav). (2) BIGGER arrows
+      (wider glyph/padded hit-target, keep 3-state). (3) CUTOFF affordance — fade/ellipsis/partial-tab
+      on the overflow edge + arrows bright-only-when-more / dimmed-at-end, so "more tabs exist" reads
+      at a glance. Verify by driving (badge shows total, dropdown lists+selects, arrows dim at ends).
+
 - [x] TAB-BAR QA (user): arrows CLICKABLE + pinned at the RIGHT edge (single geometry source shared by
       render + hit-test, so draw pos and hit-rect can't disagree); Ctrl+PageDown/PageUp cycle is
       DETERMINISTIC positional (advance one, wrap; active index maps 1:1 to visible order); close ✕ has
