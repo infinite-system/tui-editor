@@ -24,6 +24,7 @@ import type { Palette } from '../theme/ThemePalettes';
 import { Highlighter, type Role } from '../syntax/Highlighter';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { displayColumn, lineWidth, graphemeAtDisplayColumn, graphemeToU16 } from '../editor/editor.coordinates';
+import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
 import { SelectableText } from './SelectableText';
 import { GitRows } from '../git/GitRows';
 import { GitLogRows } from '../git/GitLogRows';
@@ -116,9 +117,12 @@ export function buildRootView(
     // drive cursor+anchor, and the native selection is only ever set programmatically from them.
     selectable: false,
     flexGrow: 1,
-    // An editor pane NEVER soft-wraps: one file line == one visual row, always; long lines clip at
-    // the right edge (horizontal scroll covers the rest). Wrapping desyncs the gutter (which
-    // numbers file lines) and every row-based mapping (caret Y, selection rows, click hit-testing).
+    // The RENDERABLE never soft-wraps — the renderable wrapping text itself would desync the
+    // gutter and every row-based mapping (caret Y, selection rows, click hit-testing). Word wrap
+    // is a MODE handled ABOVE this layer: wrap-OFF renders one file line per visual row (long
+    // lines clip; horizontal scroll covers the rest); wrap-ON feeds pre-wrapped SEGMENT rows from
+    // the pure mapping layer (EditorWrap.ts), so this stays 'none' in both modes.
+    // invariant: One file line is one visual row when word wrap is off (ui.invariants.md)
     wrapMode: 'none',
   });
   editorArea.add(gutterBody);
@@ -329,8 +333,10 @@ export function buildRootView(
       viewportSize: viewportHeight,
       scrollPosition: editor.viewport.scrollTop.value,
     });
+    // Wrap mode has NO horizontal scroll axis: scrollSize 0 routes through the ONE visibility
+    // rule (no scrollable range -> the bar does not exist), so the h-bar hides itself.
     let widestVisible = 0;
-    if (editorVisible) {
+    if (editorVisible && !editor.wordWrap.value) {
       const top = editor.viewport.scrollTop.value;
       for (const line of editor.document.slice(top, viewportHeight)) {
         widestVisible = Math.max(widestVisible, lineWidth(line));
@@ -420,6 +426,36 @@ export function buildRootView(
   // Gutter width in cells for the current document: "NN " (line number + space) + 1 marker cell.
   const gutterWidth = () => String(workspace.editor.document.lineCount).length + 1 + 2;
 
+  // Wrap-mode view geometry of the last-rendered frame: the visual rows the window showed, written
+  // by renderEditor and read by the caret block, applySelection, and the mouse hit-test — so all
+  // consumers agree on what is where (same pattern as gitPanelGeometry). Presentation state only.
+  // Empty when wrap is off.
+  let wrapRowsWindow: VisualRow[] = [];
+
+  // Map a document position to its wrap-mode viewport cell: the window row index and the visual
+  // column WITHIN that row. 'before'/'after' = off-window on that side.
+  function wrapVisualPosition(
+    line: number,
+    column: number,
+  ): { rowIndex: number; column: number } | 'before' | 'after' {
+    const firstRow = wrapRowsWindow[0];
+    const lastRow = wrapRowsWindow[wrapRowsWindow.length - 1];
+    if (!firstRow || !lastRow) return 'before';
+    const lineText = workspace.editor.document.line(line);
+    const segments = EditorWrap.Class.wrapLine(lineText, workspace.editor.wrapWidth());
+    const segmentIndex = EditorWrap.Class.segmentIndexForCursor(segments, column);
+    if (line < firstRow.lineIndex || (line === firstRow.lineIndex && segmentIndex < firstRow.segmentIndex))
+      return 'before';
+    if (line > lastRow.lineIndex || (line === lastRow.lineIndex && segmentIndex > lastRow.segmentIndex))
+      return 'after';
+    const rowIndex = wrapRowsWindow.findIndex(
+      (row) => row.lineIndex === line && row.segmentIndex === segmentIndex,
+    );
+    if (rowIndex < 0) return 'after';
+    const segment = segments[segmentIndex];
+    return { rowIndex, column: displayColumn(lineText, column) - (segment?.startDisplayColumn ?? 0) };
+  }
+
   // Builds the visible window as two aligned StyledTexts — the gutter (line numbers + current-line
   // marker) and the code (syntax colors only, NO gutter). Only the visible lines are tokenized
   // (flyweight). Returns null for the empty state.
@@ -436,6 +472,46 @@ export function buildRootView(
     const focused = workspace.focus.value === 'editor';
     const gutterChunks: TextChunk[] = [];
     const codeChunks: TextChunk[] = [];
+    const pushCodeChunks = (windowText: string): void => {
+      if (editor.document.binary.value || language === 'plain') {
+        codeChunks.push(fg(palette.fg)(windowText));
+      } else {
+        for (const span of Highlighter.Class.highlightLine(windowText, language)) {
+          codeChunks.push(fg(roleColor(span.role, palette))(span.text));
+        }
+      }
+    };
+    if (editor.wordWrap.value) {
+      // WRAP MODE: iterate VISUAL rows from the pure mapping layer — a long line contributes
+      // multiple rows; the gutter numbers only a line's FIRST visual row (continuation rows are
+      // blank, VS Code-style); each row's code is the segment's grapheme-safe slice. The window
+      // walk is O(window) — the file is never materialized.
+      // invariant: Word wrap is a pure view mapping (src/modules/editor/editor.invariants.md)
+      wrapRowsWindow = EditorWrap.Class.visualRowsForWindow(editor.document, top, editor.wrapWidth(), height);
+      wrapRowsWindow.forEach((row, rowIndex) => {
+        const isCurrentLine = row.lineIndex === currentLineIndex;
+        if (row.firstOfLine) {
+          const lineNumberText = String(row.lineIndex + 1).padStart(lineNumberWidth, ' ');
+          gutterChunks.push(fg(isCurrentLine ? palette.accent : palette.dim)(`${lineNumberText} `));
+          gutterChunks.push(fg(palette.accent)(isCurrentLine && focused ? '▏' : ' '));
+        } else {
+          gutterChunks.push(fg(palette.dim)(' '.repeat(lineNumberWidth + 2)));
+        }
+        const lineText = editor.document.line(row.lineIndex);
+        pushCodeChunks(
+          lineText.slice(
+            graphemeToU16(lineText, row.segment.startGrapheme),
+            graphemeToU16(lineText, row.segment.endGrapheme),
+          ),
+        );
+        if (rowIndex < wrapRowsWindow.length - 1) {
+          gutterChunks.push(fg(palette.fg)('\n'));
+          codeChunks.push(fg(palette.fg)('\n'));
+        }
+      });
+      return { gutter: new StyledText(gutterChunks), code: new StyledText(codeChunks) };
+    }
+    wrapRowsWindow = [];
     // COLUMN virtualization (the horizontal twin of the line flyweight): each visible line is
     // sliced to the visible display-column window BEFORE tokenizing, so per-frame cost tracks
     // visible columns — never total line length (50k-char lines render at normal speed).
@@ -457,13 +533,7 @@ export function buildRootView(
         const endGrapheme = graphemeAtDisplayColumn(text, scrollLeft + viewportWidth) + 1;
         windowText = text.slice(graphemeToU16(text, startGrapheme), graphemeToU16(text, endGrapheme));
       }
-      if (editor.document.binary.value || language === 'plain') {
-        codeChunks.push(fg(palette.fg)(windowText));
-      } else {
-        for (const span of Highlighter.Class.highlightLine(windowText, language)) {
-          codeChunks.push(fg(roleColor(span.role, palette))(span.text));
-        }
-      }
+      pushCodeChunks(windowText);
       if (visibleIndex < visibleLines.length - 1) {
         gutterChunks.push(fg(palette.fg)('\n'));
         codeChunks.push(fg(palette.fg)('\n'));
@@ -480,6 +550,32 @@ export function buildRootView(
     const selection = editor.hasDocument.value ? editor.cursor.selectionRange() : null;
     const top = editor.viewport.scrollTop.value;
     const viewportHeight = editorViewportHeight();
+    if (editor.wordWrap.value) {
+      // Wrap mode: the native selection coords are viewport-local VISUAL rows — map both ends
+      // through the ONE logical↔visual layer, clamping off-window ends to the window edges.
+      if (!selection || wrapRowsWindow.length === 0) {
+        codeBody.clearSelectionRange();
+        return;
+      }
+      const startPosition = wrapVisualPosition(selection.start.line, selection.start.col);
+      const endPosition = wrapVisualPosition(selection.end.line, selection.end.col);
+      if (startPosition === 'after' || endPosition === 'before') {
+        codeBody.clearSelectionRange();
+        return;
+      }
+      const anchorCell = startPosition === 'before' ? { rowIndex: 0, column: 0 } : startPosition;
+      const focusCell =
+        endPosition === 'after'
+          ? { rowIndex: wrapRowsWindow.length - 1, column: editorViewportWidth() }
+          : endPosition;
+      codeBody.setSelectionRange(
+        Math.max(0, anchorCell.column),
+        anchorCell.rowIndex,
+        Math.max(0, focusCell.column),
+        focusCell.rowIndex,
+      );
+      return;
+    }
     if (!selection || selection.end.line < top || selection.start.line >= top + viewportHeight) {
       codeBody.clearSelectionRange();
       return;
@@ -724,6 +820,25 @@ export function buildRootView(
     const scrollTop = editor.viewport.scrollTop.value;
     const viewportHeight = editorViewportHeight();
     const cursorLine = editor.cursor.line.value;
+    if (editor.wordWrap.value) {
+      // Wrap mode: the caret cell comes from the SAME logical↔visual mapping the render used —
+      // no scrollLeft subtraction (horizontal scroll is inert); the visual-row offset replaces
+      // the logical-row offset. Same 1-based ANSI +1 as the wrap-off path; still verified against
+      // tmux's own #{cursor_x},#{cursor_y}.
+      // invariant: The caret renders at the cursor display column (ui.invariants.md)
+      const caretPosition =
+        editor.hasDocument.value && workspace.focus.value === 'editor' && !open
+          ? wrapVisualPosition(cursorLine, editor.cursor.col.value)
+          : null;
+      if (caretPosition && typeof caretPosition === 'object') {
+        const caretCellX = codeBody.x + caretPosition.column;
+        const caretCellY = codeBody.y + caretPosition.rowIndex;
+        renderer.setCursorPosition(caretCellX + 1, caretCellY + 1, true);
+      } else {
+        renderer.setCursorPosition(0, 0, false);
+      }
+      return;
+    }
     const caretVisibleHorizontally =
       displayColumn(editor.document.line(Math.min(cursorLine, editor.document.lineCount - 1)), editor.cursor.col.value) >=
         editor.viewport.scrollLeft.value &&
@@ -769,12 +884,34 @@ export function buildRootView(
       }
     } else workspace.tree.moveSelection(wheelDelta(event));
   };
+  // Vertical scroll of the editor window. Wrap mode: scrollTop stays a LOGICAL line index, but
+  // tall (wrapped) lines mean the logical clamp `lineCount - height` could strand tail rows below
+  // the fold — so the clamp relaxes to let the LAST line reach the top of the window.
+  const scrollEditorVertically = (delta: number): void => {
+    const editorViewport = workspace.editor.viewport;
+    if (workspace.editor.wordWrap.value) {
+      const maxTop = Math.max(0, workspace.editor.document.lineCount - 1);
+      editorViewport.scrollTop.value = Math.max(
+        0,
+        Math.min(editorViewport.scrollTop.value + delta, maxTop),
+      );
+    } else {
+      editorViewport.scrollBy(delta, workspace.editor.document.lineCount);
+    }
+  };
   editorArea.onMouseScroll = (event) => {
     if (!workspace.editor.hasDocument.value) return;
     // Horizontal arrives TWO ways (terminal-dependent): native horizontal wheel events
     // (direction left/right — many terminals translate shift+wheel or trackpad swipes into
     // these), or a vertical wheel with the shift modifier bit. Route BOTH to columns.
     const direction = event.scroll?.direction;
+    if (workspace.editor.wordWrap.value) {
+      // Wrap mode: ONE scroll axis — horizontal gestures route to the vertical window and
+      // scrollLeft stays 0 (inert).
+      const backward = direction === 'left' || direction === 'up';
+      scrollEditorVertically((backward ? -1 : 1) * WHEEL_STEP);
+      return;
+    }
     const horizontal = direction === 'left' || direction === 'right' || event.modifiers.shift;
     if (horizontal) {
       // Clamp to the widest VISIBLE line (O(window), never the whole file).
@@ -795,6 +932,29 @@ export function buildRootView(
   // invariant: The selected range renders with a background (ui.invariants.md)
   const documentPositionAtCell = (cellX: number, cellY: number): { line: number; column: number } | null => {
     if (!workspace.editor.hasDocument.value) return null;
+    if (workspace.editor.wordWrap.value) {
+      // Wrap mode: a viewport row is a VISUAL row — resolve it through the rendered window, then
+      // hit-test the display column WITHIN that row's segment (clamped into the segment so a
+      // click past a wrapped row's end lands on its last grapheme, not the next row's first).
+      if (wrapRowsWindow.length === 0) return null;
+      const rowIndex = Math.max(0, Math.min(cellY - codeBody.y, wrapRowsWindow.length - 1));
+      const row = wrapRowsWindow[rowIndex];
+      if (!row) return null;
+      const lineText = workspace.editor.document.line(row.lineIndex);
+      const segments = EditorWrap.Class.wrapLine(lineText, workspace.editor.wrapWidth());
+      const lastSegmentOfLine = row.segmentIndex === segments.length - 1;
+      const hitColumn = graphemeAtDisplayColumn(
+        lineText,
+        row.segment.startDisplayColumn + Math.max(0, cellX - codeBody.x),
+      );
+      const maxColumn = lastSegmentOfLine
+        ? row.segment.endGrapheme
+        : Math.max(row.segment.startGrapheme, row.segment.endGrapheme - 1);
+      return {
+        line: row.lineIndex,
+        column: Math.max(row.segment.startGrapheme, Math.min(hitColumn, maxColumn)),
+      };
+    }
     const line = Math.max(
       0,
       Math.min(
@@ -883,7 +1043,8 @@ export function buildRootView(
     const stepY = Math.trunc(edgeScrollRemainder.y);
     edgeScrollRemainder.x -= stepX;
     edgeScrollRemainder.y -= stepY;
-    if (stepX !== 0) {
+    if (stepX !== 0 && !workspace.editor.wordWrap.value) {
+      // (wrap mode: horizontal scroll is inert — the X edge never scrolls)
       const top = workspace.editor.viewport.scrollTop.value;
       let widestVisible = 0;
       for (const line of workspace.editor.document.slice(top, editorViewportHeight())) {
@@ -892,7 +1053,7 @@ export function buildRootView(
       workspace.editor.viewport.scrollByColumns(stepX, widestVisible);
     }
     if (stepY !== 0) {
-      workspace.editor.viewport.scrollBy(stepY, workspace.editor.document.lineCount);
+      scrollEditorVertically(stepY);
     }
     // Extend the selection to the cell under the (edge-clamped) pointer in the NEW window.
     const clampedX = Math.max(leftEdge, Math.min(selectionDrag.pointerX, rightEdge));

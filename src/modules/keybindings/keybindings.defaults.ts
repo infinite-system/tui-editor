@@ -74,6 +74,8 @@ export const canonicalBindings: Keybinding[] = [
   // global quit chord starts.
   { chord: { key: 'x', ctrl: true }, action: 'editor.cut', context: 'editor', when: 'editorHasSelection' },
   { chord: { key: 'v', ctrl: true }, action: 'editor.paste', context: 'editor' },
+  // Alt+Z toggles word wrap (VS Code parity; `alt` matches the event's option/meta slot).
+  { chord: { key: 'z', alt: true }, action: 'editor.toggleWordWrap', context: 'editor' },
   { chord: { key: 'z', ctrl: true, shift: false }, action: 'editor.undo', context: 'editor' },
   { chord: { key: 'z', ctrl: true, shift: true }, action: 'editor.redo', context: 'editor' },
   { chord: { key: 'y', ctrl: true }, action: 'editor.redo', context: 'editor' },

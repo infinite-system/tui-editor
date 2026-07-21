@@ -127,6 +127,43 @@ bounded by viewport height.
 
 **Last refined:** 2026-07-21
 
+### One file line is one visual row when word wrap is off
+
+**Invariant:** If word wrap is OFF (the default), then one file line renders as exactly one visual
+row — long lines clip at the right edge and horizontal scroll covers the rest — so the gutter
+(which numbers file lines), the caret Y, selection rows, and click hit-testing all share the same
+trivial row mapping. When word wrap is ON, this record does not apply: the row mapping is the
+editor's pure logical↔visual layer instead (*Word wrap is a pure view mapping*,
+src/modules/editor/editor.invariants.md), and the gutter numbers only a line's FIRST visual row
+(continuation rows blank).
+
+**Scope:** the editor gutter + code renderables in `RootView`, wrap-OFF mode only. (Historically
+this was recorded as unconditional — "an editor pane NEVER soft-wraps"; word wrap becoming a MODE
+on 2026-07-21 scoped it honestly.)
+
+**Mechanism:** the code renderable is `wrapMode: 'none'` in BOTH modes — the renderable itself
+never wraps; wrap-ON feeds pre-wrapped SEGMENT rows from the mapping layer, so row identity is
+always decided ABOVE the renderable, never by widget wrapping heuristics.
+
+**Generates:** the consecutive-gutter smoke check (wrap-off); the trivial `docLine − scrollTop`
+row math every wrap-off consumer uses; the guarantee that toggling wrap OFF restores today's
+pixel-identical behavior.
+
+**Evidence:** human-QA regression (a wrapped tail once desynced every gutter number below it);
+`smoke-editor.sh` "no soft-wrap" check — consecutive rows carry consecutive gutter numbers;
+`RootView` codeBody options keep `wrapMode: 'none'`.
+
+**Impossible if true:** with wrap off, a file line occupying two visual rows, or a gutter number
+that disagrees with the file line beside it; in either mode, the OpenTUI renderable (rather than
+the row source) deciding where a line breaks.
+
+**Verification:** `smoke-editor.sh` consecutive-gutter check (wrap-off); the wrap-mode inversion
+lives with the wrap record (continuation rows have BLANK gutters).
+
+**Status:** established
+
+**Last refined:** 2026-07-21
+
 ### The caret renders at the cursor display column
 
 **Invariant:** If the editor is focused, then a caret is drawn at the cursor's **display column**
@@ -139,6 +176,12 @@ on its line — not merely a marker in the gutter — accounting for tabs and wi
 `displayColumn(line, cursor.col)`, then adds **+1 on both axes** because the native terminal cursor
 is 1-based (ANSI CUP; OpenTUI's own `renderCursor` does `screenX + visualCol + 1`). Stands on
 *A cursor position resolves to three distinct coordinates* (editor).
+
+In wrap MODE (word wrap, 2026-07-21) the caret cell comes from the SAME logical↔visual mapping the
+render used (`wrapVisualPosition`): x = `codeBody.x` + the display column WITHIN the cursor's wrapped
+segment (no scrollLeft term — horizontal scroll is inert), y = `codeBody.y` + the cursor's visual-row
+index in the window. The 1-based ANSI +1 and the tmux `#{cursor_x},#{cursor_y}` oracle are unchanged —
+the caret must agree with tmux's own cursor in EITHER mode.
 
 **Generates:** a real caret; correct visual position on lines with tabs/wide chars; a caret that
 stays correct when the layout changes (the anchor moves with the renderable).

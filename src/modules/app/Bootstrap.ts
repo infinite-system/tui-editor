@@ -94,6 +94,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       treeHovered: workspace.tree.hoveredIndex.value,
       editorScrollTop: editor.viewport.scrollTop.value,
       editorScrollLeft: editor.viewport.scrollLeft.value,
+      wordWrap: editor.wordWrap.value,
       gitLogScrollTop: workspace.gitPanel.logScrollTop.value,
       gitLogIndex: workspace.gitPanel.logIndex.value,
       gitLogLoaded: workspace.commitLog.value?.loadedCount ?? 0,
@@ -132,6 +133,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     void editor.cursor.anchor.value;
     void editor.viewport.scrollTop.value;
     void editor.viewport.scrollLeft.value;
+    void editor.wordWrap.value;
     void workspace.focus.value;
     void workspace.sidebarView.value;
     void workspace.tree.selectedIndex.value;
@@ -468,6 +470,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     'editor.paste': () => void workspace.editor.pasteClipboard(),
     'editor.undo': () => workspace.editor.performUndo(),
     'editor.redo': () => workspace.editor.performRedo(),
+    'editor.toggleWordWrap': () => workspace.editor.toggleWordWrap(),
   };
 
   const onKey = (key: KeyEvent): void => {

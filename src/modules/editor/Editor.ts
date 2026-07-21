@@ -9,6 +9,7 @@ import { TextDocument } from './TextDocument';
 import { Viewport } from './Viewport';
 import { Cursor } from './Cursor';
 import { graphemeCount, displayColumn, graphemeAtDisplayColumn, graphemes } from './editor.coordinates';
+import { EditorWrap } from './EditorWrap';
 import { UndoStore, type EditKind } from '../storage/UndoStore';
 import { Files } from '../system/Files';
 import { Clock } from '../system/Clock';
@@ -31,6 +32,51 @@ class $Editor {
   }
   get readOnly() {
     return ref(false);
+  }
+  // Word wrap is a VIEW MODE: when on, rendering/caret/selection route through the pure
+  // logical↔visual mapping in editor.wrap.ts and horizontal scroll is inert. The document model
+  // is untouched by the toggle. invariant: Word wrap is a pure view mapping (editor.invariants.md)
+  get wordWrap() {
+    return ref(false);
+  }
+
+  /** The display-column width visual rows wrap at (the laid-out code viewport width). */
+  wrapWidth(): number {
+    return Math.max(1, this.viewport.width.value);
+  }
+
+  toggleWordWrap(): void {
+    this.wordWrap.value = !this.wordWrap.value;
+    if (!this.hasDocument.value) return;
+    if (this.wordWrap.value) {
+      this.viewport.scrollLeft.value = 0; // horizontal scroll is inert in wrap mode
+      this.revealCursorWrapped();
+    } else {
+      // Restore the absolute display-column goal and the caret-following horizontal scroll.
+      this.placeCursor(this.cursor.line.value, this.cursor.col.value);
+      this.scrollLineIntoView(this.cursor.line.value);
+    }
+  }
+
+  /** Wrap-mode reveal: the smallest logical-scrollTop change that shows the cursor's VISUAL row. */
+  private revealCursorWrapped(): void {
+    const width = this.wrapWidth();
+    const segments = EditorWrap.Class.wrapLine(this.document.line(this.cursor.line.value), width);
+    const segmentIndex = EditorWrap.Class.segmentIndexForCursor(segments, this.cursor.col.value);
+    this.viewport.scrollTop.value = EditorWrap.Class.scrollTopToRevealCursor(
+      this.document,
+      this.viewport.scrollTop.value,
+      this.cursor.line.value,
+      segmentIndex,
+      width,
+      this.viewport.height.value,
+    );
+  }
+
+  /** Mode-aware vertical reveal: wrapped visual-row walk when wrap is on, logical otherwise. */
+  private scrollLineIntoView(line: number): void {
+    if (this.wordWrap.value) this.revealCursorWrapped();
+    else this.viewport.scrollToLine(line, this.document.lineCount);
   }
 
   openFile(path: string): void {
@@ -84,11 +130,23 @@ class $Editor {
     return true;
   }
 
-  /** Place the cursor at a grapheme column, recording the matching DISPLAY column as the goal. */
+  /**
+   * Place the cursor at a grapheme column, recording the matching DISPLAY column as the goal.
+   * Wrap mode: the goal is the visual column WITHIN the cursor's wrapped row, horizontal scroll
+   * stays inert, and the reveal moves by visual rows.
+   */
   placeCursor(line: number, column: number): void {
-    const goalDisplayColumn = displayColumn(this.document.line(line), column);
-    this.cursor.set(line, column, goalDisplayColumn);
-    this.viewport.scrollToColumn(goalDisplayColumn); // keep the caret horizontally visible
+    const lineText = this.document.line(line);
+    const absoluteDisplayColumn = displayColumn(lineText, column);
+    if (this.wordWrap.value) {
+      const segments = EditorWrap.Class.wrapLine(lineText, this.wrapWidth());
+      const segment = segments[EditorWrap.Class.segmentIndexForCursor(segments, column)];
+      this.cursor.set(line, column, absoluteDisplayColumn - (segment?.startDisplayColumn ?? 0));
+      this.revealCursorWrapped();
+      return;
+    }
+    this.cursor.set(line, column, absoluteDisplayColumn);
+    this.viewport.scrollToColumn(absoluteDisplayColumn); // keep the caret horizontally visible
   }
 
   /** Set/extend the anchor for a movement (extend) or drop the selection (plain move). */
@@ -120,7 +178,7 @@ class $Editor {
     this.removeSelection();
     const column = this.document.insertInline(this.cursor.line.value, this.cursor.col.value, text);
     this.placeCursor(this.cursor.line.value, column);
-    this.viewport.scrollToLine(this.cursor.line.value, this.document.lineCount);
+    this.scrollLineIntoView(this.cursor.line.value);
   }
 
   insertNewline(): void {
@@ -137,19 +195,19 @@ class $Editor {
     } else {
       this.placeCursor(position.line, position.col);
     }
-    this.viewport.scrollToLine(this.cursor.line.value, this.document.lineCount);
+    this.scrollLineIntoView(this.cursor.line.value);
   }
 
   backspace(): void {
     if (this.readOnly.value || !this.hasDocument.value) return;
     this.captureBefore('delete');
     if (this.removeSelection()) {
-      this.viewport.scrollToLine(this.cursor.line.value, this.document.lineCount);
+      this.scrollLineIntoView(this.cursor.line.value);
       return;
     }
     const position = this.document.deleteBackward(this.cursor.line.value, this.cursor.col.value);
     this.placeCursor(position.line, position.col);
-    this.viewport.scrollToLine(position.line, this.document.lineCount);
+    this.scrollLineIntoView(position.line);
   }
 
   deleteChar(): void {
@@ -175,7 +233,7 @@ class $Editor {
     await Clipboard.Class.copy(text);
     this.captureBefore('delete');
     this.removeSelection();
-    this.viewport.scrollToLine(this.cursor.line.value, this.document.lineCount);
+    this.scrollLineIntoView(this.cursor.line.value);
   }
 
   async pasteClipboard(): Promise<void> {
@@ -186,7 +244,7 @@ class $Editor {
     this.removeSelection();
     const position = this.document.insertMultiline(this.cursor.line.value, this.cursor.col.value, text);
     this.placeCursor(position.line, position.col);
-    this.viewport.scrollToLine(position.line, this.document.lineCount);
+    this.scrollLineIntoView(position.line);
   }
 
   // --- undo/redo ------------------------------------------------------------
@@ -204,7 +262,7 @@ class $Editor {
     this.document.dirty.value = true;
     this.placeCursor(target.cursor.line, target.cursor.col);
     this.cursor.clearSelection();
-    this.viewport.scrollToLine(target.cursor.line, this.document.lineCount);
+    this.scrollLineIntoView(target.cursor.line);
   }
 
   performRedo(): void {
@@ -220,7 +278,7 @@ class $Editor {
     this.document.dirty.value = true;
     this.placeCursor(target.cursor.line, target.cursor.col);
     this.cursor.clearSelection();
-    this.viewport.scrollToLine(target.cursor.line, this.document.lineCount);
+    this.scrollLineIntoView(target.cursor.line);
   }
 
   save(): boolean {
@@ -244,13 +302,27 @@ class $Editor {
 
   moveVertical(delta: number, extend = false): void {
     this.beginMove(extend);
+    if (this.wordWrap.value) {
+      // Wrap mode: vertical movement steps VISUAL rows; the goal is the visual column within the
+      // wrapped row (set by placeCursor) and survives the run.
+      const target = EditorWrap.Class.moveByVisualRows(
+        this.document,
+        { line: this.cursor.line.value, col: this.cursor.col.value },
+        this.cursor.goalColumn.value,
+        delta,
+        this.wrapWidth(),
+      );
+      this.cursor.moveToLineKeepingGoal(target.line, target.col);
+      this.revealCursorWrapped();
+      return;
+    }
     const target = this.cursor.line.value + delta;
     const maxLine = this.document.lineCount - 1;
     const clamped = Math.max(0, Math.min(target, maxLine));
     const landingColumn = graphemeAtDisplayColumn(this.document.line(clamped), this.cursor.goalColumn.value);
     this.cursor.moveToLineKeepingGoal(clamped, landingColumn);
     this.viewport.scrollToColumn(displayColumn(this.document.line(clamped), landingColumn));
-    this.viewport.scrollToLine(clamped, this.document.lineCount);
+    this.scrollLineIntoView(clamped);
   }
 
   moveHorizontal(delta: number, extend = false): void {
@@ -273,7 +345,7 @@ class $Editor {
       }
     }
     this.placeCursor(line, column);
-    this.viewport.scrollToLine(line, this.document.lineCount);
+    this.scrollLineIntoView(line);
   }
 
   /** Ctrl+Left/Right: jump to the previous/next word start (grapheme-safe). */
@@ -307,7 +379,7 @@ class $Editor {
       while (column > 0 && isWordCharacter(row[column - 1] ?? '')) column -= 1;
     }
     this.placeCursor(line, column);
-    this.viewport.scrollToLine(line, this.document.lineCount);
+    this.scrollLineIntoView(line);
   }
 
   /** Ctrl+Home / Ctrl+End: jump to the document start/end. */
@@ -315,14 +387,14 @@ class $Editor {
     if (!this.hasDocument.value) return;
     this.beginMove(extend);
     this.placeCursor(0, 0);
-    this.viewport.scrollToLine(0, this.document.lineCount);
+    this.scrollLineIntoView(0);
   }
   moveDocumentEnd(extend = false): void {
     if (!this.hasDocument.value) return;
     this.beginMove(extend);
     const lastLine = this.document.lineCount - 1;
     this.placeCursor(lastLine, graphemeCount(this.document.line(lastLine)));
-    this.viewport.scrollToLine(lastLine, this.document.lineCount);
+    this.scrollLineIntoView(lastLine);
   }
 
   moveToLineStart(extend = false): void {
@@ -342,13 +414,13 @@ class $Editor {
   gotoTop(extend = false): void {
     this.beginMove(extend);
     this.placeCursor(0, 0);
-    this.viewport.scrollToLine(0, this.document.lineCount);
+    this.scrollLineIntoView(0);
   }
   gotoBottom(extend = false): void {
     this.beginMove(extend);
     const last = this.document.lineCount - 1;
     this.placeCursor(last, 0);
-    this.viewport.scrollToLine(last, this.document.lineCount);
+    this.scrollLineIntoView(last);
   }
 }
 
