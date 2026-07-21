@@ -23,6 +23,28 @@ class $App {
   get statusMessage() {
     return ref('Ready · Ctrl+Q to quit');
   }
+  // Ctrl+X..Ctrl+C quit chord (VS Code's terminal intercepts Ctrl+Q): armed by Ctrl+X, fires on
+  // Ctrl+C, disarmed by any other key or after the timeout.
+  get quitChordArmed() {
+    return ref(false);
+  }
+  private quitChordArmedAtMs = 0;
+
+  armQuitChord(nowMs: number): void {
+    this.quitChordArmed.value = true;
+    this.quitChordArmedAtMs = nowMs;
+  }
+  disarmQuitChord(): void {
+    this.quitChordArmed.value = false;
+  }
+  quitChordActive(nowMs: number, timeoutMs = 2000): boolean {
+    if (!this.quitChordArmed.value) return false;
+    if (nowMs - this.quitChordArmedAtMs > timeoutMs) {
+      this.quitChordArmed.value = false;
+      return false;
+    }
+    return true;
+  }
 
   /** Register a disposer to run on shutdown (LIFO). */
   onDispose(disposer: () => void): void {

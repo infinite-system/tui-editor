@@ -55,7 +55,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
 
   const commands = new CommandRegistry.Class();
 
-  const view = buildRootView(renderer, workspace, theme, commands);
+  const view = buildRootView(renderer, workspace, theme, commands, app);
 
   // Last mouse event seen (for the observability side channel — proves the mouse path is live).
   let lastMouse: { type: string; x: number; y: number; button: number } | null = null;
@@ -142,6 +142,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     void commands.query.value;
     void commands.selectedIndex.value;
     void theme.paletteName.value;
+    void app.quitChordArmed.value;
     paint();
   });
 
@@ -235,10 +236,30 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   };
 
   const onKey = (key: KeyEvent): void => {
+    // Quit paths: Ctrl+Q (plain terminals), F10 (passes through VS Code's terminal), and the
+    // Ctrl+X..Ctrl+C chord (emacs-style; VS Code intercepts Ctrl+Q). Plain Ctrl+C stays COPY.
     if (key.name === 'q' && key.ctrl) {
       void shutdown();
       return;
     }
+    if (key.name === 'f10') {
+      void shutdown();
+      return;
+    }
+    if (key.name === 'x' && key.ctrl && !commands.open.value) {
+      // In editor focus WITH a selection Ctrl+X means cut (handled in the editor branch below);
+      // otherwise it arms the quit chord.
+      const cutting = workspace.focus.value === 'editor' && workspace.editor.cursor.hasSelection;
+      if (!cutting) {
+        app.armQuitChord(Date.now());
+        return;
+      }
+    }
+    if (key.name === 'c' && key.ctrl && app.quitChordActive(Date.now())) {
+      void shutdown();
+      return;
+    }
+    if (app.quitChordArmed.value) app.disarmQuitChord(); // any other key breaks the chord
 
     // Palette captures all input while open.
     if (commands.open.value) {

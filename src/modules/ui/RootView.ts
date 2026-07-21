@@ -14,6 +14,7 @@ import {
   type CliRenderer,
 } from '@opentui/core';
 import type { Workspace } from '../workspace/Workspace';
+import type { App } from '../app/App';
 import type { Theme } from '../theme/Theme';
 import type { CommandRegistry } from '../commands/CommandRegistry';
 import type { Palette } from '../theme/theme.palettes';
@@ -50,6 +51,7 @@ export function buildRootView(
   workspace: Workspace.Instance,
   theme: Theme.Instance,
   commands: CommandRegistry.Instance,
+  app: App.Instance,
 ): RootView {
   const root = renderer.root;
   const readPalette = () => theme.palette;
@@ -192,7 +194,7 @@ export function buildRootView(
     '',
     '   ↑/↓  navigate files      Enter  open / expand',
     '   Tab  switch pane         Ctrl+P command palette',
-    '   Ctrl+Q  quit',
+    '   Ctrl+Q or F10  quit   (VS Code: Ctrl+X then Ctrl+C)',
     '',
   ].join('\n');
 
@@ -322,7 +324,9 @@ export function buildRootView(
       parts.push(`${editor.document.lineCount} lines`);
     }
     parts.push(workspace.focus.value === 'files' ? '[Files]' : '[Editor]');
-    parts.push('Ctrl+Q quit');
+    parts.push(
+      app.quitChordArmed.value ? 'Ctrl+X armed — Ctrl+C quits' : 'Ctrl+Q/F10 quit',
+    );
     return parts.join('  ·  ');
   }
 
