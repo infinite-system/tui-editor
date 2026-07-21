@@ -352,6 +352,7 @@ export function buildRootView(
       parts.push(`${editor.document.lineCount} lines`);
     }
     parts.push(workspace.focus.value === 'files' ? '[Files]' : '[Editor]');
+    if (app.copyNotice.value) parts.push(app.copyNotice.value);
     parts.push(
       app.quitChordArmed.value ? 'Ctrl+X armed — Ctrl+C quits' : 'Ctrl+Q/F10 quit',
     );

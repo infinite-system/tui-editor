@@ -15,6 +15,7 @@ import { buildRootView, type RootView } from '../ui/RootView';
 import { StatusChannel } from '../system/StatusChannel';
 import { FrameProbe } from '../system/FrameProbe';
 import { ScrollPhysics } from '../ui/ScrollPhysics';
+import { Clipboard } from '../system/Clipboard';
 import { Environment } from '../system/Environment';
 import { Logging } from '../system/Logging';
 import { dirname, join } from 'node:path';
@@ -146,6 +147,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     void commands.selectedIndex.value;
     void theme.paletteName.value;
     void app.quitChordArmed.value;
+    void app.copyNotice.value;
     paint();
   });
 
@@ -395,7 +397,13 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
             // Publish how many characters landed on the clipboard — the observable proof that
             // copy actually copied (the human-QA "cannot copy" bug's verification channel).
             void editor.copySelection().then((copiedCharacters) => {
-              StatusChannel.Class.update({ lastCopyChars: copiedCharacters });
+              if (copiedCharacters > 0) {
+                app.copyNotice.value = `Copied ${copiedCharacters} chars (${Clipboard.Class.lastBackend ?? 'no backend'})`;
+              }
+              StatusChannel.Class.update({
+                lastCopyChars: copiedCharacters,
+                clipboardBackend: Clipboard.Class.lastBackend,
+              });
               StatusChannel.Class.flush();
             });
             break;

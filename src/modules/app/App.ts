@@ -28,6 +28,10 @@ class $App {
   get quitChordArmed() {
     return ref(false);
   }
+  // Last copy feedback ("Copied 42 chars (osc52)") — the user-visible proof that copy fired.
+  get copyNotice() {
+    return ref('');
+  }
   private quitChordArmedAtMs = 0;
 
   armQuitChord(nowMs: number): void {
