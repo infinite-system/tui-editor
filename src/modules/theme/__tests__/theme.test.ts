@@ -40,3 +40,17 @@ test('unicode icon set resolves known extension and falls back for unknown', () 
   expect(ThemeIcons.Class.iconFor(unicodeSet, 'main.ts', false)).toBe('◆');
   expect(ThemeIcons.Class.iconFor(unicodeSet, 'weird.zzz', false)).toBe(unicodeSet.file);
 });
+
+test('git action icons ladder: real glyphs on nerd/unicode, letters as the ascii fallback', () => {
+  // Ascii is the graceful degrade: o / d / + / - so a no-nerd-font terminal still reads.
+  expect(ThemeIcons.Class.actionIconsFor('ascii')).toEqual({ open: 'o', discard: 'd', stage: '+', unstage: '-' });
+  // Nerd + unicode are real single-cell glyphs (distinct from the letters).
+  const unicode = ThemeIcons.Class.actionIconsFor('unicode');
+  const nerd = ThemeIcons.Class.actionIconsFor('nerd');
+  for (const level of [unicode, nerd]) {
+    for (const glyph of [level.open, level.discard, level.stage, level.unstage]) {
+      expect([...glyph].length).toBe(1); // exactly one code point -> one cell, hit-zones stay aligned
+      expect('od+-'.includes(glyph)).toBe(false); // not the ascii letters
+    }
+  }
+});

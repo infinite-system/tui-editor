@@ -837,14 +837,31 @@ export function buildRootView(
         // ` [x] M path…            o d ±` — checkbox = staging state (click toggles); buttons
         // (open / discard / stage-unstage) appear on hover/selection, right-aligned.
         const checkbox = row.bucket === 'staged' ? '[x]' : '[ ]';
-        let label = ` ${checkbox} ${row.glyph} ${row.path}`;
+        const label = ` ${checkbox} ${row.glyph} ${row.path}`;
         if (selected || hovered) {
-          const buttons = ` o  d  ${row.bucket === 'staged' ? '-' : '+'}`;
-          const pathWidth = innerWidth - buttons.length - 1;
-          label = label.length > pathWidth ? label.slice(0, pathWidth) : label.padEnd(pathWidth, ' ');
-          label += buttons;
+          // Action buttons: real glyphs from the theme icon ladder (nerd → unicode → ascii letter),
+          // each theme-COLOURED and each ONE cell so the hit-zone columns (gitActionButtonAt) align:
+          // ` <open>  <discard>  <stage|unstage>` = 8 cells. Rendered as separate chunks so each
+          // button carries its own colour (open = accent, discard = deleted/red, stage = added/green,
+          // unstage = dim), then a trailing cell pads the row to innerWidth.
+          const actionIcons = theme.actionIcons;
+          const staged = row.bucket === 'staged';
+          const stageGlyph = staged ? actionIcons.unstage : actionIcons.stage;
+          const stageColor = staged ? palette.dim : palette.added;
+          const buttonCells = 8;
+          const pathWidth = innerWidth - buttonCells - 1;
+          const pathText = label.length > pathWidth ? label.slice(0, pathWidth) : label.padEnd(pathWidth, ' ');
+          const paint = (text: string, color: string) =>
+            background ? bg(background)(fg(color)(text)) : fg(color)(text);
+          chunks.push(paint(pathText, glyphColor(row.glyph)));
+          chunks.push(paint(` ${actionIcons.open}`, palette.accent));
+          chunks.push(paint(`  ${actionIcons.discard}`, palette.deleted));
+          chunks.push(paint(`  ${stageGlyph}`, stageColor));
+          chunks.push(paint(' ', palette.fg)); // pad the final cell to innerWidth
+          chunks.push(fg(palette.fg)('\n'));
+        } else {
+          pushRow(label, glyphColor(row.glyph), { background });
         }
-        pushRow(label, glyphColor(row.glyph), { background });
       }
     });
     const changesRendered = Math.min(changeRows.length - changesTop, changesVisible);

@@ -11,6 +11,14 @@ export interface IconSet {
   file: string;
 }
 
+/** Git changes-row action button glyphs — SINGLE-CELL each so the button hit-zone columns align. */
+export interface ActionIconSet {
+  open: string;
+  discard: string;
+  stage: string;
+  unstage: string;
+}
+
 const NERD: IconSet = {
   ext: {
     ts: '', tsx: '', js: '', jsx: '',
@@ -49,8 +57,20 @@ const SETS: Record<GlyphLevel, IconSet> = {
   ascii: ASCII,
 };
 
+// Action-button glyph ladder. nerd = nerd-font glyphs; unicode = single-cell symbols; ascii = the
+// letter fallback (o/d/+/-) so a no-nerd-font terminal still reads. Each glyph is exactly one cell.
+const ACTION_ICONS: Record<GlyphLevel, ActionIconSet> = {
+  nerd: { open: '\u{f08e}', discard: '\u{f0e2}', stage: '\u{f067}', unstage: '\u{f068}' }, // fa external-link / undo / plus / minus
+  unicode: { open: '↗', discard: '↩', stage: '✚', unstage: '−' },
+  ascii: { open: 'o', discard: 'd', stage: '+', unstage: '-' },
+};
+
 function $iconSetFor(level: GlyphLevel): IconSet {
   return SETS[level];
+}
+
+function $actionIconsFor(level: GlyphLevel): ActionIconSet {
+  return ACTION_ICONS[level];
 }
 
 /** Resolve an icon for a filename against a set (extension keyed, with folder/file default). */
@@ -64,6 +84,7 @@ function $iconFor(set: IconSet, name: string, isDirectory: boolean, open = false
 
 class $ThemeIcons {
   static iconSetFor = $iconSetFor;
+  static actionIconsFor = $actionIconsFor;
   static iconFor = $iconFor;
 }
 

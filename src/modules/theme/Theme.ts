@@ -6,7 +6,7 @@ import { Reactive } from 'ivue';
 import { ref } from 'vue';
 import { TerminalCapabilities, type ColorDepth, type GlyphLevel } from './TerminalCapabilities';
 import { PALETTES, DARK, ThemePalettes, type Palette } from './ThemePalettes';
-import { ThemeIcons, type IconSet } from './ThemeIcons';
+import { ThemeIcons, type IconSet, type ActionIconSet } from './ThemeIcons';
 
 class $Theme {
   get paletteName() {
@@ -26,6 +26,10 @@ class $Theme {
   }
   get icons(): IconSet {
     return ThemeIcons.Class.iconSetFor(this.glyphLevel.value);
+  }
+  /** Git changes-row action button glyphs at the current glyph level (nerd → unicode → ascii). */
+  get actionIcons(): ActionIconSet {
+    return ThemeIcons.Class.actionIconsFor(this.glyphLevel.value);
   }
 
   icon(name: string, isDir: boolean, open = false): string {
