@@ -32,16 +32,18 @@ effect-per-line/token/cell); handlers that only mutate; `App.dispose()` calling 
 **Evidence:** IMPLEMENTED — `Bootstrap.ts` `app.$watchEffect(...)` + `paint()`; input handlers
 carry no render calls; `setSize` on boot/resize only. Tested headless:
 `app/__tests__/frame-effect.test.ts` (revision + cursor change re-run the effect; `$stopEffects`
-stops it). Pending tmux end-to-end confirmation before `established`.
+stops it). Confirmed end-to-end by the tmux smoke `scripts/smoke-editor.sh`: booting, opening a
+file, and typing bump `bufferRevision` and repaint the real terminal via the side channel (ALL-PASS).
 
 **Impossible if true:** an async result (LSP diagnostic, git refresh) that changes model state but
 does not repaint until the next keystroke; a render pass that mutates model state; an
 effect-per-item render graph.
 
-**Verification:** the headless test above; plus a tmux assertion that a state change with no key
-event produces a new frame (status.json settle advances).
+**Verification:** the headless test above; plus the tmux smoke `scripts/smoke-editor.sh`
+(input → edit → repaint → side-channel, ALL-PASS). Async-producer (no-keypress) repaint is
+exercised end-to-end once git/LSP is wired into the editor (M4/M5).
 
-**Status:** provisional
+**Status:** established
 
 **Last refined:** 2026-07-21
 

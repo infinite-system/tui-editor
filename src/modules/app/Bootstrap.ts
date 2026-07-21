@@ -253,47 +253,39 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       const ed = workspace.editor;
       const accel = movementAcceleration(key);
       const extend = key.shift; // shift + movement extends the selection
-      if (key.name === 's' && key.ctrl) {
-        ed.save();
-      } else if (key.name === 'a' && key.ctrl) {
-        ed.selectAll();
-      } else if (key.name === 'c' && key.ctrl) {
-        void ed.copySelection();
-      } else if (key.name === 'x' && key.ctrl) {
-        void ed.cutSelection();
-      } else if (key.name === 'v' && key.ctrl) {
-        void ed.pasteClipboard();
-      } else if (key.name === 'z' && key.ctrl && !key.shift) {
-        ed.performUndo();
-      } else if ((key.name === 'z' && key.ctrl && key.shift) || (key.name === 'y' && key.ctrl)) {
-        ed.performRedo();
-      } else if (key.name === 'up') {
-        ed.moveVertical(-accel, extend);
-      } else if (key.name === 'down') {
-        ed.moveVertical(accel, extend);
-      } else if (key.name === 'left') {
-        ed.moveHorizontal(-accel, extend);
-      } else if (key.name === 'right') {
-        ed.moveHorizontal(accel, extend);
-      } else if (key.name === 'pageup') {
-        ed.pageUp(extend);
-      } else if (key.name === 'pagedown') {
-        ed.pageDown(extend);
-      } else if (key.name === 'home') {
-        ed.moveToLineStart(extend);
-      } else if (key.name === 'end') {
-        ed.moveToLineEnd(extend);
-      } else if (key.name === 'return') {
-        ed.insertNewline();
-      } else if (key.name === 'backspace') {
-        ed.backspace();
-      } else if (key.name === 'delete') {
-        ed.deleteChar();
-      } else if (key.name === 'escape') {
-        if (ed.hasSelection) ed.cursor.clearSelection();
-        else workspace.focusFiles();
-      } else if (isTypedCharacter(key)) {
-        ed.insertText(key.sequence);
+      if (key.ctrl) {
+        // Ctrl chords: save / select-all / clipboard / undo-redo.
+        switch (key.name) {
+          case 's': ed.save(); break;
+          case 'a': ed.selectAll(); break;
+          case 'c': void ed.copySelection(); break;
+          case 'x': void ed.cutSelection(); break;
+          case 'v': void ed.pasteClipboard(); break;
+          case 'z': key.shift ? ed.performRedo() : ed.performUndo(); break;
+          case 'y': ed.performRedo(); break;
+          default: break;
+        }
+      } else {
+        // Plain keys: movement (accel + shift-extend), editing, focus.
+        switch (key.name) {
+          case 'up': ed.moveVertical(-accel, extend); break;
+          case 'down': ed.moveVertical(accel, extend); break;
+          case 'left': ed.moveHorizontal(-accel, extend); break;
+          case 'right': ed.moveHorizontal(accel, extend); break;
+          case 'pageup': ed.pageUp(extend); break;
+          case 'pagedown': ed.pageDown(extend); break;
+          case 'home': ed.moveToLineStart(extend); break;
+          case 'end': ed.moveToLineEnd(extend); break;
+          case 'return': ed.insertNewline(); break;
+          case 'backspace': ed.backspace(); break;
+          case 'delete': ed.deleteChar(); break;
+          case 'escape':
+            if (ed.hasSelection) ed.cursor.clearSelection();
+            else workspace.focusFiles();
+            break;
+          default:
+            if (isTypedCharacter(key)) ed.insertText(key.sequence);
+        }
       }
     }
     // No explicit render here — any model mutation above triggers the frame effect.

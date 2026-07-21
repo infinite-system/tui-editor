@@ -1,26 +1,26 @@
 {
-  "ready": true,
-  "frame": 8,
+  "ready": false,
+  "frame": 70,
   "renderQuiescent": true,
-  "width": 100,
-  "height": 24,
-  "activeWorkspace": "fable-edit",
+  "width": 120,
+  "height": 40,
+  "activeWorkspace": "fixtures",
   "workspaces": [
-    "fable-edit"
+    "fixtures"
   ],
-  "activeBuffer": "/tmp/fable-edit/scratch.txt",
-  "bufferRevision": 1,
-  "dirty": false,
+  "activeBuffer": "/home/parallels/dev/tui-editor/fixtures/README.md",
+  "bufferRevision": 2,
+  "dirty": true,
   "cursor": {
     "line": 1,
-    "col": 1
+    "col": 2
   },
   "openBuffers": [
-    "/tmp/fable-edit/scratch.txt"
+    "/home/parallels/dev/tui-editor/fixtures/README.md"
   ],
   "diagnosticsCount": 0,
   "subprocessPids": [],
-  "lifecycleTier": "active",
+  "lifecycleTier": "disposing",
   "overlay": null,
   "paletteQuery": "",
   "paletteMatches": 0,

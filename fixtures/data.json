@@ -1,0 +1,5 @@
+{
+  "name": "fixture",
+  "count": 42,
+  "items": ["a", "b", "c"]
+}
