@@ -6,10 +6,70 @@ drives rendering imperatively; wiring the coarse frame effect promotes it.
 
 ## Reality-based invariants
 
-_None specific to the UI — it consumes the project reality invariants (the terminal shows a
-bounded viewport; terminal color and glyph support varies) rather than adding its own._
+### A scrollable pane height is an input not an output
+
+**Invariant:** If a pane virtualizes its content by rendering only the window that fits its height,
+then that height MUST be fixed independently of the pane's own content — viewport-derived, computed,
+or pinned. If the layout lets the height derive from the content, the window walk feeds itself
+(taller container → wider window → more rendered → taller container) and the fixpoint is the whole
+list.
+
+**Scope:** every scrollable/virtualized pane under OpenTUI's Yoga flex layout — the editor code
+area, the file tree, the git changes list, and the git commit log.
+
+**Mechanism:** the render window is a function of container height (`renderGitPanel` derives `bodyH`
+from `sidebar.height`; the editor from `editorArea.height`). A flex chain whose parent sizes to
+content closes the loop. Pinning the height (sidebar `width`+`height:'100%'`, `editorArea`
+`flexGrow:1`+`height:'100%'`, code area `flexGrow:1`) breaks it. Cross-substrate transfer from the
+browser `VirtualScroller` (`min-height:0` / viewport-pinned there) — the reality is substrate-
+independent; only the pinning mechanism rebinds (CSS flex → Yoga flex).
+
+**Generates:** a stable render window; bounded per-frame cost while scrolling.
+
+**Evidence:** all scrollable panes derive their window height from a pinned ancestor, never from
+content. Upheld. (In the browser host this ran away to 2,565→5,265 items in 12s behind a
+content-sized container — the impossibility this predicts.)
+
+**Impossible if true:** a scrollable pane whose height derives from its own rendered content (the
+window diverges toward the full list).
+
+**Verification:** review — every scrollable pane's height traces to a viewport-pinned ancestor;
+a FrameProbe check that rendered-row count stays bounded while wheel-scrolling a large log.
+
+**Status:** established
+
+**Last refined:** 2026-07-21
 
 ## Chosen invariants
+
+### One writer per scroll regime per frame
+
+**Invariant:** If more than one authority can change a pane's scroll offset (mouse wheel, keyboard
+paging, programmatic scroll-to, and later a scroll animation), then exactly one writes that offset
+in a given frame; when authority changes, the newest STOPS the other and adopts the current offset.
+Two writers in one frame silently eat input.
+
+**Scope:** every scroll offset — editor `viewport.scrollTop`, `gitPanel.logScrollTop`, tree
+selection window.
+
+**Mechanism:** wheel routes through `Workspace.scrollGitLog` / `viewport.scrollBy`; keyboard through
+`moveLog` / tree `moveSelection`; each input event is the sole writer for that event. When the
+pending scroll animation lands, it must adopt-and-stop on any programmatic jump (see the paused-clock
+contract). Cross-substrate transfer from `VirtualScroller` ("One Writer Per Regime").
+
+**Generates:** deterministic scrolling; no lost wheel/keys.
+
+**Evidence:** today only one path writes each offset per event; recorded now to bind the scroll
+animation increment.
+
+**Impossible if true:** a frame in which two authorities both write the same scroll offset.
+
+**Verification:** review + a test that a programmatic scroll-to during a wheel gesture yields the
+scroll-to's offset, not a blend.
+
+**Status:** provisional
+
+**Last refined:** 2026-07-21
 
 ### Renderables hold no model state
 
@@ -128,9 +188,5 @@ Selection MODEL: `scripts/smoke-editor.sh` (Shift+Right → `hasSelection`, Esca
 unit tests.
 
 **Status:** established
-
-**Last refined:** 2026-07-21
-
-**Status:** provisional (logic proven; render integration to be reworked to native selection)
 
 **Last refined:** 2026-07-21

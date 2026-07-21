@@ -173,3 +173,26 @@ strongest signals so far; feed back to the skills.
   code only. Completion (contract + tests + minor fixes) was delegated to review subagents that also
   caught real bugs (lsp dispose). **Takeaway:** budget a review+completion pass per codex module by
   default; a codex "done" is code-done, not milestone-done.
+
+## Cross-substrate invariant transfer (scroll, from the realized VirtualScroller) — 2026-07-21
+Transferred scroll invariants from `../realized/.../VirtualScroller.invariants.md` (browser GPU
+substrate) to this terminal cell-grid substrate. The split is the lesson:
+- **The implementation transfers ~nothing** — Lenis/creep-integrator/CSS-transition machinery is the
+  *expression*, bound to sub-pixel compositing. Discarded wholesale (expression-is-not-essence).
+- **~half the invariants transfer verbatim** because they are about STATE OWNERSHIP + COST, which are
+  substrate-independent: "Nothing Costs O(Total)" (== our *Cost tracks the actively observed set*,
+  reached INDEPENDENTLY on another substrate → a Domain-Crossing confirmation of our own core
+  invariant), "Computed Geometry Is The Truth" (pull the total through a callback; rendered rows are
+  never the source of scroll truth), "One Writer Per Regime", "The Container Is An Input Never An
+  Output" (Yoga-flex runaway fixpoint — a real reality invariant we lacked; now recorded).
+- **Some transfer only with a re-parameterized variable, not rejected:** "Smoothness Is Crossing
+  Regularity" — the KERNEL (regularity of *crossings*) is substrate-independent; only the crossing
+  UNIT rebinds (device-pixel → cell-row). It PREDICTS sub-cell smoothness is impossible (don't chase
+  it). Filed as the contract for the pending smooth-scroll increment.
+- **Some are category errors on the new substrate and must be RECORDED as non-transferable** so
+  nobody re-imports them: GPU-f32 precision, composited-layer weight, transform-scaled rects,
+  fractional/sub-pixel motion — all N/A on a discrete cell grid.
+**Takeaway:** when transferring a contract across substrates, sort each invariant into
+{transfers verbatim | transfers with a re-parameterized variable | category error here}; the
+verbatim-transfers that you also derived independently are the strongest (Domain-Crossing), and the
+re-parameterized ones are easy to wrongly reject — check whether only the *unit* changed.
