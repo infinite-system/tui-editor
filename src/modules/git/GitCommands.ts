@@ -25,12 +25,12 @@ export interface GitLogOptions {
 }
 
 class $GitCommands {
-  protected static get ProcessesClass() {
+  protected static get Processes() {
     return Processes.Class;
   }
 
   private static async run(cwd: string, arguments_: string[]): Promise<GitCommandResult> {
-    const result = await this.ProcessesClass.run(['git', ...arguments_], cwd);
+    const result = await this.Processes.run(['git', ...arguments_], cwd);
     return { code: result.code, stdout: result.stdout, stderr: result.stderr };
   }
 
