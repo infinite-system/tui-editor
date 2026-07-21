@@ -94,6 +94,25 @@ class $Workspace {
       stopVelocity: VERTICAL_MOMENTUM.stopVelocity,
     };
   }
+  // SINGLE SOURCE of the git changes/log split: settings.gitSplitRatio when settings are attached
+  // (so the panel control + the draggable divider + persistence all agree), else the panel-local
+  // ratio (unit tests, no-settings). Every reader — the renderer AND the scroll geometry here — must
+  // read THIS, never gitPanel.splitRatio directly, or the two diverge.
+  get gitSplitRatio(): number {
+    const settings = this.settingsSource;
+    return settings ? settings.gitSplitRatio.value : this.gitPanel.splitRatio.value;
+  }
+  // Clamp + write the split (a divider drag or a keyboard adjust). Writes settings.gitSplitRatio (and
+  // persists) when attached; the panel-local ratio stays mirrored so a no-settings path still works.
+  setGitSplit(ratio: number): void {
+    const clamped = Math.max(0.15, Math.min(0.85, ratio));
+    this.gitPanel.setSplit(clamped);
+    const settings = this.settingsSource;
+    if (settings) {
+      settings.gitSplitRatio.value = clamped;
+      settings.save();
+    }
+  }
   protected createCommitExpansion(root: string) { return new CommitExpansion.Class(root); }
 
   get focus() {
@@ -348,7 +367,7 @@ class $Workspace {
       const changeRows = git ? GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value) : [];
       const changesRegionHeight = Math.max(
         1,
-        Math.max(2, Math.floor(editorViewport.height.value * gitPanel.splitRatio.value)) - 1,
+        Math.max(2, Math.floor(editorViewport.height.value * this.gitSplitRatio)) - 1,
       );
       const maximumChangesScrollTop = Math.max(0, changeRows.length - changesRegionHeight);
       gitPanel.changesScrollTop.value = Math.max(

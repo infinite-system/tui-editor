@@ -1102,7 +1102,7 @@ export function buildRootView(
 
     // Changes region (top): headers + glyphed file rows from the SHARED row model, windowed.
     const changeRows = GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
-    const topHeight = Math.max(2, Math.floor(bodyHeight * gitPanel.splitRatio.value));
+    const topHeight = Math.max(2, Math.floor(bodyHeight * workspace.gitSplitRatio));
     const changesVisible = topHeight - 1;
     const changesTop = Math.min(
       gitPanel.changesScrollTop.value,
