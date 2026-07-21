@@ -21,7 +21,7 @@ import type { CommandRegistry } from '../commands/CommandRegistry';
 import type { Palette } from '../theme/theme.palettes';
 import { highlightLine, type Role } from '../syntax/Highlighter';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
-import { displayColumn, lineWidth, graphemeAtDisplayColumn } from '../editor/editor.coordinates';
+import { displayColumn, lineWidth, graphemeAtDisplayColumn, graphemeToU16 } from '../editor/editor.coordinates';
 import { SelectableText } from './SelectableText';
 import { Logging } from '../system/Logging';
 
@@ -224,16 +224,31 @@ export function buildRootView(
     const focused = workspace.focus.value === 'editor';
     const gutterChunks: TextChunk[] = [];
     const codeChunks: TextChunk[] = [];
+    // COLUMN virtualization (the horizontal twin of the line flyweight): each visible line is
+    // sliced to the visible display-column window BEFORE tokenizing, so per-frame cost tracks
+    // visible columns — never total line length (50k-char lines render at normal speed).
+    // Trade-off: tokens start at the slice, so left-context-sensitive highlighting can differ at
+    // the boundary (documented in the contract).
+    // invariant: Cost tracks the actively observed set (project.invariants.md)
+    const scrollLeft = editor.viewport.scrollLeft.value;
+    const viewportWidth = editorViewportWidth();
     visibleLines.forEach((text, visibleIndex) => {
       const lineNumber = top + visibleIndex;
       const isCurrentLine = lineNumber === currentLineIndex;
       const lineNumberText = String(lineNumber + 1).padStart(lineNumberWidth, ' ');
       gutterChunks.push(fg(isCurrentLine ? palette.accent : palette.dim)(`${lineNumberText} `));
       gutterChunks.push(fg(palette.accent)(isCurrentLine && focused ? '▏' : ' '));
+      let windowText = text;
+      if (scrollLeft > 0 || text.length > viewportWidth) { // O(1) test; a needless slice is harmless
+        let startGrapheme = graphemeAtDisplayColumn(text, scrollLeft);
+        if (displayColumn(text, startGrapheme) < scrollLeft) startGrapheme += 1; // never split a straddling wide glyph
+        const endGrapheme = graphemeAtDisplayColumn(text, scrollLeft + viewportWidth) + 1;
+        windowText = text.slice(graphemeToU16(text, startGrapheme), graphemeToU16(text, endGrapheme));
+      }
       if (editor.document.binary.value || language === 'plain') {
-        codeChunks.push(fg(palette.fg)(text));
+        codeChunks.push(fg(palette.fg)(windowText));
       } else {
-        for (const span of highlightLine(text, language)) {
+        for (const span of highlightLine(windowText, language)) {
           codeChunks.push(fg(roleColor(span.role, palette))(span.text));
         }
       }
@@ -257,6 +272,7 @@ export function buildRootView(
       codeBody.clearSelectionRange();
       return;
     }
+    const selectionScrollLeft = editor.viewport.scrollLeft.value;
     const anchorY = Math.max(0, selection.start.line - top);
     const anchorX = selection.start.line >= top ? displayColumn(editor.document.line(selection.start.line), selection.start.col) : 0;
     const focusY = Math.min(viewportHeight - 1, selection.end.line - top);
@@ -264,7 +280,12 @@ export function buildRootView(
       selection.end.line < top + viewportHeight
         ? displayColumn(editor.document.line(selection.end.line), selection.end.col)
         : lineWidth(editor.document.line(Math.min(top + viewportHeight - 1, editor.document.lineCount - 1)));
-    codeBody.setSelectionRange(anchorX, anchorY, focusX, focusY);
+    codeBody.setSelectionRange(
+      Math.max(0, anchorX - selectionScrollLeft),
+      anchorY,
+      Math.max(0, focusX - selectionScrollLeft),
+      focusY,
+    );
   }
 
   // The git sidebar: a changes region (staged/unstaged/untracked + branch header) over a
@@ -395,12 +416,18 @@ export function buildRootView(
     const scrollTop = editor.viewport.scrollTop.value;
     const viewportHeight = editorViewportHeight();
     const cursorLine = editor.cursor.line.value;
-    if (editor.hasDocument.value && workspace.focus.value === 'editor' && !open && cursorLine >= scrollTop && cursorLine < scrollTop + viewportHeight) {
+    const caretVisibleHorizontally =
+      displayColumn(editor.document.line(Math.min(cursorLine, editor.document.lineCount - 1)), editor.cursor.col.value) >=
+        editor.viewport.scrollLeft.value &&
+      displayColumn(editor.document.line(Math.min(cursorLine, editor.document.lineCount - 1)), editor.cursor.col.value) <
+        editor.viewport.scrollLeft.value + editorViewportWidth();
+    if (editor.hasDocument.value && workspace.focus.value === 'editor' && !open && cursorLine >= scrollTop && cursorLine < scrollTop + viewportHeight && caretVisibleHorizontally) {
       const cursorDisplayColumn = displayColumn(editor.document.line(cursorLine), editor.cursor.col.value);
       // Anchor the caret to the code renderable's ACTUAL laid-out screen cell (codeBody.x/y from
       // yoga), not hand-derived layout constants — the constants drifted from the real layout (the
       // human-QA off-by-one) and would break again when the sidebar becomes draggable.
-      const caretCellX = codeBody.x + cursorDisplayColumn;
+      const caretScrollLeft = editor.viewport.scrollLeft.value;
+      const caretCellX = codeBody.x + (cursorDisplayColumn - caretScrollLeft);
       const caretCellY = codeBody.y + (cursorLine - scrollTop);
       // The native terminal cursor is 1-BASED (ANSI CUP): +1 on both axes — OpenTUI's own
       // renderCursor does `screenX + visualCol + 1`.
@@ -422,8 +449,17 @@ export function buildRootView(
     else workspace.tree.moveSelection(wheelDelta(event));
   };
   editorArea.onMouseScroll = (event) => {
-    if (workspace.editor.hasDocument.value)
+    if (!workspace.editor.hasDocument.value) return;
+    if (event.modifiers.shift) {
+      // Horizontal: clamp to the widest VISIBLE line (O(window), never the whole file).
+      const top = workspace.editor.viewport.scrollTop.value;
+      const visible = workspace.editor.document.slice(top, editorViewportHeight());
+      let widestVisible = 0;
+      for (const line of visible) widestVisible = Math.max(widestVisible, lineWidth(line));
+      workspace.editor.viewport.scrollByColumns(wheelDelta(event), widestVisible);
+    } else {
       workspace.editor.viewport.scrollBy(wheelDelta(event), workspace.editor.document.lineCount);
+    }
   };
 
   // Mouse selection drives the MODEL (cursor + anchor) — the single writer; the native highlight
@@ -439,7 +475,10 @@ export function buildRootView(
         workspace.editor.document.lineCount - 1,
       ),
     );
-    const column = graphemeAtDisplayColumn(workspace.editor.document.line(line), cellX - codeBody.x);
+    const column = graphemeAtDisplayColumn(
+      workspace.editor.document.line(line),
+      workspace.editor.viewport.scrollLeft.value + (cellX - codeBody.x),
+    );
     return { line, column };
   };
   codeBody.onMouseDown = (event) => {

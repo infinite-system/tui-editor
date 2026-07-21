@@ -10,20 +10,47 @@
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
+// Memoized segmentation, keyed by line CONTENT (content-keyed = revision-proof: an edited line is a
+// new string; identical lines share an entry). Repeated coordinate lookups during a selection drag
+// or repaint re-segment nothing — the walk cost is paid once per distinct line. Bounded: on
+// overflow the oldest half is dropped (insertion order).
+const MEMO_CAP = 512;
+const boundariesMemo = new Map<string, number[]>();
+const clustersMemo = new Map<string, string[]>();
+
+function memoized<Value>(cache: Map<string, Value>, line: string, compute: () => Value): Value {
+  const cached = cache.get(line);
+  if (cached !== undefined) return cached;
+  if (cache.size >= MEMO_CAP) {
+    let dropped = 0;
+    for (const key of cache.keys()) {
+      cache.delete(key);
+      if (++dropped >= MEMO_CAP / 2) break;
+    }
+  }
+  const value = compute();
+  cache.set(line, value);
+  return value;
+}
+
 /** UTF-16 boundary offsets: [0, end-of-g0, end-of-g1, ...]. Length = graphemeCount + 1. */
 export function graphemeBoundaries(line: string): number[] {
-  const boundaries: number[] = [0];
-  for (const segment of segmenter.segment(line)) {
-    boundaries.push(segment.index + segment.segment.length);
-  }
-  return boundaries;
+  return memoized(boundariesMemo, line, () => {
+    const boundaries: number[] = [0];
+    for (const segment of segmenter.segment(line)) {
+      boundaries.push(segment.index + segment.segment.length);
+    }
+    return boundaries;
+  });
 }
 
 /** The grapheme cluster strings of a line, in order. */
 export function graphemes(line: string): string[] {
-  const clusters: string[] = [];
-  for (const segment of segmenter.segment(line)) clusters.push(segment.segment);
-  return clusters;
+  return memoized(clustersMemo, line, () => {
+    const clusters: string[] = [];
+    for (const segment of segmenter.segment(line)) clusters.push(segment.segment);
+    return clusters;
+  });
 }
 
 /** Number of user-perceived characters (grapheme clusters) in a line. */

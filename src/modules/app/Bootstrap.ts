@@ -85,6 +85,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       treeSelected: workspace.tree.selectedIndex.value,
       treeHovered: workspace.tree.hoveredIndex.value,
       editorScrollTop: editor.viewport.scrollTop.value,
+      editorScrollLeft: editor.viewport.scrollLeft.value,
       gitLogScrollTop: workspace.gitPanel.logScrollTop.value,
       gitLogIndex: workspace.gitPanel.logIndex.value,
       gitLogLoaded: workspace.commitLog.value?.loadedCount ?? 0,
@@ -120,6 +121,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     void editor.cursor.col.value;
     void editor.cursor.anchor.value;
     void editor.viewport.scrollTop.value;
+    void editor.viewport.scrollLeft.value;
     void workspace.focus.value;
     void workspace.tree.selectedIndex.value;
     void workspace.tree.hoveredIndex.value;

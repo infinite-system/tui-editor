@@ -74,7 +74,9 @@ class $Editor {
 
   /** Place the cursor at a grapheme column, recording the matching DISPLAY column as the goal. */
   placeCursor(line: number, column: number): void {
-    this.cursor.set(line, column, displayColumn(this.document.line(line), column));
+    const goalDisplayColumn = displayColumn(this.document.line(line), column);
+    this.cursor.set(line, column, goalDisplayColumn);
+    this.viewport.scrollToColumn(goalDisplayColumn); // keep the caret horizontally visible
   }
 
   /** Set/extend the anchor for a movement (extend) or drop the selection (plain move). */
@@ -235,6 +237,7 @@ class $Editor {
     const clamped = Math.max(0, Math.min(target, maxLine));
     const landingColumn = graphemeAtDisplayColumn(this.document.line(clamped), this.cursor.goalColumn.value);
     this.cursor.moveToLineKeepingGoal(clamped, landingColumn);
+    this.viewport.scrollToColumn(displayColumn(this.document.line(clamped), landingColumn));
     this.viewport.scrollToLine(clamped, this.document.lineCount);
   }
 

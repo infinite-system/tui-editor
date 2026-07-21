@@ -110,10 +110,15 @@ the actively observed set*.
 **Generates:** viewport-bounded tokenization; windowed tree/list rendering; flat render cost as
 files/repos grow.
 
-**Evidence:** `RootView.ts:143,175,240` — all three slice to the visible window. Upheld.
+**Evidence:** editor body, tree, and palette list all slice to the visible window; since 2026-07-21
+the editor ALSO virtualizes COLUMNS — each visible line is sliced to the visible display-column
+window (grapheme-safe, memoized boundaries) BEFORE tokenizing, so a 50k-char line drags/renders at
+normal speed (verified: 3 drag-selects ≈ 0.1s processing; open+settle 538ms). Trade-off recorded:
+tokens start at the slice, so left-context-sensitive highlighting can differ at the window edge.
 
 **Impossible if true:** a frame that tokenizes or builds renderables for every line of a large
-file, or every row of a large tree.
+file, or every row of a large tree; a frame whose cost depends on total LINE LENGTH rather than
+visible columns (the horizontal twin).
 
 **Verification:** a test opening a 100k-line document asserting tokenization count per frame is
 bounded by viewport height.

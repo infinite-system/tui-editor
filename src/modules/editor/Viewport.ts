@@ -43,6 +43,22 @@ class $Viewport {
     this.scrollTop.value = Math.max(0, Math.min(this.scrollTop.value + delta, maxScrollTop));
   }
 
+  /** Horizontal wheel/scrollbar: move the column window, clamped to the visible content width. */
+  scrollByColumns(delta: number, contentWidth: number): void {
+    const maxScrollLeft = Math.max(0, contentWidth - this.width.value);
+    this.scrollLeft.value = Math.max(0, Math.min(this.scrollLeft.value + delta, maxScrollLeft));
+  }
+
+  /** Keep `displayColumn` visible within [scrollLeft, scrollLeft + width): auto-hscroll on cursor moves. */
+  scrollToColumn(displayColumn: number): void {
+    const width = Math.max(1, this.width.value);
+    if (displayColumn < this.scrollLeft.value) {
+      this.scrollLeft.value = displayColumn;
+    } else if (displayColumn >= this.scrollLeft.value + width) {
+      this.scrollLeft.value = displayColumn - width + 1;
+    }
+  }
+
   get firstVisible(): number {
     return this.scrollTop.value;
   }
