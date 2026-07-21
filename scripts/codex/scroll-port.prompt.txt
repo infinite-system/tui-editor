@@ -1,0 +1,89 @@
+You are a scoped worker on the Fable TUI code editor (Bun + ivue + OpenTUI + Tree-sitter). Work ONLY
+in your current directory (a git worktree). Do exactly the task below, verify it empirically, and
+STOP. Do NOT commit (the reviewer commits). Do NOT delete files you did not create. Do NOT modify
+`src/modules/ui/scroll-momentum.ts` (the physics is done + tested — REUSE it). Install nothing.
+
+== READ FIRST (in your worktree) ==
+- `.claude/skills/ivue/SKILL.md` + `project.ivue-reference.md` — the ivue namespace pattern (Reactive
+  from 'ivue'; ref/shallowRef from 'vue'; ref-returning getter = reactive state; late-read deps;
+  plain getters for cheap derived state).
+- `.claude/skills/invariants/SKILL.md` + `.claude/skills/ibr/SKILL.md` — reduce to load-bearing
+  cause; verify by generation (the FrameProbe frame-diff). Uphold the recorded invariants.
+- `src/modules/ui/scroll-momentum.ts` — the PURE momentum physics (velocity rows/sec, decays,
+  crossing-regular, halts below threshold). `addImpulse(m, deltaRows)`, `stepMomentum(m, dtSec) ->
+  {momentum, rows}`, `halt()`, `isMoving(m)`, `AT_REST`. REUSE — do not modify or reinvent.
+- THE REFERENCE PATTERN you are replicating — the commit-log momentum wiring (just landed):
+  * `src/modules/workspace/GitPanel.ts` — `logMomentum` shallowRef; jumps set it to AT_REST.
+  * `src/modules/workspace/Workspace.ts` — `impulseGitLog(delta)` (wheel adds impulse),
+    `tickGitLogScroll(dtSec)` (steps momentum, moves the window by whole rows, returns isMoving),
+    `haltGitLogScroll()` (keyboard/jumps halt). scrollGitLog clamps + ensureRange.
+  * `src/modules/app/Bootstrap.ts` `onFrame` — steps the glide by real dt (CLAMPED to MAX_DT so a
+    resume from idle advances one frame, not the whole gap = the paused-clock invariant) and calls
+    `renderer.requestRender()` while moving (self-sustaining loop).
+  * `src/modules/ui/RootView.ts` — `sidebar.onMouseScroll` routes a wheel notch to `impulseGitLog`;
+    `editorArea.onMouseScroll` currently does a DIRECT `viewport.scrollBy` (no momentum yet).
+- `src/modules/editor/Viewport.ts` — `scrollTop`/`scrollLeft`/`height`/`width` refs, `scrollBy(delta,
+  totalLines)` (vertical), `scrollToLine`. You will ADD horizontal support.
+- `src/modules/editor/editor.coordinates.ts` — `displayColumn(line, graphemeCol)`, `lineWidth(line)`,
+  `graphemeToU16`, `u16ToGrapheme`, `graphemes`. The three coordinates (grapheme index, UTF-16
+  offset, display column) are DISTINCT — do not conflate. Horizontal scroll is in DISPLAY columns.
+- `src/modules/ui/RootView.ts` `renderEditor` (gutter + code split), `applySelection`, and the caret
+  block in `update()` (`renderer.setCursorPosition(x,y,...)`, x derived from `displayColumn`). The
+  selection + caret x-mapping was JUST fixed and is `established` in `ui.invariants.md` — you MUST NOT
+  regress it; horizontal scroll shifts both by `scrollLeft` display columns.
+- `src/modules/ui/FrameProbe.ts` — dumps the render buffer (4 RGBA lanes/cell) to
+  `artifacts/frame.json` under `TUI_FRAME_DUMP=1`; the ONLY authoritative visual oracle
+  (tmux capture is lossy). `src/modules/ui/ui.invariants.md` — the scroll invariants
+  (Container-Is-Input, One-Writer, the selection/caret records) your work must uphold.
+
+== THE TASK ==
+1. **Port momentum to the editor viewport (VERTICAL) and the file tree**, replicating the commit-log
+   pattern: a `logMomentum`-style `ScrollMomentum` state on the pane's model, a wheel notch adds an
+   impulse, the `onFrame` loop steps ALL animating panes (generalize the tick — do not special-case
+   only the git log), keyboard/precise moves and any programmatic jump `halt()` that pane's momentum
+   (One-Writer-Per-Regime). Editor vertical uses `viewport.scrollBy` for the whole-row moves; the
+   tree scrolls its window (moving the visible window / selection). Reuse `stepMomentum`/`addImpulse`.
+2. **Editor HORIZONTAL scroll** (the new capability):
+   - Input: **Shift+wheel** scrolls horizontally. The wheel MouseEvent carries `modifiers.shift`
+     (see `@opentui/core` MouseEvent) — when shift is held, route the wheel to a horizontal impulse
+     (a separate `ScrollMomentum` for the horizontal axis), else vertical.
+   - State: add `scrollLeft` momentum + a `scrollBy`-for-columns on `Viewport` (clamp to
+     `[0, max(0, maxLineWidth - viewportWidth)]`; compute the max display width across the VISIBLE
+     window only — O(window), not the whole file).
+   - Render: in `renderEditor`, offset each visible code line by `scrollLeft` DISPLAY columns — drop
+     the leading `scrollLeft` display columns (grapheme-aware: convert the display-col offset to a
+     grapheme index via the coordinates, slice there), so wide chars/tabs are handled correctly. The
+     gutter does NOT scroll horizontally.
+   - Caret + selection: subtract `scrollLeft` from the caret x and from the selection anchor/focus x
+     (in display columns) so they still line up with the shifted text; clamp so nothing renders into
+     the gutter. DO NOT regress the established selection/caret x-mapping.
+3. Publish the new offsets to the status side-channel (in `Bootstrap.publish`): editor `scrollLeft`,
+   and keep `editorScrollTop`/`gitLogScrollTop`. Add whatever you need to assert scroll state.
+
+== VERIFY BEFORE YOU STOP (all required; both-ways per the verification invariant) ==
+- `bunx tsc --noEmit; echo TSC=$?` -> 0.
+- `bun test` -> all pass. ADD unit tests where logic is extractable (e.g. Viewport horizontal clamp;
+  any pure per-pane tick adapter). The momentum physics is already tested — don't duplicate.
+- `node .claude/skills/invariants/scripts/check_invariants.mjs --all --refs` -> 0 problems. Keep the
+  schema valid; annotate new code with the invariants it upholds (exact record names, no commas).
+- REAL end-to-end under tmux with `scripts/tui-harness.sh` (verbs: launch/ready/settle/send/field/
+  kill/click/scroll). Run the app on THIS repo (`bun run src/main.ts "$PWD"`), open a code file,
+  then:
+  * vertical wheel over the editor glides scrollTop over frames then settles (sample the field over
+    time as in the reference).
+  * Shift+wheel scrolls horizontally: assert editor `scrollLeft` increases, and with `TUI_FRAME_DUMP=1`
+    a FrameProbe frame-diff shows the code text shifting LEFT while the gutter stays fixed, and the
+    caret cell still sits under the cursor's character. (For a Shift+wheel SGR sequence, the shift
+    modifier is bit 4 of the button code: left-wheel-down with shift = button 65+4=... inspect
+    `@opentui/core/lib/parse.mouse` for the exact bit; or add a `scroll` variant to the harness.)
+  * a FrameProbe frame-diff proving vertical wheel advances the window by whole rows at a regular
+    cadence (no judder), and that no gutter cells change on horizontal scroll.
+- Confirm the selection highlight + caret still land correctly WITH a non-zero scrollLeft (frame-diff).
+
+== DELIVER (final message) ==
+List files changed, the exact horizontal-scroll coordinate math (display-col -> grapheme slice), the
+frame-diff proofs (before/after cells) for vertical glide + horizontal shift + caret-with-scrollLeft,
+and any invariant you could not verify. Files you MAY change: `src/modules/editor/Viewport.ts`,
+`src/modules/ui/RootView.ts`, `src/modules/app/Bootstrap.ts`, `src/modules/workspace/*.ts`,
+`src/modules/workspace/FileTree.ts`, and colocated tests. Do NOT touch scroll-momentum.ts or
+main.ts. Do NOT git commit.
