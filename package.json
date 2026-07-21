@@ -1,0 +1,17 @@
+{
+  "name": "tui-editor",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.4.5",
+    "ivue": "^2.0.0",
+    "web-tree-sitter": "^0.26.11"
+  }
+}
