@@ -14,7 +14,7 @@ export interface CommandContext {
   requestRender: () => void;
 }
 
-function registerDefaultCommandsImplementation(
+function $registerDefaultCommands(
   registry: CommandRegistry.Instance,
   context: CommandContext,
 ): void {
@@ -94,7 +94,7 @@ function registerDefaultCommandsImplementation(
 }
 
 class $CommandDefaults {
-  static registerDefaultCommands = registerDefaultCommandsImplementation;
+  static registerDefaultCommands = $registerDefaultCommands;
 }
 
 export namespace CommandDefaults {

@@ -10,7 +10,7 @@ import { Kernel } from '../kernel/Kernel';
 import { Workspace } from '../workspace/Workspace';
 import { Theme } from '../theme/Theme';
 import { CommandRegistry } from '../commands/CommandRegistry';
-import { CommandDefaults } from '../commands/commands.defaults';
+import { CommandDefaults } from '../commands/CommandDefaults';
 import { buildRootView, type RootView } from '../ui/RootView';
 import { StatusChannel } from '../system/StatusChannel';
 import { FrameProbe } from '../system/FrameProbe';
