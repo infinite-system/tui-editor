@@ -30,9 +30,13 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       (b) grapheme-safe coordinate model — DONE (2a06da1, editor.coordinates.ts + Unicode matrix);
       (c) real caret at display column ← NEXT; (d) selection + copy/cut/paste (Clipboard capability);
       (e) multi-workspace; (f) search; (g) piece-table undo.
-- [ ] M4 — git (codex) + diff.
-- [ ] M5 — TS LSP (codex) + diagnostics + integrate.
-- [ ] M6 — markdown preview (codex).
+- [~] M4 — git module INTEGRATED (b5cf988, 7 tests). Remaining: `diff` module (DiffEngine/DiffModel/
+      DiffView/DiffRenderable) + the git sidebar UI (staged/unstaged, stage/unstage) + the
+      split editable-diff view (left read-only blob, right live buffer).
+- [~] M5 — lsp module: codex code + subagent completing contract+tests+2 tsc fixes (running). Then
+      integrate + wire to editor (diagnostics render; definition jump; coordinate map grapheme↔UTF-16).
+- [~] M6 — markdown module: codex code + subagent completing contract+tests (running). Then integrate
+      + the split-preview UI + toggle command.
 - [ ] M7 — plugin demo (kernel composition + one contribution plugin).
 - [ ] Gauntlet — 5 refinement passes + independent subagent panel + completeness-critic-until-dry.
 - [ ] §5.1 gate green — traceability matrix + checker + lifecycle audit + benchmarks + panel + critic
@@ -40,7 +44,17 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       REQUIRED for done; isolation mandatory (throwaway worktree, never touch live blackline-app).
 
 ## Delegation (see project.delegation-log.md)
-- codex git/markdown/lsp: RUNNING in worktrees, 0 commits yet. Review+checker+`bun test` each on commit; merge clean; reconcile coordinate model at integration.
+- codex WORKERS FINISHED (they do NOT self-commit — integration is the main loop's job):
+  - **git**: reviewed (high quality: stale-supersede, porcelain-v2 parser, non-vacuous 5-record
+    contract), fixed $stopEffects cast, INTEGRATED to master (b5cf988). 7 tests pass. ✓
+  - **markdown**: code done + typechecks, but codex SKIPPED contract + tests. Completion
+    (review + markdown.invariants.md + tests) delegated to subagent — running in codex-markdown worktree.
+  - **lsp**: code done but 2 tsc errors (JsonRpc TextDecoder('ascii'); LspTransport stream type) +
+    SKIPPED contract + tests. Completion (fix + review + lsp.invariants.md + tests) delegated to
+    subagent — running in codex-lsp worktree.
+- On subagent return: review its diff/output, run tsc + bun test + checker in the worktree, then
+  copy the module into master + commit (credit codex + subagent). LSP↔editor coordinate mapping
+  (grapheme↔UTF-16 via editor.coordinates) is wired at M5 integration, not in the module.
 - Audits done: Fable + Opus on M1–M3 (broadly sound; coordinate + reactive-frame the deep gaps). tsc-masking trap noted.
 
 ## Rework backlog (audits + own review)
@@ -55,12 +69,25 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 - Drive real TUI under tmux; assert STATE from `artifacts/status.json` (StatusChannel), pane-capture only for visual.
 - tsc green + tests pass at every commit; dispose resources; record benchmarks.
 
-## Next action
-Real caret at display column (RootView): replace the gutter `▏` bar with a caret at
-`displayColumn(line, cursor.col)` on the cursor's line (tab/wide aware), using
-`editor.coordinates`. Then selection (anchor on Cursor + shift/mouse) + copy/cut/paste via a
-`Clipboard` system capability (wl-copy/xclip/pbcopy + OSC 52). Then a tmux end-to-end smoke to
-promote the reactive-frame + coordinate invariants toward established.
+## Next action (precise, in order)
+1. **Integrate markdown + lsp** when the two completion subagents return (they write
+   contract+tests into `.claude/worktrees/codex-{markdown,lsp}`): review the subagent's output +
+   any code fixes, run `bunx tsc --noEmit` + `bun test src/modules/<m>` + checker in the worktree,
+   then `cp -r .claude/worktrees/codex-<m>/src/modules/<m>/. src/modules/<m>/ && rm -f
+   src/modules/<m>/.gitkeep`, verify on master, commit crediting codex + subagent. (git already done.)
+2. **Real caret at display column** — `src/modules/ui/RootView.ts` `renderEditorStyled()` (~line 185):
+   replace the gutter `▏` bar with a caret at `displayColumn(text, cursor.col)` on the cursor's line
+   (import from `../editor/editor.coordinates`). First `grep -ri cursor node_modules/@opentui/core`
+   for a native terminal-cursor API; else render a block caret (invert the grapheme cell:
+   split the line at `graphemeToU16(text, col)`, render that grapheme with bg=accent/fg=bg, or an
+   inverted space at end-of-line). Add a RootView/caret test + tmux visual check.
+3. **Selection + copy/cut/paste** — anchor on `Cursor` (add `anchorLine/anchorCol`), shift+arrow +
+   mouse-drag extend, selection-aware insert/delete (replace-selection), a `Clipboard` system
+   capability (`src/modules/system/Clipboard.ts`, Static: wl-copy/xclip/pbcopy + OSC 52 fallback),
+   selection highlight in RootView. All grapheme-boundary correct.
+4. Then M4 diff, M5/M6 UI wiring, M7 plugins, gauntlet, blackline test (VERIFICATION_RESULTS.md), gate.
+Promote the reactive-frame + coordinate + git invariants toward `established` after a tmux end-to-end smoke.
 
 ## Last commit
-2a06da1 — editor rework 2/n: grapheme-safe coordinate model. (Prev: 3b244b2 reactive frame effect.)
+b5cf988 — M4 git module integrated (codex, reviewed+fixed). (Editor rework: 3b244b2 reactive frame,
+2a06da1 grapheme coordinate model. Governance: 0448932.)
