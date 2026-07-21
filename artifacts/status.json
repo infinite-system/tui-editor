@@ -1,6 +1,6 @@
 {
   "ready": true,
-  "frame": 36,
+  "frame": 11,
   "renderQuiescent": true,
   "width": 120,
   "height": 32,
@@ -12,7 +12,7 @@
   "bufferRevision": 1,
   "dirty": false,
   "cursor": {
-    "line": 23,
+    "line": 0,
     "col": 0
   },
   "openBuffers": [

@@ -5,9 +5,32 @@
 // invariant: ivue owns state, OpenTUI owns projection (project.invariants.md)
 // invariant: The terminal shows a bounded viewport (project.invariants.md)
 // invariant: Cost tracks the actively observed set (project.invariants.md)
-import { BoxRenderable, TextRenderable, type CliRenderer } from '@opentui/core';
+import {
+  BoxRenderable,
+  TextRenderable,
+  StyledText,
+  fg,
+  type TextChunk,
+  type CliRenderer,
+} from '@opentui/core';
 import type { Workspace } from '../workspace/Workspace';
 import type { Theme } from '../theme/Theme';
+import type { Palette } from '../theme/theme.palettes';
+import { highlightLine, type Role } from '../syntax/Highlighter';
+import { LanguageRegistry } from '../syntax/LanguageRegistry';
+
+function roleColor(role: Role, pal: Palette): string {
+  switch (role) {
+    case 'keyword': return pal.keyword;
+    case 'string': return pal.string;
+    case 'number': return pal.number;
+    case 'comment': return pal.comment;
+    case 'func': return pal.func;
+    case 'type': return pal.type;
+    case 'operator': return pal.operator;
+    default: return pal.fg;
+  }
+}
 
 const SIDEBAR_W = 32;
 
@@ -63,6 +86,8 @@ export function buildRootView(
   });
   const editorBody = new TextRenderable(renderer, { id: 'editor-body', content: '' });
   editorArea.add(editorBody);
+  // Empty-state text is plain; file content is a StyledText (colored spans).
+  let editorStyled: StyledText | null = null;
 
   mainRow.add(sidebar);
   mainRow.add(editorArea);
@@ -106,31 +131,46 @@ export function buildRootView(
     return lines.join('\n');
   }
 
-  function renderEditor(): string {
+  const EMPTY_STATE = [
+    '',
+    '   Fable — a terminal code workspace',
+    '',
+    '   ↑/↓  navigate files      Enter  open / expand',
+    '   Tab  switch pane         Ctrl+P command palette',
+    '   Ctrl+Q  quit',
+    '',
+  ].join('\n');
+
+  // Builds a StyledText of the visible window with syntax colors + gutter. Only the visible
+  // lines are tokenized (flyweight). Returns null for the empty state (plain string).
+  function renderEditorStyled(): StyledText | null {
     const ed = ws.editor;
-    if (!ed.hasDocument.value) {
-      return [
-        '',
-        '   Fable — a terminal code workspace',
-        '',
-        '   ↑/↓  navigate files      Enter  open / expand',
-        '   Tab  switch pane         Ctrl+P command palette',
-        '   Ctrl+Q  quit',
-        '',
-      ].join('\n');
-    }
+    if (!ed.hasDocument.value) return null;
+    const pal = p();
+    const lang = LanguageRegistry.Class.forPath(ed.document.path);
     const height = editorViewportHeight();
     const top = ed.viewport.scrollTop.value;
     const win = ed.document.slice(top, height);
     const gutterW = String(ed.document.lineCount).length + 1;
     const curLine = ed.cursor.line.value;
-    const lines = win.map((text, i) => {
+    const focused = ws.focus.value === 'editor';
+    const chunks: TextChunk[] = [];
+    win.forEach((text, i) => {
       const lineNo = top + i;
+      const isCur = lineNo === curLine;
       const num = String(lineNo + 1).padStart(gutterW, ' ');
-      const cursorMark = lineNo === curLine && ws.focus.value === 'editor' ? '▏' : ' ';
-      return `${num} ${cursorMark}${text}`;
+      chunks.push(fg(isCur ? pal.accent : pal.dim)(`${num} `));
+      chunks.push(fg(pal.accent)(isCur && focused ? '▏' : ' '));
+      if (ed.document.binary.value || lang === 'plain') {
+        chunks.push(fg(pal.fg)(text));
+      } else {
+        for (const span of highlightLine(text, lang)) {
+          chunks.push(fg(roleColor(span.role, pal))(span.text));
+        }
+      }
+      if (i < win.length - 1) chunks.push(fg(pal.fg)('\n'));
     });
-    return lines.join('\n');
+    return new StyledText(chunks);
   }
 
   function renderStatus(): string {
@@ -160,7 +200,8 @@ export function buildRootView(
 
     sidebarBody.content = renderTree();
     sidebarBody.fg = pal.fg;
-    editorBody.content = renderEditor();
+    editorStyled = renderEditorStyled();
+    editorBody.content = editorStyled ?? EMPTY_STATE;
     editorBody.fg = pal.fg;
     statusText.content = renderStatus();
     statusText.fg = pal.dim;
