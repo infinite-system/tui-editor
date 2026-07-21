@@ -4,7 +4,43 @@ Live status ledger for the autonomous build. Updated every turn so state survive
 compaction. **If you are resuming: read this, then `HANDOFF.md`, then continue at the first
 unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
-## RESUME HERE (frontier as of commit cbdbbd2)
+## USER PIPELINE (durable — no user request drops; statused per item)
+
+- [x] 1. All-scrollbars geometry audit — ONE source (scrollbar-geometry.ts) + visibility predicate
+      + 17 property tests + FrameProbe sweep; log-bar alignment FIXED, phantom tree bar FIXED,
+      range-reaches-end FIXED (5984766, c679dad). Remaining: fold the sweep into the smoke.
+- [x] 2. Keybindings completion — defaults+mac data, kitty super, Bootstrap dissolved, 12 resolver
+      tests, tmux sequences verified (1990558). Remaining: fuller Claude review panel on the module.
+- [~] 3. Git round 3 — multi-select MODEL + collective actions landed (5984766: selectedPaths,
+      stage/unstage/discard-selected w/ multi-path confirm). TODO: ContextMenu component +
+      right-click (SGR button-2) + Ctrl/Shift-click + selection-bg render + icons on action buttons
+      (theme ladder) + keyboard parity (Space toggle, Ctrl+A, Shift+F10) + checkbox decision record.
+- [ ] 4. Hover tooltips on action buttons (reusable Tooltip: ~400ms dwell via frame tick, edge-
+      clamped; later: scrollbars/tree/diagnostics).
+- [ ] 5. Commit drill-down TREE-STYLE — commits expand INLINE (▸/▾) to changed files (lazy per-sha,
+      cached, disposed on collapse); file click -> per-commit diff (read-only unified OK first);
+      variable-height virtualization (1+fileCount rows); Right/Left/Enter parity.
+- [ ] 6. Word-wrap toggleable mode (palette + Alt+Z; logical-line gutter, wrap-aware caret/
+      selection/movement; exclusive with h-scroll; both modes regression-tested).
+- [ ] 7. Momentum parity on ALL panes (editor V+H, tree, changes) — one shared engine.
+- [ ] 8. Idle quiescence + perf baselines — 10s at-rest assertion (frame delta 0, CPU ~0; 14% live
+      sample to disambiguate), RSS 110MB vs 100MB target itemized (PERFORMANCE_BASELINES.md),
+      create/dispose lifecycle stability.
+- [ ] 9. Static-capability convention pass (single owner, mechanical, after scroll work settles).
+- [ ] 10. Milestone road: M5 diagnostics/definition + editable side-by-side diff · M6 markdown
+      split-preview · multi-workspace · file search · piece-table undo · M7 plugins (ScrollPhysics
+      or theme plugin demo) · 5-pass gauntlet (fuller Claude panel) · isolated blackline-worktree
+      acceptance test · §5.1 gate all-six-green.
+- [ ] 11. REGRESSION (user): commit-log wheel scroll "not smooth now" — verify wheel still feeds
+      IMPULSES (not direct steps) after the per-region routing rework; tick self-sustaining; dt
+      clamp unchanged; then tune FASTER (bigger impulse, snappier decay); compare 158ce95 feel;
+      verify post-input glide cadence under tmux.
+- [x] 12. Diff-open from git panel (VS Code-style; panel stays; read-only colored diff) (0cf3d88).
+- Standing conventions (in HANDOFF + decisions): full descriptive names · one-canonical-set+overlay
+  keybindings · destructive ops need confirmation · authoritative-channel verification · delegation
+  = full-parity packet, worktree/disjoint isolation, IBR+invariants embedded.
+
+## RESUME HERE (frontier as of commit 5984766)
 - **State:** 11 module contracts · 136 tests pass · tsc green · checker 0 problems · smoke ALL-PASS
   (20 assertions incl. caret-cell, no-wrap gutter, drag-select persistence, copy, tree-click, hover).
 - **HUMAN-QA BATCH COMPLETE (all committed):** caret off-by-one (1-based ANSI + layout-anchored,
