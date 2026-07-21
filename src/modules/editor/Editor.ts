@@ -7,6 +7,7 @@ import { ref } from 'vue';
 import { TextDocument } from './TextDocument';
 import { Viewport } from './Viewport';
 import { Cursor } from './Cursor';
+import { graphemeCount } from './editor.coordinates';
 import { UndoStore, type EditKind } from '../storage/UndoStore';
 import { Files } from '../system/Files';
 import { Clock } from '../system/Clock';
@@ -134,14 +135,14 @@ class $Editor {
   }
 
   private curLineLen(): number {
-    return this.document.line(this.cursor.line.value).length;
+    return graphemeCount(this.document.line(this.cursor.line.value));
   }
 
   moveVertical(delta: number): void {
     const target = this.cursor.line.value + delta;
     const max = this.document.lineCount - 1;
     const clamped = Math.max(0, Math.min(target, max));
-    this.cursor.setLinePreserveGoal(clamped, this.document.line(clamped).length);
+    this.cursor.setLinePreserveGoal(clamped, graphemeCount(this.document.line(clamped)));
     this.viewport.scrollToLine(clamped, this.document.lineCount);
   }
 
@@ -151,7 +152,7 @@ class $Editor {
     if (col < 0) {
       if (line > 0) {
         line -= 1;
-        col = this.document.line(line).length;
+        col = graphemeCount(this.document.line(line));
       } else {
         col = 0;
       }

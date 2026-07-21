@@ -7,6 +7,7 @@
 import { Reactive } from 'ivue';
 import { ref } from 'vue';
 import { Files } from '../system/Files';
+import { graphemeToU16, graphemeCount, clampCol } from './editor.coordinates';
 
 class $TextDocument {
   path = '';
@@ -116,22 +117,23 @@ class $TextDocument {
 
   // --- character-level editing (used from M3) ---
 
-  /** Insert `str` (no newlines) at line/col. Returns the new col. */
+  /** Insert `str` (no newlines) at line/grapheme-col. Returns the new grapheme col. */
   insertInline(line: number, col: number, str: string): number {
     const cur = this.line(line);
-    const c = Math.max(0, Math.min(col, cur.length));
-    this._lines[line] = cur.slice(0, c) + str + cur.slice(c);
+    const g = clampCol(cur, col);
+    const u16 = graphemeToU16(cur, g);
+    this._lines[line] = cur.slice(0, u16) + str + cur.slice(u16);
     this.dirty.value = true;
     this.revision.value++;
-    return c + str.length;
+    return g + graphemeCount(str);
   }
 
-  /** Split a line at col into two lines (Enter). Returns new cursor {line, col}. */
+  /** Split a line at grapheme-col into two lines (Enter). Returns new cursor {line, col}. */
   splitLine(line: number, col: number): { line: number; col: number } {
     const cur = this.line(line);
-    const c = Math.max(0, Math.min(col, cur.length));
-    const before = cur.slice(0, c);
-    const after = cur.slice(c);
+    const u16 = graphemeToU16(cur, clampCol(cur, col));
+    const before = cur.slice(0, u16);
+    const after = cur.slice(u16);
     this._lines[line] = before;
     this._lines.splice(line + 1, 0, after);
     this.dirty.value = true;
@@ -139,19 +141,21 @@ class $TextDocument {
     return { line: line + 1, col: 0 };
   }
 
-  /** Delete the character before line/col (Backspace). Returns new cursor. */
+  /** Delete the grapheme before line/col (Backspace). Returns new cursor. */
   deleteBackward(line: number, col: number): { line: number; col: number } {
+    const cur = this.line(line);
     if (col > 0) {
-      const cur = this.line(line);
-      this._lines[line] = cur.slice(0, col - 1) + cur.slice(col);
+      const g = clampCol(cur, col);
+      const start = graphemeToU16(cur, g - 1);
+      const end = graphemeToU16(cur, g);
+      this._lines[line] = cur.slice(0, start) + cur.slice(end);
       this.dirty.value = true;
       this.revision.value++;
-      return { line, col: col - 1 };
+      return { line, col: g - 1 };
     }
     if (line > 0) {
       const prev = this.line(line - 1);
-      const cur = this.line(line);
-      const newCol = prev.length;
+      const newCol = graphemeCount(prev);
       this._lines[line - 1] = prev + cur;
       this._lines.splice(line, 1);
       this.dirty.value = true;
@@ -161,11 +165,14 @@ class $TextDocument {
     return { line, col };
   }
 
-  /** Delete the character at line/col (Delete). Returns cursor unchanged. */
+  /** Delete the grapheme at line/col (Delete). Returns cursor unchanged. */
   deleteForward(line: number, col: number): { line: number; col: number } {
     const cur = this.line(line);
-    if (col < cur.length) {
-      this._lines[line] = cur.slice(0, col) + cur.slice(col + 1);
+    const g = clampCol(cur, col);
+    if (g < graphemeCount(cur)) {
+      const start = graphemeToU16(cur, g);
+      const end = graphemeToU16(cur, g + 1);
+      this._lines[line] = cur.slice(0, start) + cur.slice(end);
       this.dirty.value = true;
       this.revision.value++;
     } else if (line < this._lines.length - 1) {
