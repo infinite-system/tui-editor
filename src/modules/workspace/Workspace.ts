@@ -161,7 +161,45 @@ class $Workspace {
     const rows = buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
     const row = rows[rowIndex];
     if (row?.kind !== 'file') return;
-    this.gitPanel.confirmDiscard.value = { path: row.path, bucket: row.bucket };
+    this.gitPanel.confirmDiscard.value = { paths: [row.path], buckets: new Map([[row.path, row.bucket]]) };
+  }
+
+  /** The file rows for the current multi-selection (empty when none). */
+  private selectedFileRows(): Array<{ path: string; bucket: 'staged' | 'unstaged' | 'untracked' }> {
+    const git = this.git.value;
+    if (!git) return [];
+    const selected = this.gitPanel.selectedPaths.value;
+    const rows = buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
+    const out: Array<{ path: string; bucket: 'staged' | 'unstaged' | 'untracked' }> = [];
+    for (const row of rows) if (row.kind === 'file' && selected.has(row.path)) out.push(row);
+    return out;
+  }
+
+  /** Collective actions over the multi-selection (context menu). */
+  async stageSelected(): Promise<void> {
+    const git = this.git.value;
+    const targets = this.selectedFileRows().filter((row) => row.bucket !== 'staged');
+    if (!git || targets.length === 0) return;
+    await git.stage(targets.map((row) => row.path));
+    await git.refresh();
+  }
+
+  async unstageSelected(): Promise<void> {
+    const git = this.git.value;
+    const targets = this.selectedFileRows().filter((row) => row.bucket === 'staged');
+    if (!git || targets.length === 0) return;
+    await git.unstage(targets.map((row) => row.path));
+    await git.refresh();
+  }
+
+  /** Arms the y/N confirm listing every selected file (destructive — never immediate). */
+  requestDiscardSelected(): void {
+    const targets = this.selectedFileRows();
+    if (targets.length === 0) return;
+    this.gitPanel.confirmDiscard.value = {
+      paths: targets.map((row) => row.path),
+      buckets: new Map(targets.map((row) => [row.path, row.bucket])),
+    };
   }
 
   async confirmDiscard(): Promise<void> {
@@ -169,7 +207,11 @@ class $Workspace {
     const git = this.git.value;
     this.gitPanel.confirmDiscard.value = null;
     if (!pending || !git) return;
-    await GitCommands.Class.discard(this.root, pending.path, pending.bucket);
+    for (const filePath of pending.paths) {
+      const bucket = pending.buckets.get(filePath);
+      if (bucket) await GitCommands.Class.discard(this.root, filePath, bucket);
+    }
+    this.gitPanel.clearSelectedPaths();
     await git.refresh();
   }
 

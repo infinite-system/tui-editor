@@ -45,8 +45,30 @@ class $GitPanel {
     return ref(-1);
   }
   // Pending destructive confirmation (discard) — rendered as a y/N overlay; null = none.
+  // paths: one or many (collective discard lists them all).
   get confirmDiscard() {
-    return shallowRef<{ path: string; bucket: 'staged' | 'unstaged' | 'untracked' } | null>(null);
+    return shallowRef<{ paths: string[]; buckets: Map<string, 'staged' | 'unstaged' | 'untracked'> } | null>(null);
+  }
+
+  // MULTI-SELECTION of change files, keyed by PATH (survives rows reshuffling between sections
+  // as staging moves them). Identity-replaced on change so observers re-run.
+  get selectedPaths() {
+    return shallowRef<ReadonlySet<string>>(new Set());
+  }
+
+  toggleSelected(path: string): void {
+    const next = new Set(this.selectedPaths.value);
+    if (next.has(path)) next.delete(path);
+    else next.add(path);
+    this.selectedPaths.value = next;
+  }
+
+  selectMany(paths: string[]): void {
+    this.selectedPaths.value = new Set([...this.selectedPaths.value, ...paths]);
+  }
+
+  clearSelectedPaths(): void {
+    if (this.selectedPaths.value.size > 0) this.selectedPaths.value = new Set();
   }
   // Momentum state for the commit-log wheel glide (see ui/scroll-momentum).
   get logMomentum() {
