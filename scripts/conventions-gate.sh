@@ -100,5 +100,16 @@ if ! bash "$(dirname "$0")/smoke-settings-applied.sh" --meta >/tmp/conventions-g
 fi
 rm -f /tmp/conventions-gate-settings.$$.log
 
+# 9) MAP-COHERENCE: records are territory — the governance contract + the derived lattice must stay
+#    aligned with the actual invariant records. Fails if a governed module lacks its contract (shrinking
+#    allowlist) or a lattice link/dependency-map name doesn't resolve to a real ### record. Cheap
+#    (no launches), mechanical — same tier as the unwired-capability check.
+if ! bash "$(dirname "$0")/check-map-coherence.sh" >/tmp/conventions-gate-mapcoh.$$.log 2>&1; then
+  echo "CONVENTIONS FAIL: map incoherence (governance/lattice out of sync with the records):"
+  cat /tmp/conventions-gate-mapcoh.$$.log
+  fail=1
+fi
+rm -f /tmp/conventions-gate-mapcoh.$$.log
+
 [ "$fail" = 0 ] && echo "conventions-gate: PASS"
 exit "$fail"
