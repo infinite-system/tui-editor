@@ -90,5 +90,15 @@ if ! bash "$(dirname "$0")/check-unwired-capabilities.sh" >/tmp/conventions-gate
 fi
 rm -f /tmp/conventions-gate-unwired.$$.log
 
+# 8) SETTINGS APPLIED-EFFECT META-GATE: every Settings schema field MUST have an applied-effect drive in
+#    smoke-settings-applied.sh (the cheap enumeration check — no app launches). A NEW setting without a
+#    driving test fails here. The full drive suite runs at the merge gate; this is its enforcing spine.
+if ! bash "$(dirname "$0")/smoke-settings-applied.sh" --meta >/tmp/conventions-gate-settings.$$.log 2>&1; then
+  echo "CONVENTIONS FAIL: a Settings field has no applied-effect drive:"
+  cat /tmp/conventions-gate-settings.$$.log
+  fail=1
+fi
+rm -f /tmp/conventions-gate-settings.$$.log
+
 [ "$fail" = 0 ] && echo "conventions-gate: PASS"
 exit "$fail"

@@ -49,6 +49,26 @@ tests HIDE it. The craft is fine; wiring is the blind spot. These rules make it 
   test that DRIVES its observable effect; a schema-enumeration meta-assertion fails the gate if any field
   lacks one. This is why 8 dead settings went unnoticed — the existing tests only assert the ref changed.
 
+## Invariant-contract system (executable felt-invariants + the ratchet)
+
+A prose invariant that doesn't gate is just a description (the audit found DiffView had a full
+`*.invariants.md` while being DEAD). Load-bearing FELT invariants get a DRIVEN assertion that runs at the
+merge gate — `scripts/behavioral-contracts.sh`. Rules:
+
+- **ASSERT ESSENCE, NOT EXPRESSION.** Gate the refactor-proof behavior ("a wheel notch glides past its
+  immediate step, then decays to rest"), never an implementation detail ("the handler calls addImpulse").
+  An impl-coupled assertion gates the expression, not the invariant, and breaks on honest refactors.
+- **LOAD-BEARING ONLY.** Gate what must be true for the subsystem to be itself. Decorative behavior
+  (exact decel curve, exact pixel) stays ungated — a false invariant increases rigidity without truth.
+- **RATCHET (the core rule).** Every user-reported behavioral regression, ONCE FIXED, becomes a PERMANENT
+  contract entry BEFORE the fix commits. The protected set only ever grows; the same break cannot recur
+  silently. (First entries: momentum-glide per non-wrap pane. Wrap-mode-momentum joins when bug 2 lands.)
+- **SUBSYSTEM-TOUCH GATE.** Changing a subsystem means re-running its contracts, not just tsc. Wiring a
+  setting into the scroll path = the scroll contracts must still pass. "It typechecks" is not "it still
+  feels right." The behavioral suite is the mechanical form of that check.
+- Mirror of idle-quiescence: quiescence asserts motion STOPS at rest; momentum-glide asserts motion
+  CONTINUES then stops. Both are load-bearing feel-invariants, both driven, both gated.
+
 ## Verification (the discipline that makes parallelism safe)
 - Verify by DRIVING — FrameProbe framebuffer / tmux / per-session `status-<session>.json` — NEVER by
   reading code. "The handler looks right" is not verification.
