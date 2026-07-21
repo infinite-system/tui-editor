@@ -96,6 +96,23 @@ fi
 python3 -c "import json,os;p=os.path.expanduser('$SET');d=json.load(open(p));d['wordWrap']=False;json.dump(d,open(p,'w'),indent=2)"
 "$H" kill "$S" >/dev/null 2>&1; rm -rf "$WRAP"
 
+# ---- CONTRACT: idle quiescence (the MIRROR of momentum-glide — motion STOPS at rest) ----
+# Rendering is demand-driven: over a fully-untouched window the FRAME COUNTER must not advance at all
+# (authoritative signal — CPU stays low even while an empty loop ticks, the false-green a pre-fix build
+# shipped). Paired with momentum-glide, these two bound the feel: motion continues when pushed, and the
+# loop halts when left alone.
+echo "== CONTRACT idle-quiescence: at rest the render loop STOPS (frame delta == 0) =="
+S="bc-idle-$$"; SESSIONS="$SESSIONS $S"
+"$H" launch "$S" 120x40 bun run src/main.ts "$TREE" >/dev/null; "$H" ready "$S" 20 >/dev/null
+"$H" send "$S" Escape >/dev/null; "$H" settle "$S" >/dev/null 2>&1; sleep 1
+istart="$("$H" field "$S" frame)"; sleep 3; iend="$("$H" field "$S" frame)"
+if [ "$(( ${iend:-0} - ${istart:-0} ))" -eq 0 ]; then
+  pass "idle frame delta == 0 over 3s untouched (frame stayed $istart)"
+else
+  bad "idle loop still ticking ($istart -> $iend) — rendering is NOT demand-driven"
+fi
+"$H" kill "$S" >/dev/null 2>&1
+
 echo ""
 if [ "$fail" = 0 ]; then echo "behavioral-contracts: ALL-PASS"; else echo "behavioral-contracts: FAILURES"; fi
 exit "$fail"
