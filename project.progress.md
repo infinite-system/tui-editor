@@ -201,13 +201,42 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 - ✅ **DONE — Momentum "regression"**: driven-disproved (no non-wrap regression; cb85111 kept the impulse
   feed). The felt gap was wrap-mode direct scroll = folded into bug 2. Gated by momentum-glide contract.
 
-### REMAINING
-3. **Grip handles on dividers (low-med):** visible GRIP glyph on the sidebar divider (vertical: nerd grip
+### REMAINING (coordinator priority order, 2026-07-21)
+1. **DiffView P1 — IN PROGRESS (highest value; closes the audit package).** Fix DiffView.ts:262-278
+   hardcoded VERTICAL_MOMENTUM/DEFAULT_MOMENTUM → settings-driven (Workspace.verticalMomentum pattern).
+   MOUNT: Workspace.openChangeAtRow/openCommitFileDiff → a DiffView tab (synced aligned-row panes,
+   open-full promotes current version to an editor tab, jump next/prev + N-of-M). Then REMOVE DiffView
+   from check-unwired-capabilities.sh allowlist (gate enforces it stays wired). Behavioral contracts:
+   synced-scroll stays aligned under a heavily-additive file (fixtures/data.json); open-full works.
+2. **SEARCH SUITE (user priority)** — 4 CODEX workers on disjoint modules: fuzzy quick-open (reuse
+   CommandScoring.fuzzyScore), in-file find/replace, ripgrep find-in-files (rg 14.1.1), project-wide
+   replace. Main loop wires each into RootView.
+   **ACTIVITY BAR (USER APPROVED — do FIRST within the search block; it is the Search view's HOME +
+   supersedes the standalone status-bar settings-gear item):** a narrow vertical ICON STRIP pinned far-
+   LEFT (left of the sidebar). VS Code SWITCH model (one view at a time, NOT stacked) — the sidebar
+   becomes a single switchable container, reclaiming full height per view (files + git stop competing).
+   TOP items: (1) Explorer/file-tree — files glyph, Ctrl+Shift+E; (2) Search — magnifier, Ctrl+Shift+F;
+   (3) Source Control/git — git-branch, Ctrl+Shift+G. BOTTOM: Settings gear → settings.toggle (Ctrl+,).
+   Leave slots for future (Problems M5, Outline). Each icon: theme icon ladder (nerd→unicode→ascii) +
+   HOVER TOOLTIP (name + shortcut, reuse tooltip + adaptive positioning) + idle/hover/ACTIVE states
+   (active view's icon highlighted). Click OR shortcut switches the sidebar view + focuses it; clicking
+   the active icon may toggle sidebar collapsed (optional). Persist last-active view in a NEW settings
+   field (survives restart → needs an applied-effect test per the meta-gate). TERMINAL REALITY: Ctrl+
+   Shift+E/F/G SHOULD arrive via Kitty (unlike Cmd remaps) — DRIVE-verify each actually arrives + switches
+   before claiming (input-facts discipline); add a Cmd overlay for mac; if a chord doesn't arrive, note it
+   + keep the click path. Mount = new left-edge renderable in RootView; can fan a CODEX worker for the
+   ActivityBar renderable capability while main wires view-switching. Behavioral contract: "activity-bar
+   icon switches the sidebar view + highlights active." Drive-verify: FrameProbe strip renders 3+settings
+   icons; click each → sidebar switches; active highlights; hover tooltip w/ shortcut; Ctrl+Shift+E/F/G.
+3. **Git-panel row simplification** (remove checkbox; LOCKED status-glyph spec pencil/✗/+/?/→ color-coded;
+   section stage-all preserves bulk) + **file-tree QA** (tighter indent + remove leading chevron, folder
+   glyph conveys open/closed) + **tab count ▾ caret**.
+4. **Grip handles on dividers (low-med):** visible GRIP glyph on the sidebar divider (vertical: nerd grip
    → ⋮/┃/║/▕ → ascii ':'/'|') + git divider (horizontal: ⋯/═/┅ → ascii '-'), theme icon ladder. 3 states
    idle→hover→pressed (brighten to accent on hover, pressed color on drag) — reuse the existing hit-strip
    hover hooks. TUI can't change the OS mouse-cursor shape, so a grip is the discoverability signal.
    Drive-verify: FrameProbe grip glyph present; hover brightens; drag still resizes+persists. (RootView/theme.)
-4. **Context-menu adaptive positioning (medium):** mirror tooltip flip (3ec106d/c69ec4a). Default open
+5. **Context-menu adaptive positioning (medium):** mirror tooltip flip (3ec106d/c69ec4a). Default open
    RIGHT+BELOW cursor; flip HORIZONTALLY to LEFT of cursor near right edge (anchor menu's right edge at
    cursor so it extends left — user wants leftward so it coexists with VS Code's own right-click menu),
    flip vertically ABOVE near bottom; clamp fully on-screen. Same for submenus. Generous right-side flip
