@@ -4,7 +4,7 @@ Live status ledger for the autonomous build. Updated every turn so state survive
 compaction. **If you are resuming: read this, then `HANDOFF.md`, then continue at the first
 unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
-## RESUME HERE (frontier as of commit a48c36b)
+## RESUME HERE (frontier as of commit 922f373)
 - **State:** 11 module contracts · 110 tests pass · tsc green · checker 0 problems · end-to-end tmux
   smoke ALL-PASS. codex modules git/markdown/lsp INTEGRATED. Editor rework: reactive frame
   (established), grapheme coordinate model, native-cursor caret, selection + clipboard, selection
@@ -16,20 +16,35 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
   (built). Only reach for a headless xterm emulator (xterm-headless / MS `tui-test`) to verify the
   SGR *encoder* end-to-end — low priority. Frame-diff (before/after) isolates a change's cells with
   no offset/color math — that's the gold-standard visual assertion.
-- **IMMEDIATE NEXT TASK — fix the selection RENDER bug (self-do, editor-core):** FrameProbe proved
-  the bg-chunk approach mis-positions — selection on doc line 2 paints near buffer row y=13, not the
-  cursor's content row (OpenTUI lays out bg chunks differently in a multi-line StyledText). The LOGIC
-  is fine; the integration is wrong. **Fix:** drive OpenTUI's NATIVE text selection instead of bg
-  chunks — `TextBufferRenderable.selectionBg`/`selectionFg` + `onSelectionChanged`, backed by
-  `TextBufferView.setLocalSelection(anchorX,anchorY,focusX,focusY,bgColor,fgColor)` (see
-  `node_modules/@opentui/core/text-buffer-view.d.ts` + `renderables/TextBufferRenderable.d.ts`). Map
-  the model `selectionRange()` to LOCAL text-buffer coords: account for the per-line gutter+marker
-  prefix (`"NN ▏"`) and the visible-window offset (`scrollTop`). Re-verify with a FrameProbe
-  before/after frame-diff asserting the shaded run lands on the cursor's content row at the selected
-  display columns. Keep `ui.selection.ts` if still useful, or retire it. Then promote the selection +
-  caret invariants toward established.
-- **Then, in order:** multi-workspace (WorkspaceManager + outer tabs + per-workspace snapshot
-  restore) → file search → piece-table undo.
+- **Selection render — DONE (architecture) + BLOCKED (OpenTUI coord bug), gated off:** editor now
+  splits into a gutter renderable + a `SelectableText` code renderable (`SelectableText.ts`), and
+  `applySelection` drives native `TextBufferView.setLocalSelection`. BUT FrameProbe proved
+  `setLocalSelection` mis-maps coords (~4× scale + offset: a fixed `(0,0,5,0)` probe shades y=5,
+  x=28..46 in period-4 groups; real selection on doc line N lands ~`5+4N` rows low). Highlight gated
+  OFF (`TUI_SEL_RENDER=1` to experiment); model works fully. **To unblock:** find the coord space
+  `setLocalSelection` wants — suspect a viewport issue (`TextBufferView.setViewport` /
+  `setFirstLineOffset`, or logical-vs-visual line, or the code renderable's yoga size not yet
+  computed when applySelection runs). Verify via FrameProbe frame-diff (noise-free, control-tested).
+  Good codex-delegation candidate (scoped OpenTUI-internals probe with the FrameProbe as oracle).
+
+- **NEW REQUIREMENT — M4 git sidebar (VSCode-style, when git pane active):**
+  - **Top region:** changes list — staged / unstaged / created / deleted (git module already parses
+    porcelain-v2), each row stage/unstage-able (mouse click + key); a commit-message input box
+    (clickable) that commits the staged set.
+  - **Bottom region:** the commit log as a **virtualized** list (render only the visible window; do
+    NOT materialize 10k commits) — backed by a compact paged git-log source (`git log --skip/-n` or
+    a revwalk), one lightweight record per row, evicted outside the window. Realizes the existing
+    *Cost tracks the actively observed set* invariant.
+  - **Draggable:** the sidebar width AND the top/bottom separator — a thin divider renderable that
+    captures mouse-drag → updates a reactive split-ratio (ivue state) → yoga re-layout via the frame
+    effect.
+  - **Feasibility: YES** — OpenTUI gives flex/yoga layout, mouse (click + drag) events, ScrollBox +
+    manual windowing, and input primitives; ivue gives the reactive split state + the flyweight
+    virtualization. New wiring needed: a mouse-event input path (current input is keyboard-only) and
+    a paged commit-log source in the git module. Verify mouse/drag + virtualization with FrameProbe.
+- **Then, in order:** M4 git sidebar (above) + split editable diff → multi-workspace (WorkspaceManager
+  + tabs + per-workspace snapshot restore) → file search → piece-table undo → M5 lsp editor wiring →
+  M6 markdown split-preview → M7 plugins → 5-pass gauntlet → isolated blackline test → §5.1 gate.
 - **Verify the app end-to-end:** `bash scripts/smoke-editor.sh` (drives the real TUI via
   `scripts/tui-harness.sh`; asserts from `artifacts/status.json`). Harness verbs: launch/ready/
   settle/send/capture/status/field/kill (internal `sleep` works inside the invoked script).
