@@ -50,6 +50,15 @@ tree_cpu() {
   done
   echo "$total"
 }
+# Is the worker's sub-agent still ALIVE? Count codex procs whose cwd is its worktree.
+# 0 = the sub-agent has EXITED (finished or died) — that is NOT a hang; a hang is alive-but-flat.
+codex_count() {
+  local w="$1" n=0 pid
+  for pid in $(ps -eo pid,comm | awk '$2=="codex"{print $1}'); do
+    [ "$(readlink "/proc/$pid/cwd" 2>/dev/null)" = "$WORKTREE_BASE-$w" ] && n=$((n + 1))
+  done
+  echo "$n"
+}
 # Newest mtime of real work files (secondary, informational).
 work_mtime() {
   find "$WORKTREE_BASE-$1" \( -name node_modules -prune \) -o \
@@ -62,9 +71,12 @@ for w in $WORKERS; do last_cpu["$w"]="$(tree_cpu "$w")"; last_mt["$w"]="$(work_m
 
 for ((beat = 1; beat <= MAX_BEATS; beat++)); do
   sleep "$BEAT"
-  codex_alive="$(ps -eo comm= | grep -c '^codex')"
-  line="[heartbeat t+$((beat * BEAT))s | codex=$codex_alive]"; stalled=""
+  line="[heartbeat t+$((beat * BEAT))s]"; stalled=""; all_done=1
   for w in $WORKERS; do
+    # ALIVENESS FIRST — is the sub-agent still running? Gone = finished/died (its completion
+    # notification handles it), NOT a hang. Only a LIVING sub-agent with flat CPU is hung.
+    if [ "$(codex_count "$w")" -eq 0 ]; then line="$line  $w:done"; continue; fi
+    all_done=0
     cpu="$(tree_cpu "$w")"; mt="$(work_mtime "$w")"
     files="$(git -C "$WORKTREE_BASE-$w" status --short 2>/dev/null | grep -cE '\.ts$|\.sh$|\.md$')"
     dcpu=$(( ${cpu:-0} - ${last_cpu[$w]:-0} ))
@@ -78,7 +90,7 @@ for ((beat = 1; beat <= MAX_BEATS; beat++)); do
     [ "${quiet[$w]}" -ge "$STALL_LIMIT" ] && stalled="$w"
   done
   echo "$line" | tee -a "$PULSE_LOG"
-  if [ "$codex_alive" -eq 0 ]; then echo "HEARTBEAT: all codex processes gone — workers finished/died (verify + merge)"; exit 0; fi
-  if [ -n "$stalled" ]; then echo "HEARTBEAT: STALL — '$stalled' process-tree CPU flat for $STALL_LIMIT beats (kill + respawn)"; exit 2; fi
+  if [ "$all_done" -eq 1 ]; then echo "HEARTBEAT: every watched sub-agent has exited — finished/died (verify + merge)"; exit 0; fi
+  if [ -n "$stalled" ]; then echo "HEARTBEAT: STALL — '$stalled' sub-agent ALIVE but process-tree CPU flat for $STALL_LIMIT beats (kill + respawn)"; exit 2; fi
 done
 echo "HEARTBEAT: window elapsed ($((MAX_BEATS * BEAT))s), workers still alive — re-arm"; exit 0

@@ -44,8 +44,14 @@ worker climbs into the hundreds).
 
 | Exit | Meaning | Orchestrator action |
 |---|---|---|
-| `0` (codex gone) | every worker's codex process has exited | verify + merge the branches |
-| `2` (STALL) | a worker wrote nothing for `STALL_LIMIT` beats | kill + respawn that worker |
+| `0` (all done) | every watched sub-agent's process has EXITED (finished/died) | verify + merge the branches |
+| `2` (STALL) | a worker's sub-agent is still ALIVE but its process-tree CPU has been flat for `STALL_LIMIT` beats | kill + respawn that worker |
+
+**Aliveness is checked before CPU.** Each beat first asks *does this worker's sub-agent process still
+exist?* (a `codex` proc whose `cwd` is the worktree). If it's gone, the worker is **done** — not hung —
+so a *finished* worker is never mistaken for a stall (an early bug: the tool flagged a merged worker as
+"stalled" because its exited codex left flat CPU). Only a **living** sub-agent with flat process-tree CPU
+is a real hang.
 | `0` (window elapsed) | `MAX_BEATS` passed, all still alive | re-arm for another window |
 
 The orchestrator **re-arms** it while any worker is still running, so the fleet always has a pulse.
