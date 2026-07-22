@@ -13,7 +13,7 @@ f() { "$H" field "$S" "$1"; }
 
 WORKSPACE="$(mktemp -d /tmp/tui-tree-scroll.XXXXXX)"
 for fileNumber in $(seq -w 1 60); do printf 'x\n' > "$WORKSPACE/file-$fileNumber.txt"; done
-trap '"$H" kill "$S" >/dev/null 2>&1; rm -rf "$WORKSPACE"' EXIT
+trap '"$H" kill "$S" >/dev/null 2>&1; rm -rf "$WORKSPACE"' EXIT INT TERM
 
 echo "== launch + boot (60-file workspace so the tree overflows) =="
 "$H" launch "$S" 120x40 bun run src/main.ts "$WORKSPACE" >/dev/null

@@ -16,7 +16,7 @@ fail=0
 f()    { "$H" field "$S" "$1"; }
 chk()  { if [ "$2" = "$3" ]; then echo "  PASS  $1 ($2)"; else echo "  FAIL  $1: got '$2' want '$3'"; fail=1; fi; }
 status_field() { STATUS_FILE="$STATUSF" FIELD="$1" "$BUN" -e 'console.log(JSON.parse(require("fs").readFileSync(process.env.STATUS_FILE)).cursor[process.env.FIELD])'; }
-trap '"$H" kill "$S" >/dev/null 2>&1; rm -rf "$FIX"' EXIT
+trap '"$H" kill "$S" >/dev/null 2>&1; rm -rf "$FIX"' EXIT INT TERM
 
 # Fixture: a ~476-column wrappable sentence line, a short line, an unbroken 200-char run.
 "$BUN" -e '

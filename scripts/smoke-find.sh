@@ -11,7 +11,7 @@ export PATH="$HOME/.bun/bin:$PATH"
 S="find-smoke-$$"
 W="$(mktemp -d /tmp/tui-find-smoke.XXXXXX)"
 fail=0
-trap '"$H" kill "$S" >/dev/null 2>&1; rm -rf "$W"' EXIT
+trap '"$H" kill "$S" >/dev/null 2>&1; rm -rf "$W"' EXIT INT TERM
 
 python3 -c "open('$W/code.txt','w').write('alpha\nbeta TARGET\ngamma\ndelta TARGET here\nepsilon TARGET end\n')"
 

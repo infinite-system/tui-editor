@@ -14,7 +14,7 @@ REPO="$(mktemp -d /tmp/tui-git-watch.XXXXXX)"
 ( cd "$REPO" && git init -q && mkdir -p src \
   && printf 'a\n' > src/nested.ts && printf 'root\n' > root.txt && printf 'gone\n' > src/doomed.ts \
   && git add -A && git -c user.email=a@b.c -c user.name=x commit -qm init )
-trap '"$H" kill "$S" >/dev/null 2>&1; rm -rf "$REPO"' EXIT
+trap '"$H" kill "$S" >/dev/null 2>&1; rm -rf "$REPO"' EXIT INT TERM
 
 wait_for_count() { # wait_for_count <target-comparison-cmd> <timeout-ds> ; polls gitChangedCount
   local deadline=$(( SECONDS + ${2:-4} ))

@@ -10,7 +10,7 @@ export PATH="$HOME/.bun/bin:$PATH"
 S="quickopen-smoke-$$"
 W="$(mktemp -d /tmp/tui-qo-smoke.XXXXXX)"
 fail=0
-trap '"$H" kill "$S" >/dev/null 2>&1; rm -rf "$W"' EXIT
+trap '"$H" kill "$S" >/dev/null 2>&1; rm -rf "$W"' EXIT INT TERM
 
 ( cd "$W" && git init -q && for n in alpha beta gamma; do echo x > "$n.txt"; done && mkdir -p src && echo "content" > src/widget.txt )
 

@@ -60,7 +60,7 @@ LONG=$(mktemp -d /tmp/tui-sa-long.XXXXXX); python3 -c "open('$LONG/long.txt','w'
 TREE=$(mktemp -d /tmp/tui-sa-tree.XXXXXX); for n in $(seq -w 1 60); do printf 'x\n' > "$TREE/file-$n.txt"; done
 WRAP=$(mktemp -d /tmp/tui-sa-wrap.XXXXXX); python3 -c "open('$WRAP/w.txt','w').write('A'*300+chr(10)+'MARKERLINE'+chr(10))"
 REPO=$(mktemp -d /tmp/tui-sa-repo.XXXXXX); ( cd "$REPO" && git init -q && printf 'a\n'>f.txt && git add f.txt && git commit -qm init && printf 'b\n'>>f.txt && printf 'n\n'>g.txt )
-trap 'rm -rf "$LONG" "$TREE" "$WRAP" "$REPO"; for s in $SESSIONS; do "$H" kill "$s" >/dev/null 2>&1; done' EXIT
+trap 'rm -rf "$LONG" "$TREE" "$WRAP" "$REPO"; for s in $SESSIONS; do "$H" kill "$s" >/dev/null 2>&1; done' EXIT INT TERM
 SESSIONS=""
 
 # scrollTop after ONE wheel-down over the editor of the long fixture, with the given settings patch fn.

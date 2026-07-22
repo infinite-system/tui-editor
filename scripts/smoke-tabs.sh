@@ -12,7 +12,7 @@ f() { "$H" field "$S" "$1"; }
 
 WORKSPACE="$(mktemp -d /tmp/tui-tabs.XXXXXX)"
 for n in $(seq 1 9); do printf 'x\n' > "$WORKSPACE/file-$n.txt"; done
-trap '"$H" kill "$S" >/dev/null 2>&1; rm -rf "$WORKSPACE"' EXIT
+trap '"$H" kill "$S" >/dev/null 2>&1; rm -rf "$WORKSPACE"' EXIT INT TERM
 
 echo "== launch + open 8 tabs (overflows the strip -> arrows appear) =="
 "$H" launch "$S" 120x40 env TUI_FRAME_DUMP=1 bun run src/main.ts "$WORKSPACE" >/dev/null

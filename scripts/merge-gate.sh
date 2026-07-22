@@ -21,6 +21,27 @@ export PATH="$HOME/.bun/bin:$PATH"
 # The app is already hermetic (Processes.hermeticEnvironment); clearing here also covers the shell
 # fixtures. Harmless when run directly (these are normally unset). One boundary, whole gate hermetic.
 unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR GIT_PREFIX GIT_INDEX_VERSION GIT_NAMESPACE
+
+# PRE-GATE PROCESS HYGIENE — the true determinism seal (NOT architecture: Bun multiplexes every
+# fs.watch onto ONE inotify instance per PROCESS, so each running app = 1 instance). Orphaned app
+# instances left by prior runs that exited without their cleanup trap firing (a SIGTERM'd/timed-out run)
+# accumulate 1 inotify instance each toward the OS max_user_instances cap (128) and non-deterministically
+# flake a git/settings smoke (the panel reads a stale/failed watch). Reap orphaned TEST instances so the
+# gate starts from ZERO — a `bun … src/main.ts` on a `/tmp/tui-*` fixture — NEVER the user's live demo
+# (/tmp/tui-demo) or any instance on a real (non-/tmp) project.
+reaped_orphan_instances=0
+for orphan_pid in $(pgrep -f 'src/main\.ts /tmp/tui-' 2>/dev/null || true); do
+  orphan_cmdline="$(tr '\0' ' ' < "/proc/$orphan_pid/cmdline" 2>/dev/null || true)"
+  case "$orphan_cmdline" in
+    *"/tmp/tui-demo"*) continue ;;                         # never touch the user's live demo
+    *) kill -9 "$orphan_pid" 2>/dev/null && reaped_orphan_instances=$((reaped_orphan_instances + 1)) ;;
+  esac
+done
+if [ "$reaped_orphan_instances" -gt 0 ]; then
+  echo "merge-gate: reaped $reaped_orphan_instances orphaned app instance(s) before start (inotify hygiene)"
+  sleep 0.5  # let the kernel release their inotify instances before the gate launches fresh ones
+fi
+echo "merge-gate: starting with $(pgrep -cf 'src/main\.ts /tmp/tui-' 2>/dev/null || echo 0) test app instance(s) live"
 fail=0
 step() {
   local name="$1"; shift
