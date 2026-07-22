@@ -200,6 +200,40 @@ editing continues, no crash, terminal restored.
 
 **Last refined:** 2026-07-21
 
+### A notify channel cannot report its own silence
+
+**Invariant:** If a component learns of change through a notify/event channel — an fs watcher, an LSP
+publishDiagnostics stream, a worker's completion signal — then that channel can never report a DROPPED
+event or a DEAD source: silence is indistinguishable from "nothing changed" and from "the source hung."
+So correctness under any notify channel requires a periodic PULL floor that re-reads ground truth on a
+bounded interval; notify is a latency accelerator over that floor, never a replacement for it.
+
+**Scope:** GitWatcher (fs events), LSP publishDiagnostics, and — crossing out of the editor into the
+build itself — the parallel worker fleet (completion-notify).
+
+**Mechanism:** An event channel signals the PRESENCE of a change; it has no symbol for the ABSENCE of a
+signal. A dropped event (inotify `IN_Q_OVERFLOW`), a delivery gap, or a hung/dead source all emit
+nothing — so only an independent periodic read can detect divergence.
+
+**Generates:** The GitWatcher reconcile-floor (bounded `git status` re-read under the fs-watch
+accelerator); the fleet heartbeat (bounded process-tree-CPU poll under completion-notify); LSP
+rescan-on-overflow.
+
+**Evidence:** GitWatcher reconcile-floor (`src/modules/git/GitWatcher.ts` + `git.invariants.md`);
+`scripts/fleet-heartbeat.sh` (+ `.readme.md`) — a worker once hung 1.5h SILENTLY under notify-only until
+a pull heartbeat caught it. The domain-crossing (fs-watch ⇄ orchestration) is the validator that this is
+real, not a local convention.
+
+**Impossible if true:** A notify-only design that stays correct when its source drops an event or dies;
+detecting a silent hang without an independent periodic read.
+
+**Verification:** Kill the watcher / exhaust inotify → change a file → the panel still converges via the
+floor; hang a worker → the heartbeat flags flat process-tree CPU within N beats.
+
+**Status:** provisional
+
+**Last refined:** 2026-07-22
+
 ### A text position has several encodings
 
 **Invariant:** If a position in text is referenced, then its UTF-8 byte offset, UTF-16 unit

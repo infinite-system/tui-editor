@@ -114,6 +114,12 @@ Change a convention → change it HERE (and note the why in decisions.md).
   the coordinator reviews (naming gate, contracts, verification evidence) and commits with credit.
 - codex: never trusted with deletions; commit before delegating; review `git status` for
   unexpected removals.
+- FLEET LIVENESS: while parallel workers run, keep `scripts/fleet-heartbeat.sh <worker>…` armed — the
+  operational form of the *A notify channel cannot report its own silence* invariant. Completion-notify
+  alone misses a silently-hung worker (one stalled 1.5h undetected); the heartbeat polls each worker's
+  process-tree CPU and exits→notifies on STALL (kill+respawn) or all-done (verify+merge). CAP CONCURRENCY
+  ~2-3 — over-parallelizing is what starves workers into the hang, and it also flakes driven gates
+  (shared-CPU render timing / corrupted shared observability files). See `scripts/fleet-heartbeat.readme.md`.
 
 ## Self-handoff
 - On ANY resume: read `project.requirements.md` FIRST (the persistent cross-cutting brief), then THIS
