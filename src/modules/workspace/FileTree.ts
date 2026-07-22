@@ -7,6 +7,7 @@ import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
 import { Files, type DirEntry } from '../system/Files';
 import { AT_REST, type ScrollMomentum } from '../ui/Momentum';
+import { EditorCoordinates } from '../editor/EditorCoordinates';
 
 export interface TreeRow {
   name: string;
@@ -37,6 +38,9 @@ class $FileTree {
   get selectionMomentum() {
     return shallowRef<ScrollMomentum>(AT_REST);
   }
+  get horizontalScrollMomentum() {
+    return shallowRef<ScrollMomentum>(AT_REST);
+  }
   // INDEPENDENT scroll offset (first visible row), like the git-changes list — NOT derived from the
   // selection. Wheel scrolls this; selection moves independently; clicking a visible row leaves it
   // untouched (so opening a file never snaps the list). RootView sets viewportHeight each frame.
@@ -44,6 +48,12 @@ class $FileTree {
     return ref(0);
   }
   get viewportHeight() {
+    return ref(1);
+  }
+  get scrollLeft() {
+    return ref(0);
+  }
+  get viewportWidth() {
     return ref(1);
   }
   // shallowRef holding the last flattened rows (recomputed on structural change only).
@@ -55,6 +65,7 @@ class $FileTree {
     this.root = Files.Class.confineToRoot(root, '.') ?? root;
     this.expanded.clear();
     this.listings.clear();
+    this.scrollLeft.value = 0;
     this.expanded.add(this.root);
     this.recompute();
     this.selectedIndex.value = 0;
@@ -86,11 +97,26 @@ class $FileTree {
 
   private recompute(): void {
     this.rowsRef.value = this.flatten();
+    this.clampHorizontalScroll();
     this.version.value++;
   }
 
   get rows(): TreeRow[] {
     return this.rowsRef.value;
+  }
+
+  /** Widest complete rendered row: selection marker + indentation + one-cell icon + name. */
+  get contentWidth(): number {
+    return this.rows.reduce(
+      (widestWidth, row) =>
+        Math.max(widestWidth, 1 + row.depth * 2 + 1 + 1 + EditorCoordinates.Class.lineWidth(row.name)),
+      0,
+    );
+  }
+
+  // invariant: A pane is a self-contained scrollable viewport (project.invariants.md)
+  get maxScrollLeft(): number {
+    return Math.max(0, this.contentWidth - Math.max(1, this.viewportWidth.value));
   }
 
   get selected(): TreeRow | null {
@@ -109,6 +135,18 @@ class $FileTree {
   scrollBy(delta: number): void {
     const maxTop = Math.max(0, this.rows.length - this.viewportHeight.value);
     this.scrollTop.value = Math.max(0, Math.min(this.scrollTop.value + delta, maxTop));
+  }
+
+  /** Horizontal wheel/scrollbar: move the column window within this tree's own content extent. */
+  scrollByColumns(deltaColumns: number): void {
+    this.scrollLeft.value = Math.max(
+      0,
+      Math.min(this.scrollLeft.value + deltaColumns, this.maxScrollLeft),
+    );
+  }
+
+  clampHorizontalScroll(): void {
+    this.scrollLeft.value = Math.max(0, Math.min(this.scrollLeft.value, this.maxScrollLeft));
   }
 
   /** Bring the selection into view with the MINIMUM scroll (only when it is off-screen). */

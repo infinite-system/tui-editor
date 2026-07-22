@@ -88,6 +88,7 @@ if [ "${FAST:-0}" != "1" ]; then
   step "smoke: editor"      bash scripts/smoke-editor.sh
   step "smoke: tabs"        bash scripts/smoke-tabs.sh
   step "smoke: tree-scroll" bash scripts/smoke-tree-scroll.sh
+  step "smoke: scrollbars"  bash scripts/smoke-scrollbars.sh
   step "smoke: wrap"        bash scripts/smoke-wrap.sh
   step "smoke: git-watch"   bash scripts/smoke-git-watch.sh
   step "smoke: find"        bash scripts/smoke-find.sh

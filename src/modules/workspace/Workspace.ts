@@ -392,8 +392,29 @@ class $Workspace {
     this.tree.selectionMomentum.value = Momentum.Class.addImpulse(this.tree.selectionMomentum.value, deltaRows, this.verticalMomentum);
   }
 
+  impulseTreeHorizontalScroll(deltaColumns: number): void {
+    this.tree.horizontalScrollMomentum.value = Momentum.Class.addImpulse(
+      this.tree.horizontalScrollMomentum.value,
+      deltaColumns,
+    );
+  }
+
   impulseGitChangesScroll(deltaRows: number): void {
     this.gitPanel.changesMomentum.value = Momentum.Class.addImpulse(this.gitPanel.changesMomentum.value, deltaRows, this.verticalMomentum);
+  }
+
+  impulseGitChangesHorizontalScroll(deltaColumns: number): void {
+    this.gitPanel.changesHorizontalMomentum.value = Momentum.Class.addImpulse(
+      this.gitPanel.changesHorizontalMomentum.value,
+      deltaColumns,
+    );
+  }
+
+  impulseGitLogHorizontalScroll(deltaColumns: number): void {
+    this.gitPanel.logHorizontalMomentum.value = Momentum.Class.addImpulse(
+      this.gitPanel.logHorizontalMomentum.value,
+      deltaColumns,
+    );
   }
 
   /** Halt the log glide immediately (keyboard paging / a jump — One-Writer-Per-Regime). */
@@ -405,8 +426,20 @@ class $Workspace {
     this.tree.selectionMomentum.value = Momentum.Class.halt();
   }
 
+  haltTreeHorizontalScroll(): void {
+    this.tree.horizontalScrollMomentum.value = Momentum.Class.halt();
+  }
+
   haltGitChangesScroll(): void {
     this.gitPanel.changesMomentum.value = Momentum.Class.halt();
+  }
+
+  haltGitChangesHorizontalScroll(): void {
+    this.gitPanel.changesHorizontalMomentum.value = Momentum.Class.halt();
+  }
+
+  haltGitLogHorizontalScroll(): void {
+    this.gitPanel.logHorizontalMomentum.value = Momentum.Class.halt();
   }
 
   /**
@@ -463,6 +496,10 @@ class $Workspace {
     // one uniform surface and the selection highlight travels with its row (git-changes behaviour).
     if (treeStep.rows !== 0) this.tree.scrollBy(treeStep.rows);
 
+    const treeHorizontalStep = Momentum.Class.stepMomentum(this.tree.horizontalScrollMomentum.value, dtSeconds);
+    this.tree.horizontalScrollMomentum.value = treeHorizontalStep.momentum;
+    if (treeHorizontalStep.rows !== 0) this.tree.scrollByColumns(treeHorizontalStep.rows);
+
     const changesStep = Momentum.Class.stepMomentum(gitPanel.changesMomentum.value, dtSeconds, this.verticalMomentum);
     gitPanel.changesMomentum.value = changesStep.momentum;
     if (changesStep.rows !== 0) {
@@ -479,12 +516,26 @@ class $Workspace {
       );
     }
 
+    const changesHorizontalStep = Momentum.Class.stepMomentum(
+      gitPanel.changesHorizontalMomentum.value,
+      dtSeconds,
+    );
+    gitPanel.changesHorizontalMomentum.value = changesHorizontalStep.momentum;
+    if (changesHorizontalStep.rows !== 0) gitPanel.scrollChangesByColumns(changesHorizontalStep.rows);
+
+    const logHorizontalStep = Momentum.Class.stepMomentum(gitPanel.logHorizontalMomentum.value, dtSeconds);
+    gitPanel.logHorizontalMomentum.value = logHorizontalStep.momentum;
+    if (logHorizontalStep.rows !== 0) gitPanel.scrollLogByColumns(logHorizontalStep.rows);
+
     return [
       gitLogStep.momentum,
       editorVerticalStep.momentum,
       editorHorizontalStep.momentum,
       treeStep.momentum,
+      treeHorizontalStep.momentum,
       changesStep.momentum,
+      changesHorizontalStep.momentum,
+      logHorizontalStep.momentum,
     ].some((momentum) => Momentum.Class.isMoving(momentum));
   }
 

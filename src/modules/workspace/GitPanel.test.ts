@@ -30,3 +30,20 @@ describe('GitPanel multi-selection', () => {
     expect(panel.selectedPaths.value.size).toBe(0);
   });
 });
+
+describe('GitPanel horizontal pane windows', () => {
+  test('changes and log clamp independently to their own extents', () => {
+    const panel = new GitPanel.Class();
+    panel.setChangesHorizontalExtent(80, 20);
+    panel.setLogHorizontalExtent(45, 30);
+
+    panel.scrollChangesByColumns(10_000);
+    panel.scrollLogByColumns(10_000);
+    expect(panel.changesScrollLeft.value).toBe(60);
+    expect(panel.logScrollLeft.value).toBe(15);
+
+    panel.setChangesHorizontalExtent(10, 20);
+    expect(panel.changesScrollLeft.value).toBe(0);
+    expect(panel.logScrollLeft.value).toBe(15);
+  });
+});
