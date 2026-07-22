@@ -31,6 +31,11 @@ import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { TreePaneRenderer } from './TreePaneRenderer';
 import { GitPaneRenderer } from './GitPaneRenderer';
+import {
+  TabBarRenderer,
+  type TabBarSegment,
+  type WorkspaceTabBarSegment,
+} from './TabBarRenderer';
 import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
 import { DiffView } from '../diff/DiffView';
 import { MarkdownSplitView } from '../markdown/MarkdownSplitView';
@@ -1170,14 +1175,7 @@ function $buildRootView(
 
   // Workspace/project tabs and editor/buffer tabs are separate layers backed by the SAME TabStrip
   // capability. The workspace strip changes orientation; the buffer strip remains horizontal.
-  type WorkspaceTabBarSegment = {
-    kind: 'tab' | 'panBackward' | 'panForward' | 'add';
-    workspaceIndex: number;
-    primaryStart: number;
-    primaryEnd: number;
-    closePrimaryCoordinate?: number;
-    closeCrossAxisCoordinate?: number;
-  };
+  // WorkspaceTabBarSegment / TabBarSegment types now live on TabBarRenderer (imported above).
   let workspaceTabBarSegments: WorkspaceTabBarSegment[] = [];
   let workspaceTabBarHover: { kind: 'tab' | 'close' | 'panBackward' | 'panForward' | 'add'; workspaceIndex: number } | null = null;
   let lastRevealedWorkspaceIndex = -1;
@@ -1201,167 +1199,21 @@ function $buildRootView(
   }
 
   function renderWorkspaceTabBar(): StyledText {
-    const palette = readPalette();
-    const orientation = workspaceTabStrip.orientation.value;
-    const workspaceTabs = workspaceTabStrip.items;
-    workspaceTabBarSegments = [];
-    const chunks: TextChunk[] = [];
-    const activeWorkspaceIndex = workspaceTabStrip.activeIndex;
-
-    if (orientation === 'vertical') {
-      const barWidth = 22;
-      const barHeight = Math.max(4, Number(workspaceTabBar.height) || renderer.height - 1);
-      const visibleWorkspaceCount = Math.max(1, barHeight - 3);
-      const maximumScrollOffset = Math.max(0, workspaceTabs.length - visibleWorkspaceCount);
-      workspaceTabStrip.clampScrollOffset(maximumScrollOffset);
-      if (activeWorkspaceIndex >= 0 && activeWorkspaceIndex !== lastRevealedWorkspaceIndex) {
-        if (
-          activeWorkspaceIndex < workspaceTabStrip.scrollOffset.value ||
-          activeWorkspaceIndex >= workspaceTabStrip.scrollOffset.value + visibleWorkspaceCount
-        ) {
-          workspaceTabStrip.scrollOffset.value = Math.min(activeWorkspaceIndex, maximumScrollOffset);
-        }
-        lastRevealedWorkspaceIndex = activeWorkspaceIndex;
-      }
-      const startWorkspaceIndex = workspaceTabStrip.scrollOffset.value;
-      const endWorkspaceIndex = Math.min(
-        workspaceTabs.length,
-        startWorkspaceIndex + visibleWorkspaceCount,
-      );
-      let rowIndex = 0;
-      for (let workspaceIndex = startWorkspaceIndex; workspaceIndex < endWorkspaceIndex; workspaceIndex += 1) {
-        const workspaceTab = workspaceTabs[workspaceIndex]!;
-        const hovered = workspaceTabBarHover?.workspaceIndex === workspaceIndex;
-        const closeHovered = hovered && workspaceTabBarHover?.kind === 'close';
-        const rowBackground = workspaceTab.active ? palette.selection : hovered ? palette.cursorLine : null;
-        const labelWidth = barWidth - 5;
-        const label = workspaceTab.label.slice(0, labelWidth).padEnd(labelWidth, ' ');
-        const closeGlyph = workspaceTabs.length > 1 ? '✕' : ' ';
-        const rowText = ` ${workspaceTab.active ? '●' : ' '} ${label}${closeGlyph} `;
-        const styledRow = fg(closeHovered ? palette.error : workspaceTab.active ? palette.fg : palette.dim)(rowText);
-        chunks.push(rowBackground ? bg(rowBackground)(styledRow) : styledRow);
-        chunks.push(fg(palette.fg)('\n'));
-        workspaceTabBarSegments.push({
-          kind: 'tab',
-          workspaceIndex,
-          primaryStart: rowIndex,
-          primaryEnd: rowIndex + 1,
-          closeCrossAxisCoordinate: barWidth - 2,
-        });
-        rowIndex += 1;
-      }
-      while (rowIndex < visibleWorkspaceCount) {
-        chunks.push(fg(palette.fg)(`${' '.repeat(barWidth)}\n`));
-        rowIndex += 1;
-      }
-      const controlRows: Array<{ kind: 'panBackward' | 'panForward' | 'add'; label: string }> = [
-        { kind: 'panBackward', label: ' ↑ Previous tabs' },
-        { kind: 'panForward', label: ' ↓ More tabs' },
-        { kind: 'add', label: ' + Add project' },
-      ];
-      controlRows.forEach((control, controlIndex) => {
-        const hovered = workspaceTabBarHover?.kind === control.kind;
-        const enabled =
-          control.kind === 'add' ||
-          (control.kind === 'panBackward'
-            ? workspaceTabStrip.scrollOffset.value > 0
-            : workspaceTabStrip.scrollOffset.value < maximumScrollOffset);
-        const text = control.label.padEnd(barWidth, ' ').slice(0, barWidth);
-        const styled = fg(enabled ? palette.accent : palette.border)(text);
-        chunks.push(hovered ? bg(palette.cursorLine)(styled) : styled);
-        if (controlIndex < controlRows.length - 1) chunks.push(fg(palette.fg)('\n'));
-        workspaceTabBarSegments.push({
-          kind: control.kind,
-          workspaceIndex: -1,
-          primaryStart: visibleWorkspaceCount + controlIndex,
-          primaryEnd: visibleWorkspaceCount + controlIndex + 1,
-        });
-      });
-      return new StyledText(chunks);
-    }
-
-    const barWidth = Math.max(1, Number(workspaceTabBar.width) || renderer.width);
-    const controlsText = ' ‹  ›  + ';
-    const controlsWidth = EditorCoordinates.Class.lineWidth(controlsText);
-    const availableTabsWidth = Math.max(1, barWidth - controlsWidth);
-    const measuredWorkspaceTabs = workspaceTabs.map((workspaceTab) => ({
-      workspaceTab,
-      width: Math.min(availableTabsWidth, EditorCoordinates.Class.lineWidth(workspaceTab.label) + 6),
-    }));
-    const maximumScrollOffset = Math.max(0, measuredWorkspaceTabs.length - 1);
-    workspaceTabStrip.clampScrollOffset(maximumScrollOffset);
-    let startWorkspaceIndex = workspaceTabStrip.scrollOffset.value;
-    const visibleEndFrom = (startIndex: number): number => {
-      let usedWidth = 0;
-      let endIndex = startIndex;
-      for (let workspaceIndex = startIndex; workspaceIndex < measuredWorkspaceTabs.length; workspaceIndex += 1) {
-        const measuredWorkspaceTab = measuredWorkspaceTabs[workspaceIndex]!;
-        if (usedWidth + measuredWorkspaceTab.width > availableTabsWidth) break;
-        usedWidth += measuredWorkspaceTab.width;
-        endIndex = workspaceIndex + 1;
-      }
-      return Math.max(endIndex, startIndex + 1);
-    };
-    if (activeWorkspaceIndex >= 0 && activeWorkspaceIndex !== lastRevealedWorkspaceIndex) {
-      if (activeWorkspaceIndex < startWorkspaceIndex || activeWorkspaceIndex >= visibleEndFrom(startWorkspaceIndex)) {
-        workspaceTabStrip.scrollOffset.value = activeWorkspaceIndex;
-        startWorkspaceIndex = activeWorkspaceIndex;
-      }
-      lastRevealedWorkspaceIndex = activeWorkspaceIndex;
-    }
-    let columnIndex = 0;
-    const endWorkspaceIndex = visibleEndFrom(startWorkspaceIndex);
-    for (let workspaceIndex = startWorkspaceIndex; workspaceIndex < endWorkspaceIndex; workspaceIndex += 1) {
-      const measuredWorkspaceTab = measuredWorkspaceTabs[workspaceIndex]!;
-      const workspaceTab = measuredWorkspaceTab.workspaceTab;
-      const hovered = workspaceTabBarHover?.workspaceIndex === workspaceIndex;
-      const closeHovered = hovered && workspaceTabBarHover?.kind === 'close';
-      const rowBackground = workspaceTab.active ? palette.selection : hovered ? palette.cursorLine : null;
-      const maximumLabelWidth = Math.max(1, measuredWorkspaceTab.width - 6);
-      const label = workspaceTab.label.slice(0, maximumLabelWidth).padEnd(maximumLabelWidth, ' ');
-      const tabText = ` ${workspaceTab.active ? '●' : ' '} ${label} `;
-      const styledTab = fg(workspaceTab.active ? palette.fg : palette.dim)(tabText);
-      chunks.push(rowBackground ? bg(rowBackground)(styledTab) : styledTab);
-      const closePrimaryCoordinate = columnIndex + EditorCoordinates.Class.lineWidth(tabText);
-      const closeGlyph = workspaceTabs.length > 1 ? '✕' : ' ';
-      chunks.push(
-        rowBackground
-          ? bg(rowBackground)(fg(closeHovered ? palette.error : palette.dim)(closeGlyph))
-          : fg(closeHovered ? palette.error : palette.dim)(closeGlyph),
-      );
-      chunks.push(rowBackground ? bg(rowBackground)(fg(palette.dim)(' ')) : fg(palette.dim)(' '));
-      workspaceTabBarSegments.push({
-        kind: 'tab',
-        workspaceIndex,
-        primaryStart: columnIndex,
-        primaryEnd: columnIndex + measuredWorkspaceTab.width,
-        closePrimaryCoordinate,
-      });
-      columnIndex += measuredWorkspaceTab.width;
-    }
-    while (columnIndex < availableTabsWidth) {
-      chunks.push(fg(palette.fg)(' '));
-      columnIndex += 1;
-    }
-    const controls: Array<{ kind: 'panBackward' | 'panForward' | 'add'; text: string }> = [
-      { kind: 'panBackward', text: ' ‹ ' },
-      { kind: 'panForward', text: ' › ' },
-      { kind: 'add', text: ' + ' },
-    ];
-    controls.forEach((control) => {
-      const startColumn = columnIndex;
-      const hovered = workspaceTabBarHover?.kind === control.kind;
-      const styled = fg(control.kind === 'add' ? palette.accent : palette.fg)(control.text);
-      chunks.push(hovered ? bg(palette.cursorLine)(styled) : styled);
-      columnIndex += EditorCoordinates.Class.lineWidth(control.text);
-      workspaceTabBarSegments.push({
-        kind: control.kind,
-        workspaceIndex: -1,
-        primaryStart: startColumn,
-        primaryEnd: columnIndex,
-      });
+    // Delegates to TabBarRenderer; RootView keeps the persistent reveal index + hit-test segments and
+    // supplies the interaction state. Behaviour identical (horizontal + vertical orientations).
+    const result = TabBarRenderer.Class.renderWorkspace({
+      strip: workspaceTabStrip,
+      palette: readPalette(),
+      hover: workspaceTabBarHover,
+      lastRevealedIndex: lastRevealedWorkspaceIndex,
+      barWidthValue: Number(workspaceTabBar.width),
+      barHeightValue: Number(workspaceTabBar.height),
+      rendererWidth: renderer.width,
+      rendererHeight: renderer.height,
     });
-    return new StyledText(chunks);
+    workspaceTabBarSegments = result.segments;
+    lastRevealedWorkspaceIndex = result.revealedIndex;
+    return result.text;
   }
 
   function workspaceTabBarSegmentAt(primaryCoordinate: number): WorkspaceTabBarSegment | null {
@@ -1438,9 +1290,6 @@ function $buildRootView(
   // renderer and the click/hover hit-test consume — so a drawn cell and its hit-rect can never
   // disagree (the arrows-not-clickable bug was exactly that mismatch). Tabs fill from the left; the
   // overflow arrows pin to the RIGHT edge. Three visual states per target: idle → hover → pressed.
-  type TabBarSegment =
-    | { kind: 'tab'; index: number; start: number; end: number; closeColumn: number }
-    | { kind: 'previewToggle' | 'arrowLeft' | 'arrowRight' | 'badge'; start: number; end: number };
   let tabBarSegments: TabBarSegment[] = [];
   // Hover/press state (view-only), driven by tab-bar mouse move/press.
   let tabBarHover: { kind: 'tab' | 'close' | 'previewToggle' | 'arrowLeft' | 'arrowRight' | 'badge'; index: number } | null = null;
@@ -1453,166 +1302,24 @@ function $buildRootView(
   let lastRevealedActiveIndex = -1;
 
   function renderTabBar(): StyledText {
-    const palette = readPalette();
-    const tabs = bufferTabStrip.items;
-    tabBarSegments = [];
-    if (tabs.length === 0) return new StyledText([fg(palette.dim)('  no open files')]);
-    const barWidth = Math.max(1, tabBar.width as number);
-
-    // Each tab lays out as ` name <dirty> ✕ ` — the ✕ has a space BEFORE and AFTER so it is never
-    // flush against the tab edge, and the padding is identical regardless of label length.
-    const measured = tabs.map((tab) => {
-      const name = tab.label;
-      const labelWidth = 1 + EditorCoordinates.Class.lineWidth(name) + 1 + 1 + 1; // ' ' + name + ' ' + dirtyGlyph + ' '
-      return { tab, name, labelWidth, width: labelWidth + 2 }; // + '✕' + trailing ' '
+    // Delegates to TabBarRenderer; RootView keeps the persistent reveal index + hit-test segments and
+    // supplies the interaction (hover/pressed) state and the markdown-preview action inputs.
+    const result = TabBarRenderer.Class.renderBuffer({
+      strip: bufferTabStrip,
+      palette: readPalette(),
+      barWidth: tabBar.width as number,
+      hover: tabBarHover,
+      closePressed: tabBarClosePressed,
+      previewPressed: tabBarPreviewPressed,
+      arrowPressed: tabBarArrowPressed,
+      lastRevealedIndex: lastRevealedActiveIndex,
+      activeFileIsMarkdown: workspaceSet.active.activeFileIsMarkdown,
+      showingMarkdownPreview: workspaceSet.active.showingMarkdownPreview,
+      previewIcon: theme.actionIcons.preview,
     });
-    const totalWidth = measured.reduce((sum, entry) => sum + entry.width, 0);
-
-    // Right controls, pinned to the edge: a clickable ` active/total ` COUNT BADGE (always), and when
-    // the strip overflows, an ellipsis "more" marker + two padded 3-cell ARROWS. Reserve their width.
-    const total = tabs.length;
-    const activeIndex = tabs.findIndex((tab) => tab.active);
-    const badgeText = ` ${activeIndex + 1}/${total} `;
-    const badgeWidth = EditorCoordinates.Class.lineWidth(badgeText);
-    const arrowCellWidth = 3; // ' « ' / ' » ' — padded so the hit target is easy to click
-    const previewToggleWidth = workspaceSet.active.activeFileIsMarkdown ? 3 : 0;
-    const overflow = totalWidth + badgeWidth + previewToggleWidth > barWidth;
-    const rightControlsWidth = badgeWidth + previewToggleWidth + (overflow ? 1 /* ellipsis */ + arrowCellWidth * 2 : 0);
-    const tabsAreaWidth = Math.max(1, barWidth - rightControlsWidth);
-
-    // How many whole tabs fit when rendering forward from a given start index.
-    const windowEndFrom = (start: number): number => {
-      let used = 0;
-      let end = start;
-      for (let index = start; index < total; index += 1) {
-        const entry = measured[index];
-        if (!entry || used + entry.width > tabsAreaWidth) break;
-        used += entry.width;
-        end = index + 1;
-      }
-      return Math.max(end, start + 1); // always show at least one tab
-    };
-    // Largest pan offset that still fills the strip to the last tab (so we never pan past the end).
-    let maxScrollOffset = 0;
-    if (overflow) {
-      let used = 0;
-      maxScrollOffset = total;
-      for (let index = total - 1; index >= 0; index -= 1) {
-        const entry = measured[index];
-        if (!entry || used + entry.width > tabsAreaWidth) break;
-        used += entry.width;
-        maxScrollOffset = index;
-      }
-    }
-    // Clamp the user's pan; then reveal the active tab ONLY when it actually changed (click / cycle) —
-    // panning with the arrows leaves the active tab where it is, even if it scrolls out of view.
-    bufferTabStrip.clampScrollOffset(maxScrollOffset);
-    if (activeIndex >= 0 && activeIndex !== lastRevealedActiveIndex) {
-      if (activeIndex < bufferTabStrip.scrollOffset.value || activeIndex >= windowEndFrom(bufferTabStrip.scrollOffset.value)) {
-        bufferTabStrip.scrollOffset.value = Math.min(activeIndex, maxScrollOffset);
-      }
-      lastRevealedActiveIndex = activeIndex;
-    }
-    const startIndex = overflow ? bufferTabStrip.scrollOffset.value : 0;
-
-    const chunks: TextChunk[] = [];
-    let column = 0;
-    let endIndex = startIndex;
-    for (let index = startIndex; index < measured.length; index += 1) {
-      const entry = measured[index];
-      if (!entry || column + entry.width > tabsAreaWidth) break;
-      const isActive = entry.tab.active;
-      const isTabHover = tabBarHover?.kind === 'tab' && tabBarHover.index === index;
-      const isCloseHover = tabBarHover?.kind === 'close' && tabBarHover.index === index;
-      const rowBackground = isActive ? palette.selection : isTabHover ? palette.cursorLine : null;
-      const labelColor = isActive ? palette.fg : palette.dim;
-      const paint = (text: string, color: string) =>
-        rowBackground ? bg(rowBackground)(fg(color)(text)) : fg(color)(text);
-      const start = column;
-      chunks.push(paint(` ${entry.name} `, labelColor));
-      chunks.push(paint(entry.tab.dirty ? '●' : ' ', isActive ? palette.warning : palette.accent));
-      chunks.push(paint(' ', labelColor));
-      column += entry.labelWidth;
-      const closeColumn = column;
-      // The ✕ is an INDEPENDENTLY-stated target on EVERY tab (including active): idle → hover (bright
-      // error ✕ that pops even over the active tab's selection bg) → pressed (inverted: bg over error).
-      const isClosePressed = tabBarClosePressed === index;
-      const closeColor = isClosePressed ? palette.bg : isCloseHover ? palette.error : labelColor;
-      const closeBackground = isClosePressed ? palette.error : rowBackground;
-      chunks.push(closeBackground ? bg(closeBackground)(fg(closeColor)('✕')) : fg(closeColor)('✕'));
-      column += 1;
-      chunks.push(paint(' ', labelColor)); // trailing pad — ✕ never touches the edge
-      column += 1;
-      tabBarSegments.push({ kind: 'tab', index, start, end: column, closeColumn });
-      endIndex = index + 1;
-    }
-
-    // Fill the gap between the last tab and the right controls.
-    while (column < tabsAreaWidth) {
-      chunks.push(fg(palette.fg)(' '));
-      column += 1;
-    }
-
-    let moreLeft = false;
-    let moreRight = false;
-    if (overflow) {
-      moreLeft = startIndex > 0;
-      moreRight = endIndex < total;
-      // "More →" cutoff affordance: a bright ellipsis at the edge where tabs continue (so a clean cut
-      // never reads as "no more tabs"); dim when there is nothing more that way.
-      chunks.push(fg(moreRight ? palette.accent : palette.border)(moreRight ? '…' : ' '));
-      column += 1;
-    }
-
-    // Extensible right-side action cluster: Markdown preview is the first action and sits BEFORE the
-    // strip-pan arrows exactly where future editor-view actions can join it.
-    if (workspaceSet.active.activeFileIsMarkdown) {
-      const start = column;
-      const active = workspaceSet.active.showingMarkdownPreview;
-      const hovered = tabBarHover?.kind === 'previewToggle';
-      const background = tabBarPreviewPressed
-        ? palette.accent
-        : active
-          ? palette.selection
-          : hovered
-            ? palette.cursorLine
-            : null;
-      const color = tabBarPreviewPressed ? palette.bg : active || hovered ? palette.accent : palette.fg;
-      const label = ` ${theme.actionIcons.preview} `;
-      chunks.push(background ? bg(background)(fg(color)(label)) : fg(color)(label));
-      column += previewToggleWidth;
-      tabBarSegments.push({ kind: 'previewToggle', start, end: column });
-    }
-
-    if (overflow) {
-      // Bigger, easy-to-hit arrows: a bolder glyph in a padded 3-cell hit target. BRIGHT (fg/accent)
-      // only when more tabs exist that direction; DIM (border) at the end — so "more exists" reads.
-      const paintArrow = (which: 'arrowLeft' | 'arrowRight', enabled: boolean, glyph: string): void => {
-        const pressed = tabBarArrowPressed === which && enabled;
-        const hover = tabBarHover?.kind === which && enabled;
-        const color = !enabled ? palette.border : pressed ? palette.accent : hover ? palette.accent : palette.fg;
-        const background = pressed ? palette.selection : hover ? palette.cursorLine : null;
-        const paintCell = (text: string) => (background ? bg(background)(fg(color)(text)) : fg(color)(text));
-        const start = column;
-        chunks.push(paintCell(` ${glyph} `)); // 3-cell padded hit target
-        column += arrowCellWidth;
-        tabBarSegments.push({ kind: which, start, end: column });
-      };
-      paintArrow('arrowLeft', moreLeft, '«');
-      paintArrow('arrowRight', moreRight, '»');
-    }
-
-    // COUNT BADGE ` active/total ` — always shown, pinned right; click opens the all-buffers dropdown.
-    const badgeHover = tabBarHover?.kind === 'badge';
-    const badgeStart = column;
-    chunks.push(
-      badgeHover
-        ? bg(palette.cursorLine)(fg(palette.accent)(badgeText))
-        : fg(palette.accent)(badgeText),
-    );
-    column += badgeWidth;
-    tabBarSegments.push({ kind: 'badge', start: badgeStart, end: column });
-    return new StyledText(chunks);
+    tabBarSegments = result.segments;
+    lastRevealedActiveIndex = result.revealedIndex;
+    return result.text;
   }
 
   // Resolve a local column to a tab-bar segment (shared by click + hover — one geometry source).
