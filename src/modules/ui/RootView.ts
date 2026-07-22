@@ -29,16 +29,15 @@ import { Files } from '../system/Files';
 import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { TreePaneRenderer } from './TreePaneRenderer';
 import { GitPaneRenderer } from './GitPaneRenderer';
-import { EditorPaneRenderer } from './EditorPaneRenderer';
 import { StatusBar } from './StatusBar';
 import { TabBar } from './TabBar';
 import { ScrollGesture, type WheelModifiers } from './ScrollGesture';
 import { Sidebar } from './Sidebar';
-import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
+import { EditorPane } from './EditorPane';
+import { EditorWrap } from '../editor/EditorWrap';
 import { DiffView } from '../diff/DiffView';
 import { MarkdownSplitView } from '../markdown/MarkdownSplitView';
 import { SelectableText } from './SelectableText';
-import { SelectionDragBehavior } from './SelectionDragBehavior';
 import { GitRows, type ChangeRow, type FileRow } from '../git/GitRows';
 import { ScrollbarGeometry } from './ScrollbarGeometry';
 import type { ContextMenu, ContextMenuItem } from './ContextMenu';
@@ -1088,31 +1087,9 @@ function $buildRootView(
   // by renderEditor and read by the caret block, applySelection, and the mouse hit-test — so all
   // consumers agree on what is where (same pattern as gitPanelGeometry). Presentation state only.
   // Empty when wrap is off.
-  let wrapRowsWindow: VisualRow[] = [];
 
-  // Map a document position to its wrap-mode viewport cell: the window row index and the visual
-  // column WITHIN that row. 'before'/'after' = off-window on that side.
-  function wrapVisualPosition(
-    line: number,
-    column: number,
-  ): { rowIndex: number; column: number } | 'before' | 'after' {
-    const firstRow = wrapRowsWindow[0];
-    const lastRow = wrapRowsWindow[wrapRowsWindow.length - 1];
-    if (!firstRow || !lastRow) return 'before';
-    const lineText = workspaceSet.active.editor.document.line(line);
-    const segments = EditorWrap.Class.wrapLine(lineText, workspaceSet.active.editor.wrapWidth());
-    const segmentIndex = EditorWrap.Class.segmentIndexForCursor(segments, column);
-    if (line < firstRow.lineIndex || (line === firstRow.lineIndex && segmentIndex < firstRow.segmentIndex))
-      return 'before';
-    if (line > lastRow.lineIndex || (line === lastRow.lineIndex && segmentIndex > lastRow.segmentIndex))
-      return 'after';
-    const rowIndex = wrapRowsWindow.findIndex(
-      (row) => row.lineIndex === line && row.segmentIndex === segmentIndex,
-    );
-    if (rowIndex < 0) return 'after';
-    const segment = segments[segmentIndex];
-    return { rowIndex, column: EditorCoordinates.Class.displayColumn(lineText, column) - (segment?.startDisplayColumn ?? 0) };
-  }
+  // wrapVisualPosition / documentPositionAtCell / applySelection / the selection drag now live in the
+  // EditorPane controller (below) with the wrap window they read.
 
   // Workspace/project tabs and editor/buffer tabs are separate layers backed by the SAME TabStrip
   // capability, driven by the TabBar controller (below). The workspace strip changes orientation.
@@ -1178,75 +1155,10 @@ function $buildRootView(
   // Builds the visible window as two aligned StyledTexts — the gutter (line numbers + current-line
   // marker) and the code (syntax colors only, NO gutter). Only the visible lines are tokenized
   // (flyweight). Returns null for the empty state.
-  function renderEditor(): { gutter: StyledText; code: StyledText } | null {
-    // Delegates to EditorPaneRenderer; RootView stores the returned wrap-row window (the caret block,
-    // applySelection, and the hit-test read it). null (diff shown / no document) leaves it untouched,
-    // exactly as before. Behaviour identical.
-    const result = EditorPaneRenderer.Class.render({
-      workspace: workspaceSet.active,
-      palette: readPalette(),
-      viewportHeight: editorViewportHeight(),
-      viewportWidth: editorViewportWidth(),
-      findEngineFor: (documentPath) => findBar.engineFor(`source:${documentPath}`),
-    });
-    if (!result) return null;
-    wrapRowsWindow = result.wrapRowsWindow;
-    return { gutter: result.gutter, code: result.code };
-  }
 
   // Drive OpenTUI's native selection on the code renderable from the model selection, mapped into
   // code-local coords (x = display column, y = visible-line index). Clamps to the visible window.
   // invariant: The selected range renders with a background (ui.invariants.md)
-  function applySelection(): void {
-    const editor = workspaceSet.active.editor;
-    const selection = editor.hasDocument.value ? editor.cursor.selectionRange() : null;
-    const top = editor.viewport.scrollTop.value;
-    const viewportHeight = editorViewportHeight();
-    if (editor.wordWrap.value) {
-      // Wrap mode: the native selection coords are viewport-local VISUAL rows — map both ends
-      // through the ONE logical↔visual layer, clamping off-window ends to the window edges.
-      if (!selection || wrapRowsWindow.length === 0) {
-        codeBody.clearSelectionRange();
-        return;
-      }
-      const startPosition = wrapVisualPosition(selection.start.line, selection.start.col);
-      const endPosition = wrapVisualPosition(selection.end.line, selection.end.col);
-      if (startPosition === 'after' || endPosition === 'before') {
-        codeBody.clearSelectionRange();
-        return;
-      }
-      const anchorCell = startPosition === 'before' ? { rowIndex: 0, column: 0 } : startPosition;
-      const focusCell =
-        endPosition === 'after'
-          ? { rowIndex: wrapRowsWindow.length - 1, column: editorViewportWidth() }
-          : endPosition;
-      codeBody.setSelectionRange(
-        Math.max(0, anchorCell.column),
-        anchorCell.rowIndex,
-        Math.max(0, focusCell.column),
-        focusCell.rowIndex,
-      );
-      return;
-    }
-    if (!selection || selection.end.line < top || selection.start.line >= top + viewportHeight) {
-      codeBody.clearSelectionRange();
-      return;
-    }
-    const selectionScrollLeft = editor.viewport.scrollLeft.value;
-    const anchorY = Math.max(0, selection.start.line - top);
-    const anchorX = selection.start.line >= top ? EditorCoordinates.Class.displayColumn(editor.document.line(selection.start.line), selection.start.col) : 0;
-    const focusY = Math.min(viewportHeight - 1, selection.end.line - top);
-    const focusX =
-      selection.end.line < top + viewportHeight
-        ? EditorCoordinates.Class.displayColumn(editor.document.line(selection.end.line), selection.end.col)
-        : EditorCoordinates.Class.lineWidth(editor.document.line(Math.min(top + viewportHeight - 1, editor.document.lineCount - 1)));
-    codeBody.setSelectionRange(
-      Math.max(0, anchorX - selectionScrollLeft),
-      anchorY,
-      Math.max(0, focusX - selectionScrollLeft),
-      focusY,
-    );
-  }
 
   // The git sidebar: a changes region (staged/unstaged/untracked + branch header) over a
   // VIRTUALIZED commit log (only the visible window is materialized, via CommitLog.rows). Split by
@@ -1450,7 +1362,7 @@ function $buildRootView(
 
     sidebarBody.content = gitView ? renderGitPanel() : renderTree();
     sidebarBody.fg = palette.fg;
-    const rendered = renderEditor();
+    const rendered = editorController.renderEditor();
     if (rendered) {
       gutterBody.width = gutterWidth();
       gutterBody.content = rendered.gutter;
@@ -1462,7 +1374,7 @@ function $buildRootView(
     }
     codeBody.fg = palette.fg;
     codeBody.selectionBg = palette.selection;
-    applySelection(); // after content is set, so selection maps onto the current buffer
+    editorController.applySelection(); // after content is set, so selection maps onto the current buffer
     statusBar.update(palette, activeMarkdownSplitView?.previewFocused ?? false);
 
     // Palette overlay.
@@ -1680,7 +1592,7 @@ function $buildRootView(
       // invariant: The caret renders at the cursor display column (ui.invariants.md)
       const caretPosition =
         editor.hasDocument.value && workspaceSet.active.focus.value === 'editor' && !activeMarkdownSplitView?.previewFocused && !open
-          ? wrapVisualPosition(cursorLine, editor.cursor.col.value)
+          ? editorController.wrapVisualPosition(cursorLine, editor.cursor.col.value)
           : null;
       if (caretPosition && typeof caretPosition === 'object') {
         const caretCellX = codeBody.x + caretPosition.column;
@@ -1731,161 +1643,21 @@ function $buildRootView(
   // factor when the fast-scroll modifier is held (settings.fastScrollMultiplier; modifier defaults to
   // 'none' = off). One expression feeds BOTH the wrap-mode direct step and the momentum impulse.
   const wheelStep = (event: WheelModifiers): number => ScrollGesture.Class.wheelStep(event, settings);
-  const scrollEditorVertically = (delta: number): void => {
-    const editor = workspaceSet.active.editor;
-    const editorViewport = editor.viewport;
-    if (editor.wordWrap.value) {
-      // scrollTop is a VISUAL-row offset; clamp to the wrapped extent so the last visual row is reachable.
-      const maxTop = Math.max(0, EditorWrap.Class.totalVisualRows(editor.document, editor.wrapWidth()) - editorViewport.height.value);
-      editorViewport.scrollTop.value = Math.max(0, Math.min(editorViewport.scrollTop.value + delta, maxTop));
-    } else {
-      editorViewport.scrollBy(delta, editor.document.lineCount);
-    }
-  };
-  editorArea.onMouseScroll = (event) => {
-    if (!workspaceSet.active.editor.hasDocument.value) return;
-    // Horizontal scroll arrives by SEVERAL terminal-dependent encodings; route them ALL to columns:
-    //   - native horizontal wheel / tilt: SGR 66/67 -> direction left/right (trackpad two-finger swipe;
-    //     Option+wheel on the user's terminal arrives as 74/75 = 66/67 + Meta, also direction left/right);
-    //   - a VERTICAL wheel with a modifier: Option/Alt (+8 -> 72/73) is the user-facing path that
-    //     survives real terminals; Shift (+4 -> 68/69) is a bonus (most terminals swallow it).
-    // Delivery of any given modifier is terminal-dependent — supporting all of them is the robust fix.
-    const direction = event.scroll?.direction;
-    const step = wheelStep(event);
-    if (workspaceSet.active.editor.wordWrap.value) {
-      // Wrap mode: ONE scroll axis (horizontal gestures route to the vertical window, scrollLeft inert),
-      // fed through the SAME momentum engine as non-wrap so a wheel notch GLIDES then decays — scrollTop
-      // is in visual rows, so the glide is smooth over wrapped rows (not jumpy by logical line).
-      const backward = direction === 'left' || direction === 'up';
-      workspaceSet.active.impulseEditorVerticalScroll((backward ? -1 : 1) * step);
-    } else {
-      // The horizontal modifier is configurable (settings.horizontalScrollModifier, default 'alt' = the
-      // Option-wheel path that survives real terminals); native left/right direction is always horizontal.
-      const modifierHorizontal = scrollModifierHeld(event, settings.horizontalScrollModifier.value);
-      const horizontal = direction === 'left' || direction === 'right' || modifierHorizontal;
-      if (horizontal) {
-        const backward = direction === 'left' || direction === 'up';
-        workspaceSet.active.impulseEditorHorizontalScroll((backward ? -1 : 1) * step);
-      } else {
-        workspaceSet.active.impulseEditorVerticalScroll((direction === 'up' ? -1 : 1) * step);
-      }
-    }
-  };
 
   // Mouse selection drives the MODEL (cursor + anchor) — the single writer; the native highlight
   // is then applied FROM the model by applySelection() each paint, so it persists across repaints
   // and Ctrl+C copies exactly what is highlighted.
   // invariant: The selected range renders with a background (ui.invariants.md)
-  const documentPositionAtCell = (cellX: number, cellY: number): { line: number; column: number } | null => {
-    if (!workspaceSet.active.editor.hasDocument.value) return null;
-    if (workspaceSet.active.editor.wordWrap.value) {
-      // Wrap mode: a viewport row is a VISUAL row — resolve it through the rendered window, then
-      // hit-test the display column WITHIN that row's segment (clamped into the segment so a
-      // click past a wrapped row's end lands on its last grapheme, not the next row's first).
-      if (wrapRowsWindow.length === 0) return null;
-      const rowIndex = Math.max(0, Math.min(cellY - codeBody.y, wrapRowsWindow.length - 1));
-      const row = wrapRowsWindow[rowIndex];
-      if (!row) return null;
-      const lineText = workspaceSet.active.editor.document.line(row.lineIndex);
-      const segments = EditorWrap.Class.wrapLine(lineText, workspaceSet.active.editor.wrapWidth());
-      const lastSegmentOfLine = row.segmentIndex === segments.length - 1;
-      const hitColumn = EditorCoordinates.Class.graphemeAtDisplayColumn(
-        lineText,
-        row.segment.startDisplayColumn + Math.max(0, cellX - codeBody.x),
-      );
-      const maxColumn = lastSegmentOfLine
-        ? row.segment.endGrapheme
-        : Math.max(row.segment.startGrapheme, row.segment.endGrapheme - 1);
-      return {
-        line: row.lineIndex,
-        column: Math.max(row.segment.startGrapheme, Math.min(hitColumn, maxColumn)),
-      };
-    }
-    const line = Math.max(
-      0,
-      Math.min(
-        workspaceSet.active.editor.viewport.scrollTop.value + (cellY - codeBody.y),
-        workspaceSet.active.editor.document.lineCount - 1,
-      ),
-    );
-    const column = EditorCoordinates.Class.graphemeAtDisplayColumn(
-      workspaceSet.active.editor.document.line(line),
-      workspaceSet.active.editor.viewport.scrollLeft.value + (cellX - codeBody.x),
-    );
-    return { line, column };
-  };
   // One shared drag/autoscroll behavior serves this editor and DiffView. The hosts differ only in
   // coordinate mapping and scroll storage; pointer lifecycle, edge zones, rate, and re-extension are
   // identical. invariant: One writer per scroll regime per frame (src/modules/ui/ui.invariants.md)
-  const editorSelectionDragBehavior = new SelectionDragBehavior({
-    viewportRectangle: () => ({
-      leftColumn: codeBody.x,
-      rightColumn: codeBody.x + Math.max(1, editorViewportWidth()) - 1,
-      topRow: codeBody.y,
-      bottomRow: codeBody.y + Math.max(1, editorViewportHeight()) - 1,
-    }),
-    positionAtCell: documentPositionAtCell,
-    horizontalScrollPosition: () => workspaceSet.active.editor.viewport.scrollLeft.value,
-    horizontalScrollingEnabled: () => !workspaceSet.active.editor.wordWrap.value,
-    beginSelection: (position) => {
-      workspaceSet.active.focusEditor();
-      workspaceSet.active.editor.placeCursor(position.line, position.column);
-      workspaceSet.active.editor.cursor.setAnchorHere();
-    },
-    extendSelection: (position, pointerDisplayColumn) => {
-      // Direct Cursor.set preserves the pointer's display-column goal while short lines clamp the
-      // landing column; placeCursor would reveal/yank the viewport during a diagonal drag.
-      workspaceSet.active.editor.cursor.set(position.line, position.column, pointerDisplayColumn);
-    },
-    finishSelection: () => {
-      if (!workspaceSet.active.editor.cursor.hasSelection) workspaceSet.active.editor.cursor.clearSelection();
-    },
-    scrollColumns: (columnDelta) => {
-      const topLineIndex = workspaceSet.active.editor.viewport.scrollTop.value;
-      let widestVisibleLineWidth = 0;
-      for (const line of workspaceSet.active.editor.document.slice(topLineIndex, editorViewportHeight())) {
-        widestVisibleLineWidth = Math.max(widestVisibleLineWidth, EditorCoordinates.Class.lineWidth(line));
-      }
-      workspaceSet.active.editor.viewport.scrollByColumns(columnDelta, widestVisibleLineWidth);
-    },
-    scrollRows: scrollEditorVertically,
-    haltCompetingScroll: () => workspaceSet.active.editor.viewport.haltScrollMomentum(),
-  });
 
-  codeBody.onMouseDown = (event) => {
-    activeMarkdownSplitView?.focusSource();
-    if (process.env.TUI_DEBUG_MOUSE === '1') {
-      Logging.Class.info(`mouseDown (${event.x},${event.y}) hit=${JSON.stringify(documentPositionAtCell(event.x, event.y))}`);
-    }
-    // Ctrl/Cmd+click on a symbol = go to definition (VS Code style). OpenTUI exposes terminal
-    // Meta/Super mouse modifiers through the SGR alt bit, so ctrl OR alt covers Ctrl-click and
-    // terminal Cmd/Meta-click without a second path (same rule as the Markdown reference click).
-    // The event is consumed here — it never doubles as a selection begin.
-    // invariant: A definition gesture jumps to the declaration (src/modules/lsp/lsp.invariants.md)
-    if (event.button === 0 && (event.modifiers.ctrl || event.modifiers.alt)) {
-      const definitionPosition = documentPositionAtCell(event.x, event.y);
-      if (definitionPosition) {
-        workspaceSet.active.focusEditor();
-        void workspaceSet.active.goToDefinition(definitionPosition);
-        return;
-      }
-    }
-    editorSelectionDragBehavior.begin(event.x, event.y);
-  };
-  codeBody.onMouseDrag = (event) => {
-    if (process.env.TUI_DEBUG_MOUSE === '1') {
-      Logging.Class.info(`mouseDrag (${event.x},${event.y}) hit=${JSON.stringify(documentPositionAtCell(event.x, event.y))}`);
-    }
-    editorSelectionDragBehavior.drag(event.x, event.y);
-  };
-  codeBody.onMouseUp = () => editorSelectionDragBehavior.end();
-  codeBody.onMouseDragEnd = () => editorSelectionDragBehavior.end();
 
   function tickDragAutoScroll(deltaTimeSeconds: number): boolean {
     // This hook already runs after each Yoga layout. Converge every sidebar pane's live geometry here
     // too; returning true for the one changed frame guarantees a repaint, then quiescence resumes.
     const paneViewportGeometryChanged = syncPaneViewportGeometry();
-    return editorSelectionDragBehavior.tick(deltaTimeSeconds) || paneViewportGeometryChanged;
+    return editorController.tickDrag(deltaTimeSeconds) || paneViewportGeometryChanged;
   }
 
   // Sidebar clicks: focus follows the click (files or git view), and a click on a tree row SELECTS
@@ -1925,9 +1697,22 @@ function $buildRootView(
   // selection; a selected row keeps the whole multi-selection) and open the context menu at the
   // pointer with the COLLECTIVE actions the selection's buckets support.
 
-  // Shift+click: select the file rows in the range between the focused row and the clicked row
-  // (headers in between are skipped), REPLACING the previous selection.
-
+  // The editor pane CONTROLLER owns the code body's behaviour: the wrap window, coordinate mapping,
+  // model→native selection sync, the selection-drag behaviour, Ctrl/Cmd+click go-to-definition, and
+  // wheel scroll. RootView keeps the renderables + viewport geometry (public interface) and the
+  // markdown mount; update() calls renderEditor()/applySelection()/wrapVisualPosition() through it.
+  const editorController = new EditorPane.Class({
+    renderer,
+    editorArea,
+    codeBody,
+    workspaceSet,
+    findBar,
+    settings,
+    readPalette,
+    editorViewportHeight,
+    editorViewportWidth,
+    focusMarkdownSource: () => activeMarkdownSplitView?.focusSource(),
+  });
 
   update();
 
