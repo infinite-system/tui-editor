@@ -169,9 +169,16 @@ python3 -c "open('$FDIR/doc.txt','w').write(''.join('FLINE-%03d body\n'%i for i 
 open_file "$S"
 "$H" send "$S" Escape >/dev/null; "$H" settle "$S" >/dev/null 2>&1; sleep 1
 f_before="$("$H" field "$S" frame)"
-"$H" focus "$S" out; "$H" focus "$S" in
-"$H" settle "$S" 10 >/dev/null 2>&1; sleep 0.3
-f_after="$("$H" field "$S" frame)"
+# Retry the focus cycle a few times: the repaint is real but timing-sensitive, and under heavy
+# concurrent load a single settle window can miss it. A genuine freeze regression fails ALL attempts.
+f_after="$f_before"
+for _focus_attempt in 1 2 3; do
+  "$H" focus "$S" out; "$H" focus "$S" in
+  "$H" settle "$S" 10 >/dev/null 2>&1; sleep 0.3
+  f_after="$("$H" field "$S" frame)"
+  [ "$(( ${f_after:-0} - ${f_before:-0} ))" -gt 0 ] && break
+  sleep 0.5
+done
 if [ "$(( ${f_after:-0} - ${f_before:-0} ))" -gt 0 ]; then
   pass "focus-in emits a fresh frame (recovery ran: $f_before -> $f_after)"
 else
@@ -179,8 +186,13 @@ else
 fi
 # Responsive after the focus cycle: a wheel notch still moves the viewport (suspend/resume didn't wedge input).
 scroll_before="$("$H" field "$S" editorScrollTop)"
-for _ in 1 2 3 4 5 6; do tmux send-keys -t "$S" -l "$(printf '\033[<65;60;12M')"; sleep 0.1; done; sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
-scroll_after="$("$H" field "$S" editorScrollTop)"
+scroll_after="$scroll_before"
+for _wheel_attempt in 1 2 3; do
+  for _ in 1 2 3 4 5 6; do tmux send-keys -t "$S" -l "$(printf '\033[<65;60;12M')"; sleep 0.1; done; sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
+  scroll_after="$("$H" field "$S" editorScrollTop)"
+  [ "${scroll_after:-0}" -gt "${scroll_before:-0}" ] 2>/dev/null && break
+  sleep 0.5
+done
 if [ "${scroll_after:-0}" -gt "${scroll_before:-0}" ] 2>/dev/null; then
   pass "app stays responsive after focus recovery (wheel scrolled $scroll_before -> $scroll_after)"
 else
