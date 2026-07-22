@@ -7,7 +7,7 @@
 import { Reactive } from 'ivue';
 import { ref } from 'vue';
 import { Files } from '../system/Files';
-import { graphemeToU16, graphemeCount, clampCol } from './editor.coordinates';
+import { EditorCoordinates } from './EditorCoordinates';
 
 class $TextDocument {
   path = '';
@@ -120,18 +120,18 @@ class $TextDocument {
   /** Insert `text` (no newlines) at line/grapheme-col. Returns the new grapheme col. */
   insertInline(line: number, column: number, text: string): number {
     const currentLine = this.line(line);
-    const graphemeColumn = clampCol(currentLine, column);
-    const utf16Offset = graphemeToU16(currentLine, graphemeColumn);
+    const graphemeColumn = EditorCoordinates.Class.clampCol(currentLine, column);
+    const utf16Offset = EditorCoordinates.Class.graphemeToU16(currentLine, graphemeColumn);
     this._lines[line] = currentLine.slice(0, utf16Offset) + text + currentLine.slice(utf16Offset);
     this.dirty.value = true;
     this.revision.value++;
-    return graphemeColumn + graphemeCount(text);
+    return graphemeColumn + EditorCoordinates.Class.graphemeCount(text);
   }
 
   /** Split a line at grapheme-col into two lines (Enter). Returns new cursor {line, col}. */
   splitLine(line: number, column: number): { line: number; col: number } {
     const currentLine = this.line(line);
-    const utf16Offset = graphemeToU16(currentLine, clampCol(currentLine, column));
+    const utf16Offset = EditorCoordinates.Class.graphemeToU16(currentLine, EditorCoordinates.Class.clampCol(currentLine, column));
     const before = currentLine.slice(0, utf16Offset);
     const after = currentLine.slice(utf16Offset);
     this._lines[line] = before;
@@ -145,9 +145,9 @@ class $TextDocument {
   deleteBackward(line: number, column: number): { line: number; col: number } {
     const currentLine = this.line(line);
     if (column > 0) {
-      const graphemeColumn = clampCol(currentLine, column);
-      const start = graphemeToU16(currentLine, graphemeColumn - 1);
-      const end = graphemeToU16(currentLine, graphemeColumn);
+      const graphemeColumn = EditorCoordinates.Class.clampCol(currentLine, column);
+      const start = EditorCoordinates.Class.graphemeToU16(currentLine, graphemeColumn - 1);
+      const end = EditorCoordinates.Class.graphemeToU16(currentLine, graphemeColumn);
       this._lines[line] = currentLine.slice(0, start) + currentLine.slice(end);
       this.dirty.value = true;
       this.revision.value++;
@@ -155,7 +155,7 @@ class $TextDocument {
     }
     if (line > 0) {
       const previousLine = this.line(line - 1);
-      const newColumn = graphemeCount(previousLine);
+      const newColumn = EditorCoordinates.Class.graphemeCount(previousLine);
       this._lines[line - 1] = previousLine + currentLine;
       this._lines.splice(line, 1);
       this.dirty.value = true;
@@ -168,10 +168,10 @@ class $TextDocument {
   /** Delete the grapheme at line/col (Delete). Returns cursor unchanged. */
   deleteForward(line: number, column: number): { line: number; col: number } {
     const currentLine = this.line(line);
-    const graphemeColumn = clampCol(currentLine, column);
-    if (graphemeColumn < graphemeCount(currentLine)) {
-      const start = graphemeToU16(currentLine, graphemeColumn);
-      const end = graphemeToU16(currentLine, graphemeColumn + 1);
+    const graphemeColumn = EditorCoordinates.Class.clampCol(currentLine, column);
+    if (graphemeColumn < EditorCoordinates.Class.graphemeCount(currentLine)) {
+      const start = EditorCoordinates.Class.graphemeToU16(currentLine, graphemeColumn);
+      const end = EditorCoordinates.Class.graphemeToU16(currentLine, graphemeColumn + 1);
       this._lines[line] = currentLine.slice(0, start) + currentLine.slice(end);
       this.dirty.value = true;
       this.revision.value++;
@@ -190,13 +190,13 @@ class $TextDocument {
   sliceRange(start: { line: number; col: number }, end: { line: number; col: number }): string {
     if (start.line === end.line) {
       const currentLine = this.line(start.line);
-      return currentLine.slice(graphemeToU16(currentLine, start.col), graphemeToU16(currentLine, end.col));
+      return currentLine.slice(EditorCoordinates.Class.graphemeToU16(currentLine, start.col), EditorCoordinates.Class.graphemeToU16(currentLine, end.col));
     }
     const first = this.line(start.line);
     const last = this.line(end.line);
-    const parts: string[] = [first.slice(graphemeToU16(first, start.col))];
+    const parts: string[] = [first.slice(EditorCoordinates.Class.graphemeToU16(first, start.col))];
     for (let index = start.line + 1; index < end.line; index++) parts.push(this.line(index));
-    parts.push(last.slice(0, graphemeToU16(last, end.col)));
+    parts.push(last.slice(0, EditorCoordinates.Class.graphemeToU16(last, end.col)));
     return parts.join(this._eol);
   }
 
@@ -208,13 +208,13 @@ class $TextDocument {
     if (start.line === end.line) {
       const currentLine = this.line(start.line);
       this._lines[start.line] =
-        currentLine.slice(0, graphemeToU16(currentLine, start.col)) + currentLine.slice(graphemeToU16(currentLine, end.col));
+        currentLine.slice(0, EditorCoordinates.Class.graphemeToU16(currentLine, start.col)) + currentLine.slice(EditorCoordinates.Class.graphemeToU16(currentLine, end.col));
     } else {
       const head = this.line(start.line).slice(
         0,
-        graphemeToU16(this.line(start.line), start.col),
+        EditorCoordinates.Class.graphemeToU16(this.line(start.line), start.col),
       );
-      const tail = this.line(end.line).slice(graphemeToU16(this.line(end.line), end.col));
+      const tail = this.line(end.line).slice(EditorCoordinates.Class.graphemeToU16(this.line(end.line), end.col));
       this._lines.splice(start.line, end.line - start.line + 1, head + tail);
     }
     this.dirty.value = true;
@@ -229,7 +229,7 @@ class $TextDocument {
       return { line, col: this.insertInline(line, column, parts[0] ?? '') };
     }
     const currentLine = this.line(line);
-    const utf16Offset = graphemeToU16(currentLine, clampCol(currentLine, column));
+    const utf16Offset = EditorCoordinates.Class.graphemeToU16(currentLine, EditorCoordinates.Class.clampCol(currentLine, column));
     const before = currentLine.slice(0, utf16Offset);
     const after = currentLine.slice(utf16Offset);
     const firstPart = parts[0] ?? '';
@@ -238,7 +238,7 @@ class $TextDocument {
     this._lines.splice(line, 1, before + firstPart, ...middle, lastPart + after);
     this.dirty.value = true;
     this.revision.value++;
-    return { line: line + parts.length - 1, col: graphemeCount(lastPart) };
+    return { line: line + parts.length - 1, col: EditorCoordinates.Class.graphemeCount(lastPart) };
   }
 
   /** Snapshot the full line array (for undo). */

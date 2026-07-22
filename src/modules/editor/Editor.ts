@@ -8,7 +8,7 @@ import { ref, type Ref } from 'vue';
 import { TextDocument } from './TextDocument';
 import { Viewport } from './Viewport';
 import { Cursor } from './Cursor';
-import { graphemeCount, displayColumn, graphemeAtDisplayColumn, graphemes } from './editor.coordinates';
+import { EditorCoordinates } from './EditorCoordinates';
 import { EditorWrap } from './EditorWrap';
 import { UndoStore, type EditKind } from '../storage/UndoStore';
 import { Files } from '../system/Files';
@@ -178,7 +178,7 @@ class $Editor {
     const last = this.document.lineCount - 1;
     this.placeCursor(0, 0);
     this.cursor.setAnchorHere();
-    this.placeCursor(last, graphemeCount(this.document.line(last)));
+    this.placeCursor(last, EditorCoordinates.Class.graphemeCount(this.document.line(last)));
   }
 
   /** Delete the active selection (no undo capture — caller captures). Returns whether it removed. */
@@ -199,7 +199,7 @@ class $Editor {
   placeCursor(line: number, column: number): void {
     this.viewport.haltScrollMomentum(); // precise cursor move adopts authority, stops wheel glide
     const lineText = this.document.line(line);
-    const absoluteDisplayColumn = displayColumn(lineText, column);
+    const absoluteDisplayColumn = EditorCoordinates.Class.displayColumn(lineText, column);
     if (this.wordWrap.value) {
       const segments = EditorWrap.Class.wrapLine(lineText, this.wrapWidth());
       const segment = segments[EditorWrap.Class.segmentIndexForCursor(segments, column)];
@@ -359,7 +359,7 @@ class $Editor {
   // --- movement (extend = shift-select) -------------------------------------
 
   private currentLineLength(): number {
-    return graphemeCount(this.document.line(this.cursor.line.value));
+    return EditorCoordinates.Class.graphemeCount(this.document.line(this.cursor.line.value));
   }
 
   moveVertical(delta: number, extend = false): void {
@@ -381,9 +381,9 @@ class $Editor {
     const target = this.cursor.line.value + delta;
     const maxLine = this.document.lineCount - 1;
     const clamped = Math.max(0, Math.min(target, maxLine));
-    const landingColumn = graphemeAtDisplayColumn(this.document.line(clamped), this.cursor.goalColumn.value);
+    const landingColumn = EditorCoordinates.Class.graphemeAtDisplayColumn(this.document.line(clamped), this.cursor.goalColumn.value);
     this.cursor.moveToLineKeepingGoal(clamped, landingColumn);
-    this.viewport.scrollToColumn(displayColumn(this.document.line(clamped), landingColumn));
+    this.viewport.scrollToColumn(EditorCoordinates.Class.displayColumn(this.document.line(clamped), landingColumn));
     this.scrollLineIntoView(clamped);
   }
 
@@ -394,7 +394,7 @@ class $Editor {
     if (column < 0) {
       if (line > 0) {
         line -= 1;
-        column = graphemeCount(this.document.line(line));
+        column = EditorCoordinates.Class.graphemeCount(this.document.line(line));
       } else {
         column = 0;
       }
@@ -417,7 +417,7 @@ class $Editor {
     const isWordCharacter = (cluster: string): boolean => /[\p{L}\p{N}_]/u.test(cluster);
     let line = this.cursor.line.value;
     let column = this.cursor.col.value;
-    const clusters = () => graphemes(this.document.line(line));
+    const clusters = () => EditorCoordinates.Class.graphemes(this.document.line(line));
     if (direction > 0) {
       let row = clusters();
       if (column >= row.length) {
@@ -455,7 +455,7 @@ class $Editor {
     if (!this.hasDocument.value) return;
     this.beginMove(extend);
     const lastLine = this.document.lineCount - 1;
-    this.placeCursor(lastLine, graphemeCount(this.document.line(lastLine)));
+    this.placeCursor(lastLine, EditorCoordinates.Class.graphemeCount(this.document.line(lastLine)));
     this.scrollLineIntoView(lastLine);
   }
 

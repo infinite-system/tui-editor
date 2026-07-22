@@ -8,6 +8,8 @@
 //                        and rendering.
 // invariant: A cursor position resolves to three distinct coordinates (editor.invariants.md)
 
+import { Static } from 'ivue/extras';
+
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 // Memoized segmentation, keyed by line CONTENT (content-keyed = revision-proof: an edited line is a
@@ -34,7 +36,7 @@ function memoized<Value>(cache: Map<string, Value>, line: string, compute: () =>
 }
 
 /** UTF-16 boundary offsets: [0, end-of-g0, end-of-g1, ...]. Length = graphemeCount + 1. */
-export function graphemeBoundaries(line: string): number[] {
+function $graphemeBoundaries(line: string): number[] {
   return memoized(boundariesMemo, line, () => {
     const boundaries: number[] = [0];
     for (const segment of segmenter.segment(line)) {
@@ -45,7 +47,7 @@ export function graphemeBoundaries(line: string): number[] {
 }
 
 /** The grapheme cluster strings of a line, in order. */
-export function graphemes(line: string): string[] {
+function $graphemes(line: string): string[] {
   return memoized(clustersMemo, line, () => {
     const clusters: string[] = [];
     for (const segment of segmenter.segment(line)) clusters.push(segment.segment);
@@ -54,20 +56,20 @@ export function graphemes(line: string): string[] {
 }
 
 /** Number of user-perceived characters (grapheme clusters) in a line. */
-export function graphemeCount(line: string): number {
-  return graphemeBoundaries(line).length - 1;
+function $graphemeCount(line: string): number {
+  return $graphemeBoundaries(line).length - 1;
 }
 
 /** UTF-16 offset of the start of grapheme `g` (clamped to [0, count]). */
-export function graphemeToU16(line: string, graphemeIndex: number): number {
-  const boundaries = graphemeBoundaries(line);
+function $graphemeToU16(line: string, graphemeIndex: number): number {
+  const boundaries = $graphemeBoundaries(line);
   const index = Math.max(0, Math.min(graphemeIndex, boundaries.length - 1));
   return boundaries[index] ?? 0;
 }
 
 /** Grapheme index containing (or ending at) a UTF-16 offset. */
-export function u16ToGrapheme(line: string, utf16Offset: number): number {
-  const boundaries = graphemeBoundaries(line);
+function $u16ToGrapheme(line: string, utf16Offset: number): number {
+  const boundaries = $graphemeBoundaries(line);
   let graphemeIndex = 0;
   for (let index = 0; index < boundaries.length; index++) {
     if ((boundaries[index] ?? Infinity) <= utf16Offset) graphemeIndex = index;
@@ -77,7 +79,7 @@ export function u16ToGrapheme(line: string, utf16Offset: number): number {
 }
 
 /** Display width of a single Unicode scalar (approximate wcwidth). */
-export function codePointWidth(codePoint: number): number {
+function $codePointWidth(codePoint: number): number {
   if (codePoint === 0) return 0;
   // Combining marks / zero-width joiners / BOM.
   if (
@@ -110,33 +112,33 @@ export function codePointWidth(codePoint: number): number {
 }
 
 /** Display width of a grapheme cluster (its widest base scalar; a cluster is at least 1). */
-export function graphemeWidth(grapheme: string): number {
+function $graphemeWidth(grapheme: string): number {
   let width = 0;
   for (const character of grapheme) {
     const codePoint = character.codePointAt(0);
     if (codePoint === undefined) continue;
-    const characterWidth = codePointWidth(codePoint);
+    const characterWidth = $codePointWidth(codePoint);
     if (characterWidth > width) width = characterWidth;
   }
   return width === 0 ? 1 : width;
 }
 
 /** Display column at the start of grapheme `graphemeIndex` (tab stops every `tabWidth`). */
-export function displayColumn(line: string, graphemeIndex: number, tabWidth = 4): number {
-  const clusters = graphemes(line);
+function $displayColumn(line: string, graphemeIndex: number, tabWidth = 4): number {
+  const clusters = $graphemes(line);
   const limit = Math.max(0, Math.min(graphemeIndex, clusters.length));
   let column = 0;
   for (let index = 0; index < limit; index++) {
     const cluster = clusters[index] ?? '';
     if (cluster === '\t') column += tabWidth - (column % tabWidth);
-    else column += graphemeWidth(cluster);
+    else column += $graphemeWidth(cluster);
   }
   return column;
 }
 
 /** Total display width of a whole line. */
-export function lineWidth(line: string, tabWidth = 4): number {
-  return displayColumn(line, graphemeCount(line), tabWidth);
+function $lineWidth(line: string, tabWidth = 4): number {
+  return $displayColumn(line, $graphemeCount(line), tabWidth);
 }
 
 /**
@@ -144,13 +146,13 @@ export function lineWidth(line: string, tabWidth = 4): number {
  * A hit inside a wide glyph or a tab resolves to THAT grapheme; a hit past end-of-line clamps to
  * the line's grapheme count (caret after the last character).
  */
-export function graphemeAtDisplayColumn(line: string, targetColumn: number, tabWidth = 4): number {
+function $graphemeAtDisplayColumn(line: string, targetColumn: number, tabWidth = 4): number {
   if (targetColumn <= 0) return 0;
-  const clusters = graphemes(line);
+  const clusters = $graphemes(line);
   let column = 0;
   for (let index = 0; index < clusters.length; index++) {
     const cluster = clusters[index] ?? '';
-    const width = cluster === '\t' ? tabWidth - (column % tabWidth) : graphemeWidth(cluster);
+    const width = cluster === '\t' ? tabWidth - (column % tabWidth) : $graphemeWidth(cluster);
     if (targetColumn < column + width) return index;
     column += width;
   }
@@ -158,6 +160,26 @@ export function graphemeAtDisplayColumn(line: string, targetColumn: number, tabW
 }
 
 /** Clamp a grapheme column to a line's valid range [0, graphemeCount]. */
-export function clampCol(line: string, column: number): number {
-  return Math.max(0, Math.min(column, graphemeCount(line)));
+function $clampCol(line: string, column: number): number {
+  return Math.max(0, Math.min(column, $graphemeCount(line)));
+}
+
+// invariant: Construction goes through overridable seams (project.invariants.md)
+class $EditorCoordinates {
+  static graphemeBoundaries = $graphemeBoundaries;
+  static graphemes = $graphemes;
+  static graphemeCount = $graphemeCount;
+  static graphemeToU16 = $graphemeToU16;
+  static u16ToGrapheme = $u16ToGrapheme;
+  static codePointWidth = $codePointWidth;
+  static graphemeWidth = $graphemeWidth;
+  static displayColumn = $displayColumn;
+  static lineWidth = $lineWidth;
+  static graphemeAtDisplayColumn = $graphemeAtDisplayColumn;
+  static clampCol = $clampCol;
+}
+
+export namespace EditorCoordinates {
+  export const $Class = $EditorCoordinates;
+  export const Class = Static($EditorCoordinates);
 }

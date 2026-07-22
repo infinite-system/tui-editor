@@ -21,14 +21,15 @@ else
   echo "CONVENTIONS WARN: bunx not found — skipping tsc (install bun so the gate can typecheck)"
 fi
 
-# 1) NEW-FILE RULE: no bare exported function bags in modules (stateless behavior = Static class).
-LEGACY_STATIC_ALLOWLIST="editor.coordinates.ts|keybindings.defaults.ts|keybindings.mac.ts|RootView.ts"
-bare_bags=$(grep -rln "^export function" src/modules --include='*.ts' | grep -vE "\.test\.ts|__tests__|($LEGACY_STATIC_ALLOWLIST)$" || true)
-if [ -n "$bare_bags" ]; then
-  echo "CONVENTIONS FAIL: bare 'export function' bag(s) — new capability files are born namespace+Static:"
-  echo "$bare_bags"
+# 1) EXPORTED-CAPABILITY RULE: callable module exports are never bare functions/expressions/aliases;
+#    stateless behavior is indexed by a namespace+Static class. Type-aware detection distinguishes
+#    callable behavior from genuine data collections (keybinding defaults/overlays need no allowlist).
+if ! node scripts/check-exported-capabilities.mjs >/tmp/conventions-gate-exported-capabilities.$$.log 2>&1; then
+  echo "CONVENTIONS FAIL: bare exported callable behavior — publish it through namespace+Static:"
+  cat /tmp/conventions-gate-exported-capabilities.$$.log
   fail=1
 fi
+rm -f /tmp/conventions-gate-exported-capabilities.$$.log
 
 # 2) Naming: banned abbreviation identifiers (declarations only; word-bounded).
 abbreviations=$(grep -rnE "\b(const|let|var) (ed|ws|gp|cl|pal|idx|opts|prev|cur|repo|msg|cmd|btn|len)\b *=" src/modules --include='*.ts' | grep -v "__tests__" || true)

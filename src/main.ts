@@ -4,17 +4,17 @@
 process.env.NODE_ENV ??= 'production';
 
 async function loadApp() {
-  const [{ boot }, { Logging }] = await Promise.all([
+  const [{ Bootstrap }, { Logging }] = await Promise.all([
     import('./modules/app/Bootstrap'),
     import('./modules/system/Logging'),
   ]);
-  return { boot, Logging };
+  return { Bootstrap, Logging };
 }
 
 async function main(): Promise<void> {
-  const { boot } = await loadApp();
+  const appModules = await loadApp();
   const rootArgument = process.argv[2];
-  const booted = await boot({
+  const booted = await appModules.Bootstrap.Class.boot({
     root: rootArgument,
     onQuit: () => {
       // Give the renderer a tick to restore the terminal, then exit.

@@ -5,6 +5,7 @@
 // invariant: Data flows one way (project.invariants.md)
 // invariant: Rendering is one coarse frame effect (app.invariants.md)
 import { createCliRenderer, type CliRenderer, type KeyEvent } from '@opentui/core';
+import { Static } from 'ivue/extras';
 import { App } from './App';
 import { Kernel } from '../kernel/Kernel';
 import { Workspace } from '../workspace/Workspace';
@@ -12,7 +13,7 @@ import { Theme } from '../theme/Theme';
 import { TerminalCapabilities } from '../theme/TerminalCapabilities';
 import { CommandRegistry } from '../commands/CommandRegistry';
 import { CommandDefaults } from '../commands/CommandDefaults';
-import { buildRootView, type RootView } from '../ui/RootView';
+import { RootView } from '../ui/RootView';
 import { ContextMenu } from '../ui/ContextMenu';
 import { Tooltip } from '../ui/Tooltip';
 import { Settings } from '../settings/Settings';
@@ -49,7 +50,7 @@ export interface BootedApp {
   shutdown(): Promise<void>;
 }
 
-export async function boot(options: BootOptions = {}): Promise<BootedApp> {
+async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   Logging.Class.info('Boot start');
 
   const renderer = await createCliRenderer({
@@ -88,7 +89,18 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   const findBar = new FindBar.Class();
   const quickOpen = new QuickOpen.Class();
 
-  const view = buildRootView(renderer, workspace, theme, commands, app, contextMenu, tooltip, settingsPanel, findBar, quickOpen);
+  const view = RootView.Class.buildRootView(
+    renderer,
+    workspace,
+    theme,
+    commands,
+    app,
+    contextMenu,
+    tooltip,
+    settingsPanel,
+    findBar,
+    quickOpen,
+  );
 
   // Reveal the find bar's current match in the editor (the ONE writer of the editor selection): select
   // the match range (anchor=start, cursor=end) and scroll it into view. Called after every find action.
@@ -869,4 +881,14 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
 
   Logging.Class.info('Boot complete');
   return { app, workspace, theme, renderer, view, render, shutdown };
+}
+
+// invariant: Construction goes through overridable seams (project.invariants.md)
+class $Bootstrap {
+  static boot = $boot;
+}
+
+export namespace Bootstrap {
+  export const $Class = $Bootstrap;
+  export const Class = Static($Bootstrap);
 }

@@ -17,6 +17,7 @@ import {
   type CliRenderer,
   type OptimizedBuffer,
 } from '@opentui/core';
+import { Static } from 'ivue/extras';
 import type { Workspace } from '../workspace/Workspace';
 import type { App } from '../app/App';
 import type { Theme } from '../theme/Theme';
@@ -25,7 +26,7 @@ import type { Palette } from '../theme/ThemePalettes';
 import { Highlighter, type Role } from '../syntax/Highlighter';
 import { Files } from '../system/Files';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
-import { displayColumn, lineWidth, graphemeAtDisplayColumn, graphemeToU16 } from '../editor/editor.coordinates';
+import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
 import { DiffView } from '../diff/DiffView';
 import { SelectableText } from './SelectableText';
@@ -88,7 +89,7 @@ class HitTransparentText extends TextRenderable {
   }
 }
 
-export function buildRootView(
+function $buildRootView(
   renderer: CliRenderer,
   workspace: Workspace.Instance,
   theme: Theme.Instance,
@@ -666,7 +667,7 @@ export function buildRootView(
     if (editorVisible && !editor.wordWrap.value) {
       const firstVisibleLine = editor.viewport.scrollTop.value;
       for (const line of editor.document.slice(firstVisibleLine, viewportHeight)) {
-        widestVisibleLineWidth = Math.max(widestVisibleLineWidth, lineWidth(line));
+        widestVisibleLineWidth = Math.max(widestVisibleLineWidth, EditorCoordinates.Class.lineWidth(line));
       }
     }
       applyBarGeometry(editorHorizontalBar, 'horizontal', editorRegion, {
@@ -807,7 +808,7 @@ export function buildRootView(
     );
     if (rowIndex < 0) return 'after';
     const segment = segments[segmentIndex];
-    return { rowIndex, column: displayColumn(lineText, column) - (segment?.startDisplayColumn ?? 0) };
+    return { rowIndex, column: EditorCoordinates.Class.displayColumn(lineText, column) - (segment?.startDisplayColumn ?? 0) };
   }
 
   // The editor tab bar. ONE geometry source: a layout pass produces positioned SEGMENTS that BOTH the
@@ -839,7 +840,7 @@ export function buildRootView(
     // flush against the tab edge, and the padding is identical regardless of label length.
     const measured = tabs.map((tab) => {
       const name = Files.Class.basename(tab.path);
-      const labelWidth = 1 + lineWidth(name) + 1 + 1 + 1; // ' ' + name + ' ' + dirtyGlyph + ' '
+      const labelWidth = 1 + EditorCoordinates.Class.lineWidth(name) + 1 + 1 + 1; // ' ' + name + ' ' + dirtyGlyph + ' '
       return { tab, name, labelWidth, width: labelWidth + 2 }; // + '✕' + trailing ' '
     });
     const totalWidth = measured.reduce((sum, entry) => sum + entry.width, 0);
@@ -849,7 +850,7 @@ export function buildRootView(
     const total = tabs.length;
     const activeIndex = tabs.findIndex((tab) => tab.active);
     const badgeText = ` ${activeIndex + 1}/${total} `;
-    const badgeWidth = lineWidth(badgeText);
+    const badgeWidth = EditorCoordinates.Class.lineWidth(badgeText);
     const arrowCellWidth = 3; // ' « ' / ' » ' — padded so the hit target is easy to click
     const overflow = totalWidth + badgeWidth > barWidth;
     const rightControlsWidth = badgeWidth + (overflow ? 1 /* ellipsis */ + arrowCellWidth * 2 : 0);
@@ -1096,8 +1097,8 @@ export function buildRootView(
         const lineText = editor.document.line(row.lineIndex);
         pushCodeChunks(
           lineText.slice(
-            graphemeToU16(lineText, row.segment.startGrapheme),
-            graphemeToU16(lineText, row.segment.endGrapheme),
+            EditorCoordinates.Class.graphemeToU16(lineText, row.segment.startGrapheme),
+            EditorCoordinates.Class.graphemeToU16(lineText, row.segment.endGrapheme),
           ),
         );
         if (rowIndex < wrapRowsWindow.length - 1) {
@@ -1124,10 +1125,10 @@ export function buildRootView(
       gutterChunks.push(fg(palette.accent)(isCurrentLine && focused ? '▏' : ' '));
       let windowText = text;
       if (scrollLeft > 0 || text.length > viewportWidth) { // O(1) test; a needless slice is harmless
-        let startGrapheme = graphemeAtDisplayColumn(text, scrollLeft);
-        if (displayColumn(text, startGrapheme) < scrollLeft) startGrapheme += 1; // never split a straddling wide glyph
-        const endGrapheme = graphemeAtDisplayColumn(text, scrollLeft + viewportWidth) + 1;
-        windowText = text.slice(graphemeToU16(text, startGrapheme), graphemeToU16(text, endGrapheme));
+        let startGrapheme = EditorCoordinates.Class.graphemeAtDisplayColumn(text, scrollLeft);
+        if (EditorCoordinates.Class.displayColumn(text, startGrapheme) < scrollLeft) startGrapheme += 1; // never split a straddling wide glyph
+        const endGrapheme = EditorCoordinates.Class.graphemeAtDisplayColumn(text, scrollLeft + viewportWidth) + 1;
+        windowText = text.slice(EditorCoordinates.Class.graphemeToU16(text, startGrapheme), EditorCoordinates.Class.graphemeToU16(text, endGrapheme));
       }
       pushCodeChunks(windowText);
       if (visibleIndex < visibleLines.length - 1) {
@@ -1178,12 +1179,12 @@ export function buildRootView(
     }
     const selectionScrollLeft = editor.viewport.scrollLeft.value;
     const anchorY = Math.max(0, selection.start.line - top);
-    const anchorX = selection.start.line >= top ? displayColumn(editor.document.line(selection.start.line), selection.start.col) : 0;
+    const anchorX = selection.start.line >= top ? EditorCoordinates.Class.displayColumn(editor.document.line(selection.start.line), selection.start.col) : 0;
     const focusY = Math.min(viewportHeight - 1, selection.end.line - top);
     const focusX =
       selection.end.line < top + viewportHeight
-        ? displayColumn(editor.document.line(selection.end.line), selection.end.col)
-        : lineWidth(editor.document.line(Math.min(top + viewportHeight - 1, editor.document.lineCount - 1)));
+        ? EditorCoordinates.Class.displayColumn(editor.document.line(selection.end.line), selection.end.col)
+        : EditorCoordinates.Class.lineWidth(editor.document.line(Math.min(top + viewportHeight - 1, editor.document.lineCount - 1)));
     codeBody.setSelectionRange(
       Math.max(0, anchorX - selectionScrollLeft),
       anchorY,
@@ -1590,7 +1591,7 @@ export function buildRootView(
       const tooltipLabel = ` ${tooltip.text.value} `;
       // CENTER the tooltip horizontally over the anchor cell (its midpoint aligns to the cursor
       // column), then clamp so it never overflows the canvas (the scrollbar-geometry lesson).
-      const tooltipWidth = lineWidth(tooltipLabel);
+      const tooltipWidth = EditorCoordinates.Class.lineWidth(tooltipLabel);
       const centeredLeft = tooltip.anchorX.value - Math.floor(tooltipWidth / 2);
       tooltipText.left = Math.max(0, Math.min(centeredLeft, renderer.width - tooltipWidth));
       // Vertical: default ABOVE the anchor row (so it does not cover the pointed-at row); flip BELOW
@@ -1632,12 +1633,12 @@ export function buildRootView(
       return;
     }
     const caretVisibleHorizontally =
-      displayColumn(editor.document.line(Math.min(cursorLine, editor.document.lineCount - 1)), editor.cursor.col.value) >=
+      EditorCoordinates.Class.displayColumn(editor.document.line(Math.min(cursorLine, editor.document.lineCount - 1)), editor.cursor.col.value) >=
         editor.viewport.scrollLeft.value &&
-      displayColumn(editor.document.line(Math.min(cursorLine, editor.document.lineCount - 1)), editor.cursor.col.value) <
+      EditorCoordinates.Class.displayColumn(editor.document.line(Math.min(cursorLine, editor.document.lineCount - 1)), editor.cursor.col.value) <
         editor.viewport.scrollLeft.value + editorViewportWidth();
     if (editor.hasDocument.value && workspace.focus.value === 'editor' && !open && cursorLine >= scrollTop && cursorLine < scrollTop + viewportHeight && caretVisibleHorizontally) {
-      const cursorDisplayColumn = displayColumn(editor.document.line(cursorLine), editor.cursor.col.value);
+      const cursorDisplayColumn = EditorCoordinates.Class.displayColumn(editor.document.line(cursorLine), editor.cursor.col.value);
       // Anchor the caret to the code renderable's ACTUAL laid-out screen cell (codeBody.x/y from
       // yoga), not hand-derived layout constants — the constants drifted from the real layout (the
       // human-QA off-by-one) and would break again when the sidebar becomes draggable.
@@ -1757,7 +1758,7 @@ export function buildRootView(
       const lineText = workspace.editor.document.line(row.lineIndex);
       const segments = EditorWrap.Class.wrapLine(lineText, workspace.editor.wrapWidth());
       const lastSegmentOfLine = row.segmentIndex === segments.length - 1;
-      const hitColumn = graphemeAtDisplayColumn(
+      const hitColumn = EditorCoordinates.Class.graphemeAtDisplayColumn(
         lineText,
         row.segment.startDisplayColumn + Math.max(0, cellX - codeBody.x),
       );
@@ -1776,7 +1777,7 @@ export function buildRootView(
         workspace.editor.document.lineCount - 1,
       ),
     );
-    const column = graphemeAtDisplayColumn(
+    const column = EditorCoordinates.Class.graphemeAtDisplayColumn(
       workspace.editor.document.line(line),
       workspace.editor.viewport.scrollLeft.value + (cellX - codeBody.x),
     );
@@ -1862,7 +1863,7 @@ export function buildRootView(
       const top = workspace.editor.viewport.scrollTop.value;
       let widestVisible = 0;
       for (const line of workspace.editor.document.slice(top, editorViewportHeight())) {
-        widestVisible = Math.max(widestVisible, lineWidth(line));
+        widestVisible = Math.max(widestVisible, EditorCoordinates.Class.lineWidth(line));
       }
       workspace.editor.viewport.scrollByColumns(stepX, widestVisible);
     }
@@ -2090,4 +2091,14 @@ export function buildRootView(
       }
     },
   };
+}
+
+// invariant: Construction goes through overridable seams (project.invariants.md)
+class $RootView {
+  static buildRootView = $buildRootView;
+}
+
+export namespace RootView {
+  export const $Class = $RootView;
+  export const Class = Static($RootView);
 }
