@@ -7,18 +7,20 @@
 # in the running app consumes it (GitWatcher, DiffView). Isolated tests HIDE this; this gate makes it a
 # hard merge blocker.
 #
-# Forward-milestone modules (LSP = M5, Markdown = M6) are unwired BY DESIGN until their milestone lands;
-# they are allowlisted WITH a justification. When M5/M6 start, wire + drive them (build the smoke first)
+# Forward-milestone modules (LSP = M5) are unwired BY DESIGN until their milestone lands;
+# they are allowlisted WITH a justification. When M5 starts, wire + drive them (build the smoke first)
 # and remove them from the allowlist.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 # Allowlisted capabilities, each unwired for a NAMED reason. This list only ever SHRINKS.
-#  - LSP (M5) / Markdown (M6): forward-milestone modules, built ahead, wired when their milestone lands.
+#  - LSP (M5): forward-milestone modules, built ahead, wired when its milestone lands.
 #  (DiffView removed 2026-07-21 — now mounted via Workspace.diffRequest -> RootView syncDiffView; the
 #   gate now enforces it stays wired.)
-ALLOWLIST_NAMES="JsonRpc LanguageClient LspProcess LspTransport TypeScriptProvider MarkdownDocument MarkdownParser MarkdownPreview MarkdownRenderable"
+#  (Markdown removed 2026-07-22 — MarkdownSplitView mounts MarkdownPreview/Renderable from RootView,
+#   and smoke-markdown drives the real tab-button path.)
+ALLOWLIST_NAMES="JsonRpc LanguageClient LspProcess LspTransport TypeScriptProvider"
 
 is_allowlisted() {
   local name="$1"

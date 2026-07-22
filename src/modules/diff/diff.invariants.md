@@ -38,6 +38,33 @@ at the same screen row; a large insertion shifting equal lines onto different sc
 
 **Last refined:** 2026-07-21
 
+### Diff panes keep independent find state
+
+**Invariant:** If the base and current diff panes are searched in turn, then each pane retains its
+own query, matches, current match, and highlights without changing the other pane's state.
+
+**Scope:** `DiffView.findTarget`, `FindBar.openForTarget`, and per-side highlighting in
+`DiffView.renderPane`.
+
+**Mechanism:** Each side exposes a stable target identifier and its own read-only text document.
+`FindBar` retains one engine per identifier, while `DiffView` reveals and paints through the side
+that supplied the engine.
+
+**Generates:** focused-side Ctrl F; independent base/current searches; simultaneous retained match
+highlights; no replace operation against either read-only side.
+
+**Evidence:** `src/modules/diff/DiffView.ts` (`attachFindBar`, `findTarget`, `highlightLine`);
+`src/modules/search/FindBar.ts` (`enginesByTargetIdentifier`).
+
+**Impossible if true:** searching current erasing the base query; a base match highlighting current
+text; replace mode mutating either diff side.
+
+**Verification:** `bun test src/modules/diff && bash scripts/smoke-markdown.sh`.
+
+**Status:** provisional
+
+**Last refined:** 2026-07-22
+
 ### Replace hunks pair before adding fillers
 
 **Invariant:** If one contiguous change hunk contains deleted and added lines, then the first

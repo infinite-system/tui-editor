@@ -31,6 +31,7 @@ import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
 import { DiffView } from '../diff/DiffView';
+import { MarkdownSplitView } from '../markdown/MarkdownSplitView';
 import { SelectableText } from './SelectableText';
 import { SelectionDragBehavior } from './SelectionDragBehavior';
 import { GitRows, type ChangeRow, type FileRow } from '../git/GitRows';
@@ -41,7 +42,8 @@ import type { OverlayCoordinator } from './OverlayCoordinator';
 import type { Tooltip } from './Tooltip';
 import type { SettingsPanel } from '../settings/SettingsPanel';
 import type { ScrollModifier } from '../settings/Settings';
-import type { FindBar } from '../search/FindBar';
+import type { FindBar, FindBarTarget } from '../search/FindBar';
+import type { KeybindingRegistry } from '../keybindings/KeybindingRegistry';
 import type { QuickOpen } from '../search/QuickOpen';
 import { SplitterModel } from '../layout/SplitterModel';
 import { Logging } from '../system/Logging';
@@ -114,6 +116,10 @@ export interface RootView {
   tickDiffMomentum(dtSeconds: number): boolean;
   /** The live DiffView instance when a diff is open, else null (for keyboard routing). */
   activeDiffView(): DiffView.Instance | null;
+  /** Frame-tick hook for Markdown preview momentum, drag selection, and async parse landing. */
+  tickMarkdownPreview(dtSeconds: number): boolean;
+  activeMarkdownSplitView(): MarkdownSplitView.Instance | null;
+  findTarget(): FindBarTarget | null;
   dispose(): void;
 }
 
@@ -174,6 +180,7 @@ function $buildRootView(
   bufferTabStrip: TabStrip.Instance,
   workspaceTabStrip: TabStrip.Instance,
   theme: Theme.Instance,
+  keybindings: KeybindingRegistry.Instance,
   commands: CommandRegistry.Instance,
   app: App.Instance,
   contextMenu: ContextMenu.Instance,
@@ -310,6 +317,12 @@ function $buildRootView(
   // editorArea, so the DiffView (height:100%) inside gets a real box. Not added until a diff opens.
   const diffContainer = new BoxRenderable(renderer, {
     id: 'diff-container',
+    flexGrow: 1,
+    width: '100%',
+    flexDirection: 'column',
+  });
+  const markdownContainer = new BoxRenderable(renderer, {
+    id: 'markdown-container',
     flexGrow: 1,
     width: '100%',
     flexDirection: 'column',
@@ -1418,11 +1431,12 @@ function $buildRootView(
   // overflow arrows pin to the RIGHT edge. Three visual states per target: idle → hover → pressed.
   type TabBarSegment =
     | { kind: 'tab'; index: number; start: number; end: number; closeColumn: number }
-    | { kind: 'arrowLeft' | 'arrowRight' | 'badge'; start: number; end: number };
+    | { kind: 'previewToggle' | 'arrowLeft' | 'arrowRight' | 'badge'; start: number; end: number };
   let tabBarSegments: TabBarSegment[] = [];
   // Hover/press state (view-only), driven by tab-bar mouse move/press.
-  let tabBarHover: { kind: 'tab' | 'close' | 'arrowLeft' | 'arrowRight' | 'badge'; index: number } | null = null;
+  let tabBarHover: { kind: 'tab' | 'close' | 'previewToggle' | 'arrowLeft' | 'arrowRight' | 'badge'; index: number } | null = null;
   let tabBarArrowPressed: 'arrowLeft' | 'arrowRight' | null = null;
+  let tabBarPreviewPressed = false;
   let tabBarClosePressed: number | null = null; // index of the tab whose ✕ is being pressed
   // The strip's VIEWPORT PAN offset (first visible tab), INDEPENDENT of the active tab — the overflow
   // arrows drive this and never change which buffer is active (VS Code's ‹ › pan the strip only).
@@ -1452,8 +1466,9 @@ function $buildRootView(
     const badgeText = ` ${activeIndex + 1}/${total} `;
     const badgeWidth = EditorCoordinates.Class.lineWidth(badgeText);
     const arrowCellWidth = 3; // ' « ' / ' » ' — padded so the hit target is easy to click
-    const overflow = totalWidth + badgeWidth > barWidth;
-    const rightControlsWidth = badgeWidth + (overflow ? 1 /* ellipsis */ + arrowCellWidth * 2 : 0);
+    const previewToggleWidth = workspaceSet.active.activeFileIsMarkdown ? 3 : 0;
+    const overflow = totalWidth + badgeWidth + previewToggleWidth > barWidth;
+    const rightControlsWidth = badgeWidth + previewToggleWidth + (overflow ? 1 /* ellipsis */ + arrowCellWidth * 2 : 0);
     const tabsAreaWidth = Math.max(1, barWidth - rightControlsWidth);
 
     // How many whole tabs fit when rendering forward from a given start index.
@@ -1529,13 +1544,38 @@ function $buildRootView(
       column += 1;
     }
 
+    let moreLeft = false;
+    let moreRight = false;
     if (overflow) {
-      const moreLeft = startIndex > 0;
-      const moreRight = endIndex < total;
+      moreLeft = startIndex > 0;
+      moreRight = endIndex < total;
       // "More →" cutoff affordance: a bright ellipsis at the edge where tabs continue (so a clean cut
       // never reads as "no more tabs"); dim when there is nothing more that way.
       chunks.push(fg(moreRight ? palette.accent : palette.border)(moreRight ? '…' : ' '));
       column += 1;
+    }
+
+    // Extensible right-side action cluster: Markdown preview is the first action and sits BEFORE the
+    // strip-pan arrows exactly where future editor-view actions can join it.
+    if (workspaceSet.active.activeFileIsMarkdown) {
+      const start = column;
+      const active = workspaceSet.active.showingMarkdownPreview;
+      const hovered = tabBarHover?.kind === 'previewToggle';
+      const background = tabBarPreviewPressed
+        ? palette.accent
+        : active
+          ? palette.selection
+          : hovered
+            ? palette.cursorLine
+            : null;
+      const color = tabBarPreviewPressed ? palette.bg : active || hovered ? palette.accent : palette.fg;
+      const label = ` ${theme.actionIcons.preview} `;
+      chunks.push(background ? bg(background)(fg(color)(label)) : fg(color)(label));
+      column += previewToggleWidth;
+      tabBarSegments.push({ kind: 'previewToggle', start, end: column });
+    }
+
+    if (overflow) {
       // Bigger, easy-to-hit arrows: a bolder glyph in a padded 3-cell hit target. BRIGHT (fg/accent)
       // only when more tabs exist that direction; DIM (border) at the end — so "more exists" reads.
       const paintArrow = (which: 'arrowLeft' | 'arrowRight', enabled: boolean, glyph: string): void => {
@@ -1616,6 +1656,10 @@ function $buildRootView(
       } else workspaceSet.active.activateTab(segment.index);
     } else if (segment.kind === 'badge') {
       openTabDropdown(segment.start);
+    } else if (segment.kind === 'previewToggle') {
+      tabBarPreviewPressed = true;
+      workspaceSet.active.toggleMarkdownPreview();
+      renderer.requestRender();
     } else {
       tabBarArrowPressed = segment.kind; // pressed colour shows until release
       if (segment.kind === 'arrowLeft') scrollTabsLeft();
@@ -1624,8 +1668,9 @@ function $buildRootView(
     }
   };
   tabBar.onMouseUp = () => {
-    if (tabBarArrowPressed || tabBarClosePressed !== null) {
+    if (tabBarArrowPressed || tabBarPreviewPressed || tabBarClosePressed !== null) {
       tabBarArrowPressed = null;
+      tabBarPreviewPressed = false;
       tabBarClosePressed = null;
       renderer.requestRender();
     }
@@ -1639,16 +1684,32 @@ function $buildRootView(
     } else if (segment) {
       next = { kind: segment.kind, index: -1 };
     }
+    if (segment?.kind === 'previewToggle') {
+      const bindingHint = keybindings.bindingHint('markdown.togglePreview', 'editor');
+      tooltip.point(
+        `Toggle Markdown preview${bindingHint ? ` (${bindingHint})` : ''}`,
+        event.x,
+        event.y,
+      );
+    } else if (segment?.kind === 'arrowLeft' || segment?.kind === 'arrowRight') {
+      tooltip.point('Pan file tabs without switching', event.x, event.y);
+    } else if (segment?.kind === 'badge') {
+      tooltip.point('Show all open files', event.x, event.y);
+    } else {
+      tooltip.clear();
+    }
     if (JSON.stringify(next) !== JSON.stringify(tabBarHover)) {
       tabBarHover = next;
       renderer.requestRender();
     }
   };
   tabBar.onMouseOut = () => {
-    if (tabBarHover || tabBarArrowPressed || tabBarClosePressed !== null) {
+    if (tabBarHover || tabBarArrowPressed || tabBarPreviewPressed || tabBarClosePressed !== null) {
       tabBarHover = null;
       tabBarArrowPressed = null;
+      tabBarPreviewPressed = false;
       tabBarClosePressed = null;
+      tooltip.clear();
       renderer.requestRender();
     }
   };
@@ -1684,12 +1745,41 @@ function $buildRootView(
         gutterChunks.push(fg(palette.accent)(isCurrentLine && focused ? '▏' : ' '));
       }
     };
-    const pushCodeChunks = (windowText: string): void => {
-      if (editor.document.binary.value || language === 'plain') {
-        codeChunks.push(fg(palette.fg)(windowText));
-      } else {
-        for (const span of Highlighter.Class.highlightLine(windowText, language)) {
-          codeChunks.push(fg(roleColor(span.role, palette))(span.text));
+    const sourceFindEngine = findBar.engineFor(`source:${editor.document.path}`);
+    const pushCodeChunks = (
+      windowText: string,
+      lineIndex: number,
+      windowStartGrapheme = 0,
+    ): void => {
+      const lineMatches = sourceFindEngine?.matches.value.filter((match) => match.line === lineIndex) ?? [];
+      const windowGraphemeCount = EditorCoordinates.Class.graphemeCount(windowText);
+      const boundaries = new Set<number>([0, windowGraphemeCount]);
+      for (const match of lineMatches) {
+        boundaries.add(Math.max(0, Math.min(windowGraphemeCount, match.startColumn - windowStartGrapheme)));
+        boundaries.add(Math.max(0, Math.min(windowGraphemeCount, match.endColumn - windowStartGrapheme)));
+      }
+      const orderedBoundaries = [...boundaries].sort((first, second) => first - second);
+      for (let boundaryIndex = 0; boundaryIndex < orderedBoundaries.length - 1; boundaryIndex += 1) {
+        const segmentStart = orderedBoundaries[boundaryIndex]!;
+        const segmentEnd = orderedBoundaries[boundaryIndex + 1]!;
+        if (segmentEnd <= segmentStart) continue;
+        const segmentText = windowText.slice(
+          EditorCoordinates.Class.graphemeToU16(windowText, segmentStart),
+          EditorCoordinates.Class.graphemeToU16(windowText, segmentEnd),
+        );
+        const findHighlighted = lineMatches.some(
+          (match) =>
+            match.startColumn < windowStartGrapheme + segmentEnd &&
+            match.endColumn > windowStartGrapheme + segmentStart,
+        );
+        if (editor.document.binary.value || language === 'plain') {
+          const textChunk = fg(palette.fg)(segmentText);
+          codeChunks.push(findHighlighted ? bg(palette.cursorLine)(textChunk) : textChunk);
+        } else {
+          for (const span of Highlighter.Class.highlightLine(segmentText, language)) {
+            const syntaxChunk = fg(roleColor(span.role, palette))(span.text);
+            codeChunks.push(findHighlighted ? bg(palette.cursorLine)(syntaxChunk) : syntaxChunk);
+          }
         }
       }
     };
@@ -1717,6 +1807,8 @@ function $buildRootView(
             EditorCoordinates.Class.graphemeToU16(lineText, row.segment.startGrapheme),
             EditorCoordinates.Class.graphemeToU16(lineText, row.segment.endGrapheme),
           ),
+          row.lineIndex,
+          row.segment.startGrapheme,
         );
         if (rowIndex < wrapRowsWindow.length - 1) {
           gutterChunks.push(fg(palette.fg)('\n'));
@@ -1741,13 +1833,15 @@ function $buildRootView(
       gutterChunks.push(fg(isCurrentLine ? palette.accent : palette.dim)(`${lineNumberText} `));
       pushGutterMarker(lineNumber, isCurrentLine);
       let windowText = text;
+      let windowStartGrapheme = 0;
       if (scrollLeft > 0 || text.length > viewportWidth) { // O(1) test; a needless slice is harmless
         let startGrapheme = EditorCoordinates.Class.graphemeAtDisplayColumn(text, scrollLeft);
         if (EditorCoordinates.Class.displayColumn(text, startGrapheme) < scrollLeft) startGrapheme += 1; // never split a straddling wide glyph
         const endGrapheme = EditorCoordinates.Class.graphemeAtDisplayColumn(text, scrollLeft + viewportWidth) + 1;
+        windowStartGrapheme = startGrapheme;
         windowText = text.slice(EditorCoordinates.Class.graphemeToU16(text, startGrapheme), EditorCoordinates.Class.graphemeToU16(text, endGrapheme));
       }
-      pushCodeChunks(windowText);
+      pushCodeChunks(windowText, lineNumber, windowStartGrapheme);
       if (visibleIndex < visibleLines.length - 1) {
         gutterChunks.push(fg(palette.fg)('\n'));
         codeChunks.push(fg(palette.fg)('\n'));
@@ -2024,7 +2118,13 @@ function $buildRootView(
       parts.push(`Ln ${editor.cursor.line.value + 1}, Col ${editor.cursor.col.value + 1}`);
       parts.push(`${editor.document.lineCount} lines`);
     }
-    parts.push(workspaceSet.active.focus.value === 'files' ? '[Files]' : '[Editor]');
+    parts.push(
+      workspaceSet.active.focus.value === 'files'
+        ? '[Files]'
+        : activeMarkdownSplitView?.previewFocused
+          ? '[Markdown Preview]'
+          : '[Editor Source]',
+    );
     if (workspaceSet.active.focus.value === 'git')
       parts.push('checkbox/Space stage · row/o open · d discard');
     if (app.copyNotice.value) parts.push(app.copyNotice.value);
@@ -2039,9 +2139,29 @@ function $buildRootView(
   // no re-open, so it is reconstructed whenever the diff request's token changes; disposed when cleared.
   let activeDiffView: DiffView.Instance | null = null;
   let shownDiffIdentifier = '';
-  let diffContainerMounted = false;
+  let activeMarkdownSplitView: MarkdownSplitView.Instance | null = null;
+  let shownMarkdownIdentifier = '';
+  let mountedEditorContent: 'editor' | 'diff' | 'markdown' | null = 'editor';
   let lastDiffLaidHeight = -1;
+
+  function unmountEditorContent(): void {
+    if (mountedEditorContent === 'editor') editorColumn.remove(editorArea);
+    else if (mountedEditorContent === 'diff') editorColumn.remove(diffContainer);
+    else if (mountedEditorContent === 'markdown') editorColumn.remove(markdownContainer);
+    mountedEditorContent = null;
+  }
+
+  function mountEditorContent(content: 'editor' | 'diff' | 'markdown'): void {
+    if (mountedEditorContent === content) return;
+    unmountEditorContent();
+    if (content === 'editor') editorColumn.add(editorArea);
+    else if (content === 'diff') editorColumn.add(diffContainer);
+    else editorColumn.add(markdownContainer);
+    mountedEditorContent = content;
+  }
+
   function syncDiffView(): void {
+    // invariant: A Markdown file offers a live source preview split (src/modules/markdown/markdown.invariants.md)
     const request = workspaceSet.active.diffRequest.value;
     const diffIdentifier = `${workspaceSet.active.root}:${request?.token ?? 'none'}`;
     if (diffIdentifier !== shownDiffIdentifier) {
@@ -2068,25 +2188,90 @@ function $buildRootView(
           onPrevChange: () => renderer.requestRender(),
         });
         activeDiffView.attachSettings(settings); // live scroll physics, same as the editor
+        activeDiffView.attachFindBar(findBar, diffIdentifier);
       }
     }
     const diffActive = activeDiffView !== null && workspaceSet.active.showingDiff.value;
-    // SWAP editorArea <-> diffContainer by add/remove (not runtime flex toggling — OpenTUI doesn't
-    // re-lay-out on a runtime flexGrow/height change). editorColumn = [tabBar, <one of them>]; the second
-    // slot swaps, so whichever is mounted gets flexGrow:1 and the full area below the tab bar.
-    if (diffActive && !diffContainerMounted) {
-      editorColumn.remove(editorArea);
-      editorColumn.add(diffContainer);
-      diffContainerMounted = true;
-    } else if (!diffActive && diffContainerMounted) {
-      editorColumn.remove(diffContainer);
-      editorColumn.add(editorArea);
-      diffContainerMounted = false;
+    const markdownIdentifier = workspaceSet.active.showingMarkdownPreview
+      ? `${workspaceSet.active.root}:${workspaceSet.active.editor.document.path}`
+      : '';
+
+    if (diffActive) {
+      if (activeMarkdownSplitView) {
+        if (mountedEditorContent === 'markdown') unmountEditorContent();
+        activeMarkdownSplitView.dispose();
+        activeMarkdownSplitView = null;
+        shownMarkdownIdentifier = '';
+      }
+      mountEditorContent('diff');
+    } else if (markdownIdentifier) {
+      if (shownMarkdownIdentifier !== markdownIdentifier || !activeMarkdownSplitView) {
+        if (activeMarkdownSplitView) {
+          if (mountedEditorContent === 'markdown') unmountEditorContent();
+          activeMarkdownSplitView.dispose();
+        }
+        shownMarkdownIdentifier = markdownIdentifier;
+        unmountEditorContent();
+        activeMarkdownSplitView = new MarkdownSplitView.Class(renderer, theme, {
+          source: workspaceSet.active.editor.document,
+          sourcePath: workspaceSet.active.editor.document.path,
+          sourceRenderable: editorArea,
+          parentRenderable: markdownContainer,
+          settings,
+          findBar,
+          resolveReference: (reference) => workspaceSet.active.resolveFileReference(reference),
+          openReference: (path) => workspaceSet.active.openFileInTab(path),
+          showReferenceTooltip: (path, screenColumn, screenRow) => {
+            const label = Files.Class.relative(workspaceSet.active.root, path);
+            const bindingHint = keybindings.bindingHint('markdown.openHoveredReference', 'editor');
+            tooltip.point(
+              `Open ${label} (Ctrl/Cmd+click${bindingHint ? ` · ${bindingHint}` : ''})`,
+              screenColumn,
+              screenRow,
+            );
+          },
+          clearReferenceTooltip: () => tooltip.clear(),
+        });
+      }
+      mountEditorContent('markdown');
+      activeMarkdownSplitView.update();
+    } else {
+      if (activeMarkdownSplitView) {
+        if (mountedEditorContent === 'markdown') unmountEditorContent();
+        activeMarkdownSplitView.dispose();
+        activeMarkdownSplitView = null;
+        shownMarkdownIdentifier = '';
+      }
+      mountEditorContent('editor');
     }
     // NOTE: the DiffView's first paint at its real laid-out height is driven from the FRAME LOOP
     // (tickDiffMomentum), NOT here — syncDiffView runs in the reactive paint (fires only on signal
     // changes), which happens BEFORE OpenTUI lays out the freshly-swapped container, so root height is
     // still 0 here. The frame loop re-checks the laid-out height each frame and repaints when it changes.
+  }
+
+  function findTarget(): FindBarTarget | null {
+    // invariant: Markdown panes keep independent find state (src/modules/markdown/markdown.invariants.md)
+    // invariant: Diff panes keep independent find state (src/modules/diff/diff.invariants.md)
+    if (workspaceSet.active.showingDiff.value && activeDiffView) {
+      return activeDiffView.findTarget();
+    }
+    if (activeMarkdownSplitView?.previewFocused) {
+      return activeMarkdownSplitView.findTarget();
+    }
+    const editor = workspaceSet.active.editor;
+    if (!editor.hasDocument.value) return null;
+    return {
+      identifier: `source:${editor.document.path}`,
+      document: editor.document,
+      replaceAllowed: !editor.readOnly.value,
+      revealMatch: (match) => {
+        activeMarkdownSplitView?.focusSource();
+        editor.placeCursor(match.line, match.endColumn);
+        editor.cursor.anchor.value = { line: match.line, col: match.startColumn };
+        editor.revealCursor();
+      },
+    };
   }
 
   function update(): void {
@@ -2104,9 +2289,11 @@ function $buildRootView(
     sidebar.titleColor = workspaceSet.active.focus.value === 'files' || gitView ? palette.accent : palette.dim;
     sidebar.title = gitView ? 'Git' : 'Files';
     editorArea.backgroundColor = palette.bg;
-    editorArea.borderColor = workspaceSet.active.focus.value === 'editor' ? palette.borderActive : palette.border;
+    const sourcePaneFocused = workspaceSet.active.focus.value === 'editor' &&
+      !(activeMarkdownSplitView?.previewFocused ?? false);
+    editorArea.borderColor = sourcePaneFocused ? palette.borderActive : palette.border;
     editorArea.title = workspaceSet.active.editor.hasDocument.value ? workspaceSet.active.editor.title : 'Editor';
-    editorArea.titleColor = workspaceSet.active.focus.value === 'editor' ? palette.accent : palette.dim;
+    editorArea.titleColor = sourcePaneFocused ? palette.accent : palette.dim;
     tabBar.content = renderTabBar();
     workspaceTabBar.content = renderWorkspaceTabBar();
     workspaceTabBar.fg = palette.fg;
@@ -2304,7 +2491,7 @@ function $buildRootView(
       // tmux's own #{cursor_x},#{cursor_y}.
       // invariant: The caret renders at the cursor display column (ui.invariants.md)
       const caretPosition =
-        editor.hasDocument.value && workspaceSet.active.focus.value === 'editor' && !open
+        editor.hasDocument.value && workspaceSet.active.focus.value === 'editor' && !activeMarkdownSplitView?.previewFocused && !open
           ? wrapVisualPosition(cursorLine, editor.cursor.col.value)
           : null;
       if (caretPosition && typeof caretPosition === 'object') {
@@ -2321,7 +2508,7 @@ function $buildRootView(
         editor.viewport.scrollLeft.value &&
       EditorCoordinates.Class.displayColumn(editor.document.line(Math.min(cursorLine, editor.document.lineCount - 1)), editor.cursor.col.value) <
         editor.viewport.scrollLeft.value + editorViewportWidth();
-    if (editor.hasDocument.value && workspaceSet.active.focus.value === 'editor' && !open && cursorLine >= scrollTop && cursorLine < scrollTop + viewportHeight && caretVisibleHorizontally) {
+    if (editor.hasDocument.value && workspaceSet.active.focus.value === 'editor' && !activeMarkdownSplitView?.previewFocused && !open && cursorLine >= scrollTop && cursorLine < scrollTop + viewportHeight && caretVisibleHorizontally) {
       const cursorDisplayColumn = EditorCoordinates.Class.displayColumn(editor.document.line(cursorLine), editor.cursor.col.value);
       // Anchor the caret to the code renderable's ACTUAL laid-out screen cell (codeBody.x/y from
       // yoga), not hand-derived layout constants — the constants drifted from the real layout (the
@@ -2516,6 +2703,7 @@ function $buildRootView(
   });
 
   codeBody.onMouseDown = (event) => {
+    activeMarkdownSplitView?.focusSource();
     if (process.env.TUI_DEBUG_MOUSE === '1') {
       Logging.Class.info(`mouseDown (${event.x},${event.y}) hit=${JSON.stringify(documentPositionAtCell(event.x, event.y))}`);
     }
@@ -2739,9 +2927,15 @@ function $buildRootView(
       }
       return live;
     },
+    tickMarkdownPreview(dtSeconds: number): boolean {
+      return activeMarkdownSplitView?.tick(dtSeconds) ?? false;
+    },
     activeDiffView: () => activeDiffView,
+    activeMarkdownSplitView: () => activeMarkdownSplitView,
+    findTarget,
     dispose() {
       try {
+        activeMarkdownSplitView?.dispose();
         activeDiffView?.dispose();
         root.remove(column);
         column.destroyRecursively();

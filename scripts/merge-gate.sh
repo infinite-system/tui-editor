@@ -99,9 +99,10 @@ if [ "${FAST:-0}" != "1" ]; then
   step "smoke: quick-open"  bash scripts/smoke-quickopen.sh
   step "smoke: gutter-diff" bash scripts/smoke-gutter-diff.sh
   step "smoke: diff-overview" bash scripts/smoke-diff-overview.sh
-  # 5) The REAL settings applied-effect drives (all 15 fields, not just the --meta enumeration).
+  step "smoke: markdown"     bash scripts/smoke-markdown.sh
+  # 5) The REAL settings applied-effect drives (all 16 fields, not just the --meta enumeration).
   # diffSplitRatio is driven in smoke-diff-overview above through a real divider drag + second open.
-  step "settings applied-effect (all 15 driven)" bash scripts/smoke-settings-applied.sh
+  step "settings applied-effect (all 16 driven)" bash scripts/smoke-settings-applied.sh
   # 6) Perf baselines — SOFT: memory/CPU/latency are measured + REPORTED so a regression surfaces in
   #    the gate (it was previously unwired = a perf regression could ship). Non-blocking: the numbers
   #    are informational and the load-bearing idle-quiescence invariant is hard-gated above. Slow

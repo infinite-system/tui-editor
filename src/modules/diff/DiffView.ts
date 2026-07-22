@@ -46,6 +46,8 @@ import {
   type MomentumOptions,
 } from '../ui/Momentum';
 import type { Settings } from '../settings/Settings';
+import type { FindBar, FindBarTarget } from '../search/FindBar';
+import type { FindInBufferMatch } from '../search/FindInBuffer';
 import {
   DiffAlignment,
   type AlignedRow,
@@ -159,6 +161,11 @@ class $DiffView {
   private paneDividerDragActive = false;
   private activeSelectionSide: 'previous' | 'current' | null = null;
   private selectionEditor: Editor.Instance | null = null;
+  private readonly previousFindEditor: Editor.Instance;
+  private readonly currentFindEditor: Editor.Instance;
+  private focusedFindSide: 'previous' | 'current' = 'current';
+  private findBarSource: FindBar.Instance | null = null;
+  private findIdentifier = 'diff';
 
   get alignedRowScrollOffset() {
     return ref(0);
@@ -207,6 +214,14 @@ class $DiffView {
     this.alignment = DiffAlignment.Class.align(options.previousVersionText, options.currentVersionText);
     this.previousVersionLines = DiffAlignment.Class.splitLines(options.previousVersionText);
     this.currentVersionLines = DiffAlignment.Class.splitLines(options.currentVersionText);
+    this.previousFindEditor = this.createFindEditor(
+      options.previousVersionPath ?? 'previous version',
+      options.previousVersionText,
+    );
+    this.currentFindEditor = this.createFindEditor(
+      options.currentVersionPath ?? 'current version',
+      options.currentVersionText,
+    );
     this.rootRenderable = this.createBoxRenderable({
       id: 'diff-view',
       width: '100%',
@@ -310,6 +325,30 @@ class $DiffView {
 
   createScrollBarRenderable(options: ScrollBarOptions): ScrollBarRenderable {
     return new ScrollBarRenderable(this.renderer, options);
+  }
+
+  createFindEditor(path: string, text: string): Editor.Instance {
+    const editor = new Editor.Class();
+    editor.openDiff(path, text);
+    return editor;
+  }
+
+  attachFindBar(findBar: FindBar.Instance, identifier: string): void {
+    this.findBarSource = findBar;
+    this.findIdentifier = identifier;
+    this.update();
+  }
+
+  findTarget(): FindBarTarget {
+    // invariant: Diff panes keep independent find state (src/modules/diff/diff.invariants.md)
+    const side = this.focusedFindSide;
+    const editor = side === 'previous' ? this.previousFindEditor : this.currentFindEditor;
+    return {
+      identifier: this.findTargetIdentifier(side),
+      document: editor.document,
+      replaceAllowed: false,
+      revealMatch: (match) => this.revealFindMatch(side, match),
+    };
   }
 
   createPaneRenderables(side: 'previous' | 'current'): DiffPaneRenderables {
@@ -575,8 +614,17 @@ class $DiffView {
         codeChunks.push(rowBackgroundColor ? bg(rowBackgroundColor)(fillerChunk) : fillerChunk);
       } else {
         const sourceLine = this.lineForSide(side, lineNumber);
-        const visibleLine = this.sliceLineWindow(sourceLine, codeViewportWidth);
-        const lineChunks = this.highlightLine(visibleLine, language, palette, rowBackgroundColor);
+        const visibleLineWindow = this.sliceLineWindowDetails(sourceLine, codeViewportWidth);
+        const visibleLine = visibleLineWindow.text;
+        const lineChunks = this.highlightLine(
+          visibleLine,
+          language,
+          palette,
+          rowBackgroundColor,
+          side,
+          lineNumber - 1,
+          visibleLineWindow.startGrapheme,
+        );
         codeChunks.push(...lineChunks);
         const remainingColumns = Math.max(0, codeViewportWidth - EditorCoordinates.Class.lineWidth(visibleLine));
         if (remainingColumns > 0) {
@@ -598,27 +646,70 @@ class $DiffView {
     language: LangId,
     palette: Palette,
     rowBackgroundColor: string | null,
+    side?: 'previous' | 'current',
+    lineIndex?: number,
+    visibleStartGrapheme = 0,
   ): TextChunk[] {
     // This is the same viewport-local LanguageRegistry + Highlighter seam used by the editor. A
     // future Tree-sitter provider upgrades LanguageRegistry without a second diff rendering path.
-    const highlightedSpans = Highlighter.Class.highlightLine(visibleLine, language);
-    return highlightedSpans.map((highlightedSpan) => {
-      const syntaxChunk = fg(syntaxRoleColor(highlightedSpan.role, palette))(highlightedSpan.text);
-      return rowBackgroundColor ? bg(rowBackgroundColor)(syntaxChunk) : syntaxChunk;
-    });
+    const findEngine = side ? this.findBarSource?.engineFor(this.findTargetIdentifier(side)) : null;
+    const lineMatches = lineIndex === undefined
+      ? []
+      : findEngine?.matches.value.filter((match) => match.line === lineIndex) ?? [];
+    const visibleGraphemeCount = EditorCoordinates.Class.graphemeCount(visibleLine);
+    const boundaries = new Set<number>([0, visibleGraphemeCount]);
+    for (const match of lineMatches) {
+      boundaries.add(Math.max(0, Math.min(visibleGraphemeCount, match.startColumn - visibleStartGrapheme)));
+      boundaries.add(Math.max(0, Math.min(visibleGraphemeCount, match.endColumn - visibleStartGrapheme)));
+    }
+    const orderedBoundaries = [...boundaries].sort((first, second) => first - second);
+    const chunks: TextChunk[] = [];
+    for (let boundaryIndex = 0; boundaryIndex < orderedBoundaries.length - 1; boundaryIndex += 1) {
+      const segmentStart = orderedBoundaries[boundaryIndex]!;
+      const segmentEnd = orderedBoundaries[boundaryIndex + 1]!;
+      if (segmentEnd <= segmentStart) continue;
+      const segmentText = visibleLine.slice(
+        EditorCoordinates.Class.graphemeToU16(visibleLine, segmentStart),
+        EditorCoordinates.Class.graphemeToU16(visibleLine, segmentEnd),
+      );
+      const findHighlighted = lineMatches.some(
+        (match) =>
+          match.startColumn < visibleStartGrapheme + segmentEnd &&
+          match.endColumn > visibleStartGrapheme + segmentStart,
+      );
+      for (const highlightedSpan of Highlighter.Class.highlightLine(segmentText, language)) {
+        let syntaxChunk = fg(syntaxRoleColor(highlightedSpan.role, palette))(highlightedSpan.text);
+        if (findHighlighted) syntaxChunk = bg(palette.cursorLine)(syntaxChunk);
+        else if (rowBackgroundColor) syntaxChunk = bg(rowBackgroundColor)(syntaxChunk);
+        chunks.push(syntaxChunk);
+      }
+    }
+    return chunks;
   }
 
   sliceLineWindow(sourceLine: string, codeViewportWidth: number): string {
+    return this.sliceLineWindowDetails(sourceLine, codeViewportWidth).text;
+  }
+
+  private sliceLineWindowDetails(
+    sourceLine: string,
+    codeViewportWidth: number,
+  ): { text: string; startGrapheme: number } {
     const horizontalScrollOffset = this.horizontalScrollOffset.value;
-    if (horizontalScrollOffset === 0 && sourceLine.length <= codeViewportWidth) return sourceLine;
+    if (horizontalScrollOffset === 0 && sourceLine.length <= codeViewportWidth) {
+      return { text: sourceLine, startGrapheme: 0 };
+    }
     let startGraphemeIndex = EditorCoordinates.Class.graphemeAtDisplayColumn(sourceLine, horizontalScrollOffset);
     if (EditorCoordinates.Class.displayColumn(sourceLine, startGraphemeIndex) < horizontalScrollOffset) startGraphemeIndex++;
     const endGraphemeIndex =
       EditorCoordinates.Class.graphemeAtDisplayColumn(sourceLine, horizontalScrollOffset + codeViewportWidth) + 1;
-    return sourceLine.slice(
-      EditorCoordinates.Class.graphemeToU16(sourceLine, startGraphemeIndex),
-      EditorCoordinates.Class.graphemeToU16(sourceLine, endGraphemeIndex),
-    );
+    return {
+      text: sourceLine.slice(
+        EditorCoordinates.Class.graphemeToU16(sourceLine, startGraphemeIndex),
+        EditorCoordinates.Class.graphemeToU16(sourceLine, endGraphemeIndex),
+      ),
+      startGrapheme: startGraphemeIndex,
+    };
   }
 
   synchronizeScrollbars(palette: Palette): void {
@@ -866,6 +957,7 @@ class $DiffView {
     position: SelectionDragPosition,
     pointerDisplayColumn: number,
   ): void {
+    this.focusedFindSide = side;
     if (side === 'previous') this.currentSelectionDragBehavior.end();
     else this.previousSelectionDragBehavior.end();
     this.selectionEditor?.dispose();
@@ -876,6 +968,27 @@ class $DiffView {
     this.activeSelectionSide = side;
     this.selectionEditor.cursor.set(position.line, position.column, pointerDisplayColumn);
     this.selectionEditor.cursor.setAnchorHere();
+    this.selectionRevision.value += 1;
+    this.update();
+  }
+
+  private findTargetIdentifier(side: 'previous' | 'current'): string {
+    return `${this.findIdentifier}:${side}`;
+  }
+
+  private revealFindMatch(side: 'previous' | 'current', match: FindInBufferMatch): void {
+    this.focusedFindSide = side;
+    const matchingAlignedRowIndex = this.alignment.alignedRows.findIndex((alignedRow) => {
+      const lineNumber = side === 'previous' ? alignedRow.leftLineNumber : alignedRow.rightLineNumber;
+      return lineNumber === match.line + 1;
+    });
+    if (matchingAlignedRowIndex >= 0) {
+      this.alignedRowScrollOffset.value = this.clampAlignedRowOffset(matchingAlignedRowIndex);
+    }
+    this.activateSelection(side, { line: match.line, column: match.endColumn }, match.endColumn);
+    if (this.selectionEditor) {
+      this.selectionEditor.cursor.anchor.value = { line: match.line, col: match.startColumn };
+    }
     this.selectionRevision.value += 1;
     this.update();
   }
@@ -1096,6 +1209,8 @@ class $DiffView {
   dispose(): void {
     try {
       this.selectionEditor?.dispose();
+      this.previousFindEditor.dispose();
+      this.currentFindEditor.dispose();
       (this.options.parentRenderable ?? this.renderer.root).remove(this.rootRenderable);
       this.rootRenderable.destroyRecursively();
     } catch {

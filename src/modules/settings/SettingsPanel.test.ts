@@ -55,6 +55,10 @@ describe('SettingsPanel', () => {
     panel.selectedIndex.value = indexOfKey(panel, 'diffSplitRatio');
     panel.adjust(1);
     expect(settings.diffSplitRatio.value).toBe(0.55);
+
+    panel.selectedIndex.value = indexOfKey(panel, 'markdownSplitRatio');
+    panel.adjust(1);
+    expect(settings.markdownSplitRatio.value).toBe(0.55);
   });
 
   test('adjust a BOOLEAN toggles, an ENUM cycles', () => {

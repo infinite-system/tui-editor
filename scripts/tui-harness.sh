@@ -26,6 +26,38 @@ BUN_BIN="$(dirname "$BUN")"          # real bun dir, captured BEFORE we isolate 
 # concurrent gate runs in different worktrees never share it (or clobber the real ~/.config).
 HARNESS_HOME="$ROOT/artifacts/home"
 
+# Capture pane descendants BEFORE tmux tears down the shell. Some terminal app processes survive the
+# pane HUP and are reparented to pid 1; once that happens the session no longer identifies them and a
+# full smoke run accumulates enough live renderers/watchers to perturb later drives.
+session_descendant_process_identifiers() {
+  local parent_process_identifier="$1"
+  local child_process_identifier
+  for child_process_identifier in $(pgrep -P "$parent_process_identifier" 2>/dev/null || true); do
+    session_descendant_process_identifiers "$child_process_identifier"
+    echo "$child_process_identifier"
+  done
+}
+
+kill_session_and_descendants() {
+  local session_name="$1"
+  local pane_process_identifier
+  local descendant_process_identifiers
+  local descendant_process_identifier
+  pane_process_identifier="$(tmux display-message -p -t "$session_name" '#{pane_pid}' 2>/dev/null || true)"
+  descendant_process_identifiers=""
+  if [ -n "$pane_process_identifier" ]; then
+    descendant_process_identifiers="$(session_descendant_process_identifiers "$pane_process_identifier")"
+  fi
+  tmux kill-session -t "$session_name" 2>/dev/null || true
+  for descendant_process_identifier in $descendant_process_identifiers; do
+    kill "$descendant_process_identifier" 2>/dev/null || true
+  done
+  sleep 0.05
+  for descendant_process_identifier in $descendant_process_identifiers; do
+    kill -9 "$descendant_process_identifier" 2>/dev/null || true
+  done
+}
+
 _field() { # read a top-level field from status.json without jq
   local key="$1"
   [ -f "$STATUS" ] || { echo ""; return; }
@@ -37,7 +69,7 @@ case "$cmd" in
   launch)
     session="$1"; size="$2"; shift 2
     cols="${size%x*}"; rows="${size#*x}"
-    tmux kill-session -t "$session" 2>/dev/null
+    kill_session_and_descendants "$session"
     rm -f "$STATUS"
     tmux new-session -d -s "$session" -x "$cols" -y "$rows"
     rm -f "$(status_path "$session")" "$(frame_path "$session")"
@@ -127,7 +159,12 @@ case "$cmd" in
     _field "$1"
     ;;
   kill)
-    tmux kill-session -t "$1" 2>/dev/null && echo "killed $1" || echo "no session $1"
+    if tmux has-session -t "$1" 2>/dev/null; then
+      kill_session_and_descendants "$1"
+      echo "killed $1"
+    else
+      echo "no session $1"
+    fi
     ;;
   *)
     echo "usage: tui-harness.sh {launch|ready|settle|send|capture|status|field|kill} ..." >&2

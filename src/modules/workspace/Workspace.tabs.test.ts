@@ -3,7 +3,12 @@
 // dirty tab requires a close confirmation. Uses real Editors over real temp files (end-to-end).
 import { test, expect, describe, beforeEach, afterEach } from 'bun:test';
 import { Workspace } from './Workspace';
-import { mkdtempSync as makeTemporaryDirectorySync, rmSync as removeSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync as makeDirectorySync,
+  mkdtempSync as makeTemporaryDirectorySync,
+  rmSync as removeSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir as temporaryDirectory } from 'node:os';
 import { join } from 'node:path';
 
@@ -108,5 +113,30 @@ describe('Workspace editor buffer tabs (item 10a)', () => {
     workspace.openFileInTab(filePaths[0]!);
     expect(workspace.showingDiff.value).toBe(false);
     expect(workspace.editor.document.path).toBe(filePaths[0]!);
+  });
+
+  // invariant: A file reference opens from rendered Markdown (src/modules/markdown/markdown.invariants.md)
+  test('rendered file references resolve only to real files inside the workspace', () => {
+    const sourceDirectory = join(workspaceDirectory, 'guides');
+    const sourcePath = join(sourceDirectory, 'guide.md');
+    const sourceRelativeTarget = join(sourceDirectory, 'details.md');
+    const rootRelativeTarget = join(workspaceDirectory, 'project.invariants.md');
+    makeDirectorySync(sourceDirectory);
+    writeFileSync(sourcePath, '# Guide\n');
+    writeFileSync(sourceRelativeTarget, '# Details\n');
+    writeFileSync(rootRelativeTarget, '# Invariants\n');
+
+    const workspace = new Workspace.Class();
+    workspace.root = workspaceDirectory;
+    workspace.openFileInTab(sourcePath);
+
+    expect(workspace.resolveFileReference('details.md')).toBe(sourceRelativeTarget);
+    expect(workspace.resolveFileReference('project.invariants.md#record')).toBe(rootRelativeTarget);
+    expect(workspace.resolveFileReference('https://example.com/file.md')).toBeNull();
+    expect(workspace.resolveFileReference('../outside.md')).toBeNull();
+    expect(workspace.resolveFileReference('missing.md')).toBeNull();
+
+    expect(workspace.openFileReference('project.invariants.md')).toBe(true);
+    expect(workspace.editor.document.path).toBe(rootRelativeTarget);
   });
 });

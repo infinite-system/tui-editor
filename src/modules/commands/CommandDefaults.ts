@@ -16,6 +16,9 @@ export interface CommandContext {
   hasOpenDiff: () => boolean;
   nextDiffChange: () => void;
   previousDiffChange: () => void;
+  toggleMarkdownPreview: () => void;
+  hasHoveredMarkdownReference: () => boolean;
+  openHoveredMarkdownReference: () => void;
 }
 
 // Manifest first — the capability's surface reads at the top of the file; implementations follow.
@@ -120,6 +123,20 @@ function $registerDefaultCommands(
       category: 'View',
       when: hasDocument,
       run: () => getEditor().toggleWordWrap(),
+    },
+    {
+      id: 'markdown.togglePreview',
+      title: 'Markdown: Toggle Preview',
+      category: 'Markdown',
+      when: () => context.workspaceSet.active.activeFileIsMarkdown,
+      run: context.toggleMarkdownPreview,
+    },
+    {
+      id: 'markdown.openHoveredReference',
+      title: 'Markdown: Open Hovered File Reference',
+      category: 'Markdown',
+      when: context.hasHoveredMarkdownReference,
+      run: context.openHoveredMarkdownReference,
     },
     {
       id: 'go.top',

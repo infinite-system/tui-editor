@@ -76,6 +76,33 @@ class $Workspace {
   get showingDiff() {
     return ref(false);
   }
+  /** File paths whose tabs currently show the Markdown source | preview split. A set keeps the mode
+   * per tab, so switching away and back does not silently discard the user's view choice. */
+  get markdownPreviewPaths() {
+    return shallowRef<ReadonlySet<string>>(new Set());
+  }
+
+  get activeFileIsMarkdown(): boolean {
+    return (
+      !this.showingDiff.value &&
+      this.editor.hasDocument.value &&
+      Files.Class.extname(this.editor.document.path).toLowerCase() === '.md'
+    );
+  }
+
+  get showingMarkdownPreview(): boolean {
+    return this.activeFileIsMarkdown && this.markdownPreviewPaths.value.has(this.editor.document.path);
+  }
+
+  toggleMarkdownPreview(): void {
+    if (!this.activeFileIsMarkdown) return;
+    const path = this.editor.document.path;
+    const nextPaths = new Set(this.markdownPreviewPaths.value);
+    if (nextPaths.has(path)) nextPaths.delete(path);
+    else nextPaths.add(path);
+    this.markdownPreviewPaths.value = nextPaths;
+    this.focus.value = 'editor';
+  }
   // The two SIDES of the currently-shown side-by-side diff (the rich DiffView), or null. Set by
   // openChangeAtRow / openCommitFileDiff, cleared when a real tab replaces it. The token forces the
   // view host to rebuild (DiffView has no re-open — it reconstructs per file).
@@ -676,6 +703,46 @@ class $Workspace {
     this.diffRequest.value = null;
     this.buffers.open(path);
     void this.refreshActiveHeadText();
+  }
+
+  /** Resolve a rendered Markdown reference through the existing workspace confinement boundary.
+   * External URLs and directories are deliberately not editor targets. */
+  // invariant: A file reference opens from rendered Markdown (src/modules/markdown/markdown.invariants.md)
+  resolveFileReference(reference: string): string | null {
+    const withoutFragment = reference.split('#', 1)[0]?.split('?', 1)[0]?.trim() ?? '';
+    if (!withoutFragment || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(withoutFragment)) return null;
+    let decodedReference = withoutFragment;
+    try {
+      decodedReference = decodeURIComponent(withoutFragment);
+    } catch {
+      // A malformed percent escape is not a file target.
+      return null;
+    }
+    const candidatePaths = [
+      Files.Class.confineToRoot(this.root, decodedReference),
+      this.editor.hasDocument.value
+        ? Files.Class.confineToRoot(Files.Class.dirname(this.editor.document.path), decodedReference)
+        : null,
+    ];
+    for (const candidatePath of candidatePaths) {
+      if (
+        candidatePath &&
+        Files.Class.confineToRoot(this.root, candidatePath) !== null &&
+        Files.Class.exists(candidatePath) &&
+        !Files.Class.isDir(candidatePath)
+      ) {
+        return candidatePath;
+      }
+    }
+    return null;
+  }
+
+  openFileReference(reference: string): boolean {
+    const resolvedPath = this.resolveFileReference(reference);
+    if (!resolvedPath) return false;
+    this.openFileInTab(resolvedPath);
+    this.focus.value = 'editor';
+    return true;
   }
 
   /** Activate an already-open tab by index (tab click / cycle). */

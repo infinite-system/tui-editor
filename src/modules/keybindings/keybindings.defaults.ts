@@ -47,6 +47,9 @@ export const canonicalBindings: Keybinding[] = [
   // as toolbar buttons and command-palette entries; these bindings are discoverable accelerators.
   { chord: { key: 'f7', shift: true }, action: 'diff.previousChange', context: 'editor' },
   { chord: { key: 'f7', shift: false }, action: 'diff.nextChange', context: 'editor' },
+  // Markdown preview actions share the visible tab-bar button / hovered link affordance.
+  { chord: { key: 'v', ctrl: true, shift: true }, action: 'markdown.togglePreview', context: 'editor' },
+  { chord: { key: 'return', ctrl: true }, action: 'markdown.openHoveredReference', context: 'editor' },
 
   // --- palette (captures input while open) ---
   { chord: { key: 'escape' }, action: 'palette.close', context: 'palette' },

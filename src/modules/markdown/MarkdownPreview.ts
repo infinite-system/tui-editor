@@ -146,6 +146,32 @@ class $MarkdownPreview {
     return this.collectRows(document.blocks.value, rowWidth, this.scrollTop.value, rowLimit);
   }
 
+  /** Materialize the rendered text only for operations whose domain is the whole preview (find and
+   * copy selection). Normal painting continues to call visibleRows and stays viewport bounded. */
+  allRows(width: number): PreviewRow[] {
+    const document = this.document.value;
+    const rowWidth = Math.max(1, Math.floor(width));
+    if (!document) return [];
+    if (document.error.value) return [this.statusRow(`Markdown: ${document.error.value}`)];
+    if (document.parsing.value && document.blocks.value.length === 0) {
+      return [this.statusRow('Parsing Markdown…')];
+    }
+    return this.collectRows(
+      document.blocks.value,
+      rowWidth,
+      0,
+      Number.MAX_SAFE_INTEGER,
+    );
+  }
+
+  /** The exact plain text represented by one preview row, shared by rendering hit-tests, find, and
+   * clipboard selection so those paths cannot disagree about cell-to-text mapping. */
+  textForRow(row: PreviewRow): string {
+    if (row.overrideText !== undefined) return row.overrideText;
+    if (!row.block) return '';
+    return `${row.prefix}${row.block.text.slice(row.textStart, row.textEnd)}${row.suffix}`;
+  }
+
   totalRows(width: number): number {
     const document = this.document.value;
     if (!document) return 0;
