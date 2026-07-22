@@ -16,7 +16,8 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/.." && pwd)"
 H="$DIR/tui-harness.sh"
 BUN="$HOME/.bun/bin/bun"
-SET="$HOME/.config/fable/settings.json"
+SET="$ROOT/artifacts/home/.config/fable/settings.json"   # matches the harness's isolated HOME — per-worktree, never the real ~/.config
+mkdir -p "$(dirname "$SET")"
 export PATH="$HOME/.bun/bin:$PATH"
 
 # EVERY schema field must be listed here with a real drive below. Keep in sync with Settings' schema; the
