@@ -63,6 +63,49 @@ test('diagnostics are stored only for the current document revision and stale ba
   }
 });
 
+test('a versionless batch (real typescript-language-server 5.x) is accepted for the synced revision and dropped after an edit', async () => {
+  const fake = new FakeLspProcess(6004);
+  const client = new LanguageClient.Class({
+    rootPath: ROOT,
+    providers: [new FakeProvider()],
+    processFactory: () => fake,
+  });
+  const path = `${ROOT}/versionless.ts`;
+  const uri = uriFor(path);
+  const document = new TextDocument.Class();
+  document.loadFromText('const x = 1\n', path);
+
+  try {
+    client.openDocument(document);
+    await client.whenStarted();
+    await fake.waitFor('textDocument/didOpen');
+    await flush();
+
+    // Real servers omit `version` even when versionSupport is advertised; the batch is
+    // attributed to the last synced revision and accepted while that is still current.
+    fake.pushNotification('textDocument/publishDiagnostics', {
+      uri,
+      diagnostics: [makeDiagnostic('versionless real')],
+    });
+    await flush();
+    expect(client.diagnosticCountFor(uri)).toBe(1);
+    expect(client.diagnosticSlice(uri, 0, 1)[0]?.version).toBe(document.revision.value);
+
+    // After an un-synced edit the synced revision is stale, so a versionless batch is dropped.
+    const synced = document.revision.value;
+    document.insertInline(0, 0, 'y');
+    expect(document.revision.value).toBeGreaterThan(synced);
+    fake.pushNotification('textDocument/publishDiagnostics', {
+      uri,
+      diagnostics: [makeDiagnostic('computed against stale text'), makeDiagnostic('extra')],
+    });
+    await flush();
+    expect(client.diagnosticCountFor(uri)).toBe(1); // unchanged
+  } finally {
+    await client.dispose();
+  }
+});
+
 test('diagnostic storage is capped at maxDiagnosticsPerDocument', async () => {
   const fake = new FakeLspProcess(6003);
   const client = new LanguageClient.Class({

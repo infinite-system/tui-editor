@@ -62,22 +62,28 @@ spec default; a server that negotiates UTF-8 or UTF-32 would move the boundary, 
 API stays UTF-16-derived.
 
 **Mechanism:** Stands on *A text position has several encodings*. A JS string is UTF-16
-internally, but a grapheme cluster (emoji, base+combining) can span several UTF-16 units, so the
-client converts grapheme column → UTF-16 character before a request and UTF-16 character →
-grapheme column when reading a result.
+internally, but a grapheme cluster (emoji, base+combining, ZWJ sequence) can span several UTF-16
+units — and several CODE POINTS, so a code-point walk (`Array.from`) is also wrong. The client
+converts grapheme column → UTF-16 character before a request and UTF-16 character → grapheme
+column when reading a result, through `EditorCoordinates.graphemeToU16`/`u16ToGrapheme` — the
+same segmenter-backed boundaries the editor cursor uses.
 
-**Generates:** `toLspPosition` (grapheme prefix → UTF-16 length) and `fromLspPosition` (UTF-16
-slice → grapheme count); the client API surfacing UTF-16-derived positions rather than raw
-grapheme columns.
+**Generates:** `toLspPosition` (grapheme boundary → UTF-16 offset via
+`EditorCoordinates.graphemeToU16`) and `fromLspPosition` (UTF-16 offset → grapheme index via
+`EditorCoordinates.u16ToGrapheme`); the client API surfacing UTF-16-derived positions rather
+than raw grapheme columns.
 
-**Evidence:** `src/modules/lsp/LanguageClient.ts:636` (`toLspPosition` maps to `character` via
-UTF-16 prefix length); `:644` (`fromLspPosition` maps a UTF-16 `character` back to a grapheme
-column).
+**Evidence:** `src/modules/lsp/LanguageClient.ts:643` (`toLspPosition` →
+`EditorCoordinates.graphemeToU16`); `:650` (`fromLspPosition` → `EditorCoordinates.u16ToGrapheme`).
+Driven against a real `typescript-language-server` 5.3.0: a use site after a ZWJ family emoji
+(grapheme 39 / code point 43 / UTF-16 46) resolved to the correct identifier — the server's
+`originSelectionRange` echoed exactly the `greetWidget` token.
 
 **Impossible if true:** A definition/hover/diagnostic that lands on the correct column for ASCII
 text but drifts by the surrogate/cluster width once an emoji or combining mark precedes it.
 
-**Verification:** `bun test src/modules/lsp -t "cross to the server as UTF-16"`.
+**Verification:** `bun test src/modules/lsp -t "cross to the server as UTF-16"` and
+`bun test src/modules/lsp -t "ZWJ emoji"`.
 
 **Status:** provisional
 
@@ -186,9 +192,11 @@ LSP is missing, slow, or has died.
 
 ### Diagnostic updates match current revisions
 
-**Invariant:** If a `publishDiagnostics` batch is applied to a document, then its version equals
-both the document's current revision and the version last synced to the server; a batch naming
-any other version is discarded, never applied.
+**Invariant:** If a `publishDiagnostics` batch is applied to a document, then the revision it is
+stored under equals both the document's current revision and the version last synced to the
+server. A batch naming any other version is discarded; a batch naming NO version (real
+`typescript-language-server` 5.x omits `version` even when `versionSupport` is advertised) is
+attributed to the last synced revision and accepted only while that is still the current one.
 
 **Scope:** `applyDiagnostics`. Diagnostics for a document whose text has advanced past the batch's
 version, or that was never opened/synced.
@@ -196,23 +204,27 @@ version, or that was never opened/synced.
 **Mechanism:** Stands on *An async result can outlive the state it described* and generates
 *Async results are revision-stamped and stale results discarded*. The client stamps every
 `didOpen`/`didChange` with the document revision; a returning batch is accepted only when its
-`version` matches both the live revision and the last-sent version, so a batch computed against
-stale text is dropped.
+version — reported, or `lastSentVersion` when the server omits it — matches both the live
+revision and the last-sent version, so a batch computed against stale text is dropped either way.
 
-**Generates:** The exact-version guard in `applyDiagnostics`; revision stamping on document sync;
-per-URI diagnostic batches keyed by version.
+**Generates:** The exact-version guard in `applyDiagnostics`; the versionless fallback to
+`lastSentVersion`; revision stamping on document sync; per-URI diagnostic batches keyed by
+version.
 
 **Rejected alternatives:** Applying whatever diagnostics arrive last — an older batch would then
 overwrite diagnostics for newer text, the exact failure *Async results are revision-stamped*
-forbids.
+forbids. Requiring a reported `version` unconditionally — drops every batch from real
+`typescript-language-server` 5.x, which never sends one (found by driving the real server).
 
-**Evidence:** `src/modules/lsp/LanguageClient.ts:547` (`state.document.revision.value !== version
-|| state.lastSentVersion !== version` → discard); `:540` (`applyDiagnostics`).
+**Evidence:** `src/modules/lsp/LanguageClient.ts:551` (versionless fallback to
+`state.lastSentVersion`); `:554` (`state.document.revision.value !== version ||
+state.lastSentVersion !== version` → discard); `:541` (`applyDiagnostics`).
 
 **Impossible if true:** A stored diagnostic whose `version` is older than the document revision it
 is shown against.
 
-**Verification:** `bun test src/modules/lsp -t "stored only for the current document revision"`.
+**Verification:** `bun test src/modules/lsp -t "stored only for the current document revision"`
+and `bun test src/modules/lsp -t "versionless batch"`.
 
 **Status:** provisional
 

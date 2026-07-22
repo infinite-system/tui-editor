@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { TextDocument } from '../editor/TextDocument';
+import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { Environment } from '../system/Environment';
 import { Files } from '../system/Files';
 import { Logging } from '../system/Logging';
@@ -540,10 +541,16 @@ class $LanguageClient {
   private applyDiagnostics(params: unknown): void {
     const value = this.objectValue(params);
     const uri = typeof value?.uri === 'string' ? value.uri : null;
-    const version = typeof value?.version === 'number' ? value.version : null;
-    if (!uri || version === null || !Array.isArray(value?.diagnostics)) return;
+    if (!uri || !Array.isArray(value?.diagnostics)) return;
     const state = this.documents.get(uri);
     if (!state || !state.opened) return;
+    // Real servers (typescript-language-server 5.x) omit `version` even when the client
+    // advertises publishDiagnostics.versionSupport. A versionless batch is attributed to the
+    // last revision synced to the server — and still accepted only when that revision is the
+    // document's current one, so a batch computed against stale text remains impossible.
+    const reportedVersion = typeof value?.version === 'number' ? value.version : null;
+    const version = reportedVersion ?? state.lastSentVersion;
+    if (version === null) return;
     if (state.document.revision.value !== version || state.lastSentVersion !== version) return;
 
     const items: LanguageDiagnostic[] = [];
@@ -636,9 +643,8 @@ class $LanguageClient {
   private toLspPosition(document: TextDocumentModel, position: TextPosition): LspPosition {
     const line = Math.max(0, Math.min(Math.trunc(position.line), document.lineCount - 1));
     const text = document.line(line);
-    const logicalColumn = Math.max(0, Math.trunc(position.column));
-    const prefix = Array.from(text).slice(0, logicalColumn).join('');
-    return { line, character: prefix.length };
+    const graphemeColumn = Math.max(0, Math.trunc(position.column));
+    return { line, character: EditorCoordinates.Class.graphemeToU16(text, graphemeColumn) };
   }
 
   private fromLspPosition(uri: string, position: LspPosition): TextPosition {
@@ -646,7 +652,7 @@ class $LanguageClient {
     const utf16Column = Math.max(0, Math.min(position.character, lineText.length));
     return {
       line: position.line,
-      column: Array.from(lineText.slice(0, utf16Column)).length,
+      column: EditorCoordinates.Class.u16ToGrapheme(lineText, utf16Column),
     };
   }
 
