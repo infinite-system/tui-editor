@@ -805,7 +805,7 @@ Disease = build-but-don't-wire. Session frontier HEAD **c7ee4d8**. Progress:
       REQUIRED for done; isolation mandatory (throwaway worktree, never touch live blackline-app).
 
 ## Delegation (see project.delegation-log.md)
-- ALL 3 codex MODULES INTEGRATED into master; worktrees + branches removed. (codex writes code only,
+- ALL 3 codex MODULES INTEGRATED into main; worktrees + branches removed. (codex writes code only,
   no self-commit; skipped tests/contract on markdown+lsp → completed by review subagents.)
   - **git** (b5cf988): stale-supersede repo, porcelain-v2 parser, 2+4 contract, 7 tests. Later fixed
     a $stopEffects footgun in dispose (1fd95de).
