@@ -416,25 +416,29 @@ focus decision) — but that neither moves nor clears the list's selection.
 
 **Scope:** file tree, git changes/staging, git commit log, git stashes, and any future selectable list.
 
-**Mechanism:** selection = an item index/identity in the list model; hover = a separate pointer-row
-index; scroll = a viewport offset. Three orthogonal states, each written only by its own input (click,
-pointer-move, wheel/scrollbar) — never one by another.
+**Mechanism:** `FileTree.selectedIndex` and `GitPanel.changesIndex`/`logIndex` hold selection;
+`hoveredIndex`/`changesHovered`/`logHovered` and each pane's scroll offsets hold the other two states.
+`RootView.renderTree` and `RootView.renderGitPanel` always project selection, using
+`palette.selection` while its region owns keyboard focus and `palette.cursorLine` otherwise;
+`GitPanel.setChangesSelection`/`setLogSelection` leave scroll untouched while keyboard movement
+minimally reveals through the pane's live viewport height.
 
 **Generates:** click → set selection (+ open/focus-editor for a file); ↑/↓ while focused → move
 selection + reveal; wheel/scrollbar → move viewport only; hover → transient highlight only; blur →
 selection stays, highlight dims.
 
-**Evidence:** `FileTree.selectedIndex` vs `hoveredIndex` ("hover highlight only, never selection truth")
-vs `scrollTop`; `GitPanel.changesIndex`/`logIndex` vs `changesHovered`.
+**Evidence:** `src/modules/ui/RootView.ts` (`renderTree`, `renderGitPanel`, sidebar click/hover/scroll
+handlers); `src/modules/workspace/GitPanel.ts` selection setters and movers;
+`src/modules/workspace/GitPanel.test.ts`; `scripts/smoke-selection.sh`, hard-wired in
+`scripts/merge-gate.sh`, drives tree, changes, and commit-log click/hover/wheel/blur/refocus paths and
+asserts full/dim backgrounds through FrameProbe.
 
 **Impossible if true:** selection following the mouse hover or the scroll position; a clicked selection
 vanishing on scroll or on losing focus; a list where click selects but the keyboard cannot move from
 there; different list panes disagreeing on the selection model.
 
-**Verification:** click a row → highlights; wheel-scroll → the SAME item stays selected (highlight rides
-the item, not the viewport); focus away → still highlighted (dimmed); Tab back → arrows move it from
-there; identical in tree, changes, commits, stashes.
+**Verification:** `bun test src/modules/workspace/GitPanel.test.ts src/modules/workspace/FileTree.scroll.test.ts && bash scripts/smoke-selection.sh`
 
-**Status:** provisional
+**Status:** established
 
 **Last refined:** 2026-07-22

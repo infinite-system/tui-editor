@@ -230,6 +230,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       editorScrollLeft: editor.viewport.scrollLeft.value,
       wordWrap: editor.wordWrap.value,
       changesScrollTop: workspaceSet.active.gitPanel.changesScrollTop.value,
+      gitChangesIndex: workspaceSet.active.gitPanel.changesIndex.value,
       gitLogScrollTop: workspaceSet.active.gitPanel.logScrollTop.value,
       gitLogIndex: workspaceSet.active.gitPanel.logIndex.value,
       gitLogLoaded: workspaceSet.active.commitLog.value?.loadedCount ?? 0,
@@ -517,7 +518,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     const rows = currentChangeRows();
     if (rows[workspaceSet.active.gitPanel.changesIndex.value]?.kind !== 'file') {
       const firstFile = GitRows.Class.nextFileRow(rows, -1, 1);
-      if (firstFile >= 0) workspaceSet.active.gitPanel.changesIndex.value = firstFile;
+      if (firstFile >= 0) workspaceSet.active.gitPanel.moveChangesSelection(firstFile);
     }
   };
   // Up/Down walk the FLAT log rows (commit headers AND expanded file rows are both selectable) —
@@ -526,14 +527,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     const gitPanel = workspaceSet.active.gitPanel;
     workspaceSet.active.haltGitLogScroll(); // keyboard is precise — adopt-and-stop any glide (One-Writer)
     const end = workspaceSet.active.logFlatEnd();
-    gitPanel.logIndex.value = Math.max(
-      0,
-      Math.min(gitPanel.logIndex.value + delta, Number.isFinite(end) ? end - 1 : gitPanel.logIndex.value + delta),
-    );
-    const approximateVisible = 12;
-    if (gitPanel.logIndex.value < gitPanel.logScrollTop.value) gitPanel.logScrollTop.value = gitPanel.logIndex.value;
-    else if (gitPanel.logIndex.value >= gitPanel.logScrollTop.value + approximateVisible)
-      gitPanel.logScrollTop.value = gitPanel.logIndex.value - approximateVisible + 1;
+    gitPanel.moveLogSelection(delta, end);
     workspaceSet.active.ensureLogWindow(gitPanel.logScrollTop.value);
   };
   const moveChanges = (direction: 1 | -1): void => {
@@ -541,7 +535,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     workspaceSet.active.haltGitChangesScroll(); // keyboard is precise — adopt-and-stop wheel glide
     const rows = currentChangeRows();
     const next = GitRows.Class.nextFileRow(rows, gitPanel.changesIndex.value, direction);
-    if (next >= 0) gitPanel.changesIndex.value = next;
+    if (next >= 0) gitPanel.moveChangesSelection(next);
     else if (direction === 1) gitPanel.region.value = 'log'; // flow into the log
   };
 
@@ -601,7 +595,6 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'git.togglePanel': () => {
       workspaceSet.active.toggleGit();
       if (workspaceSet.active.focus.value === 'git') {
-        workspaceSet.active.gitPanel.region.value = 'changes';
         void workspaceSet.active.git.value?.refresh();
         void workspaceSet.active.commitLog.value?.ensureRange(0, 50);
       }
@@ -614,7 +607,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
         workspaceSet.active.gitPanel.region.value = 'changes'; // flow back up into the changes
         const rows = currentChangeRows();
         const last = GitRows.Class.nextFileRow(rows, rows.length, -1);
-        if (last >= 0) workspaceSet.active.gitPanel.changesIndex.value = last;
+        if (last >= 0) workspaceSet.active.gitPanel.moveChangesSelection(last);
       } else moveLog(-1);
     },
     'git.down': () => {

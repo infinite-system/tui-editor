@@ -29,6 +29,9 @@ class $GitPanel {
   get changesScrollTop() {
     return ref(0);
   }
+  get changesViewportHeight() {
+    return ref(1);
+  }
   get changesScrollLeft() {
     return ref(0);
   }
@@ -85,6 +88,9 @@ class $GitPanel {
   get logMomentum() {
     return shallowRef<ScrollMomentum>(AT_REST);
   }
+  get logViewportHeight() {
+    return ref(1);
+  }
   get logScrollLeft() {
     return ref(0);
   }
@@ -108,6 +114,58 @@ class $GitPanel {
   /** Clamp and set the top/bottom split ratio (from a divider drag). */
   setSplit(ratio: number): void {
     this.splitRatio.value = Math.max(MIN_SPLIT, Math.min(MAX_SPLIT, ratio));
+  }
+
+  setVerticalViewportHeights(changesViewportHeight: number, logViewportHeight: number): void {
+    this.changesViewportHeight.value = Math.max(1, changesViewportHeight);
+    this.logViewportHeight.value = Math.max(1, logViewportHeight);
+  }
+
+  // Click selection changes only the selected ITEM. A visible click must never move its viewport.
+  // invariant: Selection is item-anchored, click-set, keyboard-moved, and stays (src/modules/ui/ui.invariants.md)
+  setChangesSelection(index: number): void {
+    this.changesIndex.value = Math.max(0, index);
+  }
+
+  /** Keyboard movement receives the next selectable row and minimally reveals it. */
+  moveChangesSelection(nextIndex: number): void {
+    if (nextIndex < 0) return;
+    this.changesIndex.value = nextIndex;
+    this.revealChangesSelection();
+  }
+
+  private revealChangesSelection(): void {
+    const selectedIndex = this.changesIndex.value;
+    const viewportHeight = this.changesViewportHeight.value;
+    if (selectedIndex < this.changesScrollTop.value) {
+      this.changesScrollTop.value = selectedIndex;
+    } else if (selectedIndex >= this.changesScrollTop.value + viewportHeight) {
+      this.changesScrollTop.value = selectedIndex - viewportHeight + 1;
+    }
+  }
+
+  /** Click selection changes only the selected ITEM. It does not reveal or activate it. */
+  setLogSelection(index: number): void {
+    this.logIndex.value = Math.max(0, index);
+  }
+
+  /** Arrow/page movement advances from persistent selection and minimally reveals the destination. */
+  moveLogSelection(delta: number, onePastLastIndex: number): void {
+    const lastIndex = Number.isFinite(onePastLastIndex)
+      ? Math.max(0, onePastLastIndex - 1)
+      : this.logIndex.value + Math.max(0, delta);
+    this.logIndex.value = Math.max(0, Math.min(this.logIndex.value + delta, lastIndex));
+    this.revealLogSelection();
+  }
+
+  private revealLogSelection(): void {
+    const selectedIndex = this.logIndex.value;
+    const viewportHeight = this.logViewportHeight.value;
+    if (selectedIndex < this.logScrollTop.value) {
+      this.logScrollTop.value = selectedIndex;
+    } else if (selectedIndex >= this.logScrollTop.value + viewportHeight) {
+      this.logScrollTop.value = selectedIndex - viewportHeight + 1;
+    }
   }
 
   // invariant: A pane is a self-contained scrollable viewport (project.invariants.md)
