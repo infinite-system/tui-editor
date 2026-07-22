@@ -29,12 +29,9 @@ import { Files } from '../system/Files';
 import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { TreePaneRenderer } from './TreePaneRenderer';
 import { GitPaneRenderer } from './GitPaneRenderer';
-import {
-  TabBarRenderer,
-  type TabBarSegment,
-  type WorkspaceTabBarSegment,
-} from './TabBarRenderer';
 import { EditorPaneRenderer } from './EditorPaneRenderer';
+import { StatusBar } from './StatusBar';
+import { TabBar } from './TabBar';
 import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
 import { DiffView } from '../diff/DiffView';
 import { MarkdownSplitView } from '../markdown/MarkdownSplitView';
@@ -374,61 +371,17 @@ function $buildRootView(
   mainRow.add(sidebarDivider);
   mainRow.add(editorColumn);
 
-  const statusBar = new BoxRenderable(renderer, {
-    id: 'status-bar',
-    width: '100%',
-    height: 1,
-    flexDirection: 'row',
-    backgroundColor: readPalette().statusBg,
+  // The status bar is a self-contained pane controller: it owns its renderables (bar/text/`?` button),
+  // the button's hover state, and its handlers. RootView mounts statusBar.bar and calls update().
+  const statusBar = new StatusBar.Class({
+    renderer,
+    workspaceSet,
+    app,
+    shortcutHelp,
+    overlayCoordinator,
+    keybindings,
+    tooltip,
   });
-  const statusText = new TextRenderable(renderer, { id: 'status-text', content: '' });
-  statusBar.add(statusText);
-  // Clickable shortcut-help affordance: a real hit-tested `?` cell span pinned to the RIGHT end of
-  // the status bar (the spacer's flexGrow pushes it there). Click toggles the cheat-sheet through
-  // the exclusive-overlay coordinator; hover shows a tooltip with the bound open chord.
-  // invariant: The shortcut sheet lists the effective bindings (src/modules/ui/ui.invariants.md)
-  const statusSpacer = new BoxRenderable(renderer, {
-    id: 'status-spacer',
-    flexGrow: 1,
-    height: 1,
-  });
-  const shortcutHelpButton = new TextRenderable(renderer, {
-    id: 'status-help-button',
-    content: ' ? ',
-    width: 3,
-    height: 1,
-    selectable: false, // a click must only toggle the sheet, never start a text selection
-  });
-  statusBar.add(statusSpacer);
-  statusBar.add(shortcutHelpButton);
-  let shortcutHelpButtonHover = false;
-  const toggleShortcutHelp = (): void => {
-    if (shortcutHelp.open.value) shortcutHelp.close();
-    else overlayCoordinator.openExclusiveOverlay('shortcutHelp', () => shortcutHelp.show());
-  };
-  shortcutHelpButton.onMouseDown = () => {
-    toggleShortcutHelp();
-    renderer.requestRender();
-  };
-  shortcutHelpButton.onMouseMove = (event) => {
-    if (!shortcutHelpButtonHover) {
-      shortcutHelpButtonHover = true;
-      renderer.requestRender();
-    }
-    const openChordHint = keybindings.bindingHint('help.shortcuts', 'global');
-    tooltip.point(
-      `Keyboard shortcuts${openChordHint ? ` (${openChordHint})` : ''}`,
-      event.x,
-      event.y,
-    );
-  };
-  shortcutHelpButton.onMouseOut = () => {
-    if (shortcutHelpButtonHover) {
-      shortcutHelpButtonHover = false;
-      renderer.requestRender();
-    }
-    tooltip.clear();
-  };
 
   if (settings.workspaceTabPosition.value === 'left') {
     mainRow.add(workspaceTabBar, 0);
@@ -436,7 +389,7 @@ function $buildRootView(
     column.add(workspaceTabBar);
   }
   column.add(mainRow);
-  column.add(statusBar);
+  column.add(statusBar.bar);
   root.add(column);
 
   // Command palette overlay — added last so it renders on top; shown only when open.
@@ -1160,11 +1113,7 @@ function $buildRootView(
   }
 
   // Workspace/project tabs and editor/buffer tabs are separate layers backed by the SAME TabStrip
-  // capability. The workspace strip changes orientation; the buffer strip remains horizontal.
-  // WorkspaceTabBarSegment / TabBarSegment types now live on TabBarRenderer (imported above).
-  let workspaceTabBarSegments: WorkspaceTabBarSegment[] = [];
-  let workspaceTabBarHover: { kind: 'tab' | 'close' | 'panBackward' | 'panForward' | 'add'; workspaceIndex: number } | null = null;
-  let lastRevealedWorkspaceIndex = -1;
+  // capability, driven by the TabBar controller (below). The workspace strip changes orientation.
   let workspaceTabBarMountedPosition: 'top' | 'left' = settings.workspaceTabPosition.value;
 
   function synchronizeWorkspaceTabMount(): void {
@@ -1184,237 +1133,45 @@ function $buildRootView(
     workspaceTabBarMountedPosition = position;
   }
 
-  function renderWorkspaceTabBar(): StyledText {
-    // Delegates to TabBarRenderer; RootView keeps the persistent reveal index + hit-test segments and
-    // supplies the interaction state. Behaviour identical (horizontal + vertical orientations).
-    const result = TabBarRenderer.Class.renderWorkspace({
-      strip: workspaceTabStrip,
-      palette: readPalette(),
-      hover: workspaceTabBarHover,
-      lastRevealedIndex: lastRevealedWorkspaceIndex,
-      barWidthValue: Number(workspaceTabBar.width),
-      barHeightValue: Number(workspaceTabBar.height),
-      rendererWidth: renderer.width,
-      rendererHeight: renderer.height,
-    });
-    workspaceTabBarSegments = result.segments;
-    lastRevealedWorkspaceIndex = result.revealedIndex;
-    return result.text;
-  }
+  // The tab-bar CONTROLLER owns both strips' behaviour (handlers, segments, hover/pressed/reveal
+  // state, the render shims). RootView keeps constructing + mounting the renderables (above) and the
+  // layout-position mount (synchronizeWorkspaceTabMount); it just calls render*() each frame.
+  const tabBarController = new TabBar.Class({
+    renderer,
+    tabBar,
+    workspaceTabBar,
+    bufferTabStrip,
+    workspaceTabStrip,
+    workspaceSet,
+    theme,
+    tooltip,
+    overlayCoordinator,
+    contextMenu,
+    quickOpen,
+    keybindings,
+    readPalette,
+  });
 
-  function workspaceTabBarSegmentAt(primaryCoordinate: number): WorkspaceTabBarSegment | null {
-    return workspaceTabBarSegments.find(
-      (segment) => primaryCoordinate >= segment.primaryStart && primaryCoordinate < segment.primaryEnd,
-    ) ?? null;
-  }
 
-  workspaceTabBar.onMouseDown = (event) => {
-    tooltip.clear();
-    const vertical = workspaceTabStrip.orientation.value === 'vertical';
-    const primaryCoordinate = vertical ? event.y - Number(workspaceTabBar.y) : event.x - Number(workspaceTabBar.x);
-    const crossAxisCoordinate = vertical ? event.x - Number(workspaceTabBar.x) : event.y - Number(workspaceTabBar.y);
-    const segment = workspaceTabBarSegmentAt(primaryCoordinate);
-    if (!segment) return;
-    if (segment.kind === 'tab') {
-      const closeHit = vertical
-        ? crossAxisCoordinate === segment.closeCrossAxisCoordinate
-        : primaryCoordinate === segment.closePrimaryCoordinate;
-      if (closeHit && workspaceSet.count > 1) workspaceSet.close(segment.workspaceIndex);
-      else workspaceSet.activate(segment.workspaceIndex);
-    } else if (segment.kind === 'panBackward') {
-      workspaceTabStrip.pan(-1);
-    } else if (segment.kind === 'panForward') {
-      workspaceTabStrip.pan(1);
-    } else {
-      overlayCoordinator.openExclusiveOverlay('quickOpen', () => quickOpen.showWorkspacePath());
-    }
-    renderer.requestRender();
-  };
-  workspaceTabBar.onMouseMove = (event) => {
-    const vertical = workspaceTabStrip.orientation.value === 'vertical';
-    const primaryCoordinate = vertical ? event.y - Number(workspaceTabBar.y) : event.x - Number(workspaceTabBar.x);
-    const crossAxisCoordinate = vertical ? event.x - Number(workspaceTabBar.x) : event.y - Number(workspaceTabBar.y);
-    const segment = workspaceTabBarSegmentAt(primaryCoordinate);
-    let nextHover: typeof workspaceTabBarHover = null;
-    if (segment?.kind === 'tab') {
-      const closeHit = vertical
-        ? crossAxisCoordinate === segment.closeCrossAxisCoordinate
-        : primaryCoordinate === segment.closePrimaryCoordinate;
-      nextHover = { kind: closeHit ? 'close' : 'tab', workspaceIndex: segment.workspaceIndex };
-      const workspaceTab = workspaceSet.tabs()[segment.workspaceIndex];
-      tooltip.point(
-        closeHit
-          ? 'Close project (Ctrl+Shift+W)'
-          : `Switch project: ${workspaceTab?.name ?? ''} (Ctrl+Shift+PageUp/PageDown)`,
-        event.x,
-        event.y,
-      );
-    } else if (segment) {
-      nextHover = { kind: segment.kind, workspaceIndex: -1 };
-      tooltip.point(
-        segment.kind === 'add'
-          ? 'Open project folder (Ctrl+Shift+O)'
-          : 'Pan project tabs without switching',
-        event.x,
-        event.y,
-      );
-    } else {
-      tooltip.clear();
-    }
-    if (JSON.stringify(nextHover) !== JSON.stringify(workspaceTabBarHover)) {
-      workspaceTabBarHover = nextHover;
-      renderer.requestRender();
-    }
-  };
-  workspaceTabBar.onMouseOut = () => {
-    workspaceTabBarHover = null;
-    tooltip.clear();
-    renderer.requestRender();
-  };
 
   // The editor tab bar. ONE geometry source: a layout pass produces positioned SEGMENTS that BOTH the
   // renderer and the click/hover hit-test consume — so a drawn cell and its hit-rect can never
   // disagree (the arrows-not-clickable bug was exactly that mismatch). Tabs fill from the left; the
   // overflow arrows pin to the RIGHT edge. Three visual states per target: idle → hover → pressed.
-  let tabBarSegments: TabBarSegment[] = [];
   // Hover/press state (view-only), driven by tab-bar mouse move/press.
-  let tabBarHover: { kind: 'tab' | 'close' | 'previewToggle' | 'arrowLeft' | 'arrowRight' | 'badge'; index: number } | null = null;
-  let tabBarArrowPressed: 'arrowLeft' | 'arrowRight' | null = null;
-  let tabBarPreviewPressed = false;
-  let tabBarClosePressed: number | null = null; // index of the tab whose ✕ is being pressed
   // The strip's VIEWPORT PAN offset (first visible tab), INDEPENDENT of the active tab — the overflow
   // arrows drive this and never change which buffer is active (VS Code's ‹ › pan the strip only).
   // Changing the active tab (click / Ctrl+PageUp-Down) auto-reveals it, but panning does not snap back.
-  let lastRevealedActiveIndex = -1;
 
-  function renderTabBar(): StyledText {
-    // Delegates to TabBarRenderer; RootView keeps the persistent reveal index + hit-test segments and
-    // supplies the interaction (hover/pressed) state and the markdown-preview action inputs.
-    const result = TabBarRenderer.Class.renderBuffer({
-      strip: bufferTabStrip,
-      palette: readPalette(),
-      barWidth: tabBar.width as number,
-      hover: tabBarHover,
-      closePressed: tabBarClosePressed,
-      previewPressed: tabBarPreviewPressed,
-      arrowPressed: tabBarArrowPressed,
-      lastRevealedIndex: lastRevealedActiveIndex,
-      activeFileIsMarkdown: workspaceSet.active.activeFileIsMarkdown,
-      showingMarkdownPreview: workspaceSet.active.showingMarkdownPreview,
-      previewIcon: theme.actionIcons.preview,
-    });
-    tabBarSegments = result.segments;
-    lastRevealedActiveIndex = result.revealedIndex;
-    return result.text;
-  }
 
   // Resolve a local column to a tab-bar segment (shared by click + hover — one geometry source).
-  function tabBarSegmentAt(localColumn: number): TabBarSegment | null {
-    return tabBarSegments.find((segment) => localColumn >= segment.start && localColumn < segment.end) ?? null;
-  }
 
   // The arrows PAN the strip viewport only — they never change the active buffer (the render clamps
   // the offset, so panning past an end is a no-op and the arrow reads as disabled there).
-  function scrollTabsLeft(): void {
-    if (bufferTabStrip.scrollOffset.value > 0) {
-      bufferTabStrip.pan(-1);
-      renderer.requestRender();
-    }
-  }
-  function scrollTabsRight(): void {
-    bufferTabStrip.pan(1); // clamped to maxScrollOffset in renderTabBar
-    renderer.requestRender();
-  }
 
   // Clicking the count badge opens a dropdown of ALL open buffers (VS Code's overflow menu) — reusing
   // the ContextMenu machinery (modal, keyboard-navigable, Esc to close). Selecting a row jumps to it.
-  function openTabDropdown(anchorColumn: number): void {
-    const items = workspaceSet.active.buffers.tabs().map((tab, index) => ({
-      id: String(index),
-      label: `${tab.active ? '●' : ' '} ${Files.Class.basename(tab.path)}${tab.dirty ? '  ✕' : ''}`,
-      enabled: true,
-    }));
-    overlayCoordinator.openExclusiveOverlay('contextMenu', () =>
-      contextMenu.openAt(
-        items,
-        (tabBar.x as number) + anchorColumn,
-        (tabBar.y as number) + 1,
-        { width: renderer.width, height: renderer.height },
-        (itemId) => workspaceSet.active.activateTab(Number(itemId)),
-      ),
-    );
-  }
 
-  tabBar.onMouseDown = (event) => {
-    tooltip.clear();
-    const localColumn = event.x - (tabBar.x as number);
-    const segment = tabBarSegmentAt(localColumn);
-    if (!segment) return;
-    if (segment.kind === 'tab') {
-      if (localColumn === segment.closeColumn) {
-        tabBarClosePressed = segment.index; // show the pressed ✕ before the close/confirm
-        renderer.requestRender();
-        workspaceSet.active.requestCloseTab(segment.index);
-      } else workspaceSet.active.activateTab(segment.index);
-    } else if (segment.kind === 'badge') {
-      openTabDropdown(segment.start);
-    } else if (segment.kind === 'previewToggle') {
-      tabBarPreviewPressed = true;
-      workspaceSet.active.toggleMarkdownPreview();
-      renderer.requestRender();
-    } else {
-      tabBarArrowPressed = segment.kind; // pressed colour shows until release
-      if (segment.kind === 'arrowLeft') scrollTabsLeft();
-      else scrollTabsRight();
-      renderer.requestRender();
-    }
-  };
-  tabBar.onMouseUp = () => {
-    if (tabBarArrowPressed || tabBarPreviewPressed || tabBarClosePressed !== null) {
-      tabBarArrowPressed = null;
-      tabBarPreviewPressed = false;
-      tabBarClosePressed = null;
-      renderer.requestRender();
-    }
-  };
-  tabBar.onMouseMove = (event) => {
-    const localColumn = event.x - (tabBar.x as number);
-    const segment = tabBarSegmentAt(localColumn);
-    let next: typeof tabBarHover = null;
-    if (segment?.kind === 'tab') {
-      next = { kind: localColumn === segment.closeColumn ? 'close' : 'tab', index: segment.index };
-    } else if (segment) {
-      next = { kind: segment.kind, index: -1 };
-    }
-    if (segment?.kind === 'previewToggle') {
-      const bindingHint = keybindings.bindingHint('markdown.togglePreview', 'editor');
-      tooltip.point(
-        `Toggle Markdown preview${bindingHint ? ` (${bindingHint})` : ''}`,
-        event.x,
-        event.y,
-      );
-    } else if (segment?.kind === 'arrowLeft' || segment?.kind === 'arrowRight') {
-      tooltip.point('Pan file tabs without switching', event.x, event.y);
-    } else if (segment?.kind === 'badge') {
-      tooltip.point('Show all open files', event.x, event.y);
-    } else {
-      tooltip.clear();
-    }
-    if (JSON.stringify(next) !== JSON.stringify(tabBarHover)) {
-      tabBarHover = next;
-      renderer.requestRender();
-    }
-  };
-  tabBar.onMouseOut = () => {
-    if (tabBarHover || tabBarArrowPressed || tabBarPreviewPressed || tabBarClosePressed !== null) {
-      tabBarHover = null;
-      tabBarArrowPressed = null;
-      tabBarPreviewPressed = false;
-      tabBarClosePressed = null;
-      tooltip.clear();
-      renderer.requestRender();
-    }
-  };
 
   // Builds the visible window as two aligned StyledTexts — the gutter (line numbers + current-line
   // marker) and the code (syntax colors only, NO gutter). Only the visible lines are tokenized
@@ -1522,29 +1279,8 @@ function $buildRootView(
     return result.text;
   }
 
-  function renderStatus(): string {
-    const editor = workspaceSet.active.editor;
-    const parts: string[] = [` ${workspaceSet.active.name.value || '—'}`];
-    if (editor.hasDocument.value) {
-      parts.push(editor.title);
-      parts.push(`Ln ${editor.cursor.line.value + 1}, Col ${editor.cursor.col.value + 1}`);
-      parts.push(`${editor.document.lineCount} lines`);
-    }
-    parts.push(
-      workspaceSet.active.focus.value === 'files'
-        ? '[Files]'
-        : activeMarkdownSplitView?.previewFocused
-          ? '[Markdown Preview]'
-          : '[Editor Source]',
-    );
-    if (workspaceSet.active.focus.value === 'git')
-      parts.push('checkbox/Space stage · row/o open · d discard');
-    if (app.copyNotice.value) parts.push(app.copyNotice.value);
-    parts.push(
-      app.quitChordArmed.value ? 'Ctrl+X armed — Ctrl+C quits' : 'Ctrl+Q/F10 quit',
-    );
-    return parts.join('  ·  ');
-  }
+  // renderStatus moved into the StatusBar controller (it composes the same parts from workspace/app
+  // state + the markdown-preview-focused flag RootView passes to statusBar.update).
 
   // The rich side-by-side DiffView overlays the editor area when a git diff is open (mirrors the old
   // showingDiff overlay, but the DiffView renderable replaces the unified-text diffEditor). DiffView has
@@ -1706,10 +1442,9 @@ function $buildRootView(
     editorArea.borderColor = sourcePaneFocused ? palette.borderActive : palette.border;
     editorArea.title = workspaceSet.active.editor.hasDocument.value ? workspaceSet.active.editor.title : 'Editor';
     editorArea.titleColor = sourcePaneFocused ? palette.accent : palette.dim;
-    tabBar.content = renderTabBar();
-    workspaceTabBar.content = renderWorkspaceTabBar();
+    tabBar.content = tabBarController.renderBuffer();
+    workspaceTabBar.content = tabBarController.renderWorkspace();
     workspaceTabBar.fg = palette.fg;
-    statusBar.backgroundColor = palette.statusBg;
 
     sidebarBody.content = gitView ? renderGitPanel() : renderTree();
     sidebarBody.fg = palette.fg;
@@ -1726,11 +1461,7 @@ function $buildRootView(
     codeBody.fg = palette.fg;
     codeBody.selectionBg = palette.selection;
     applySelection(); // after content is set, so selection maps onto the current buffer
-    statusText.content = renderStatus();
-    statusText.fg = palette.dim;
-    // The `?` help affordance brightens on hover and while its sheet is open.
-    shortcutHelpButton.fg =
-      shortcutHelpButtonHover || shortcutHelp.open.value ? palette.accent : palette.dim;
+    statusBar.update(palette, activeMarkdownSplitView?.previewFocused ?? false);
 
     // Palette overlay.
     const open = commands.open.value;
