@@ -8,7 +8,18 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
 
 ### 🔴 ACTIVE QUEUE (coordinator-relayed, 2026-07-21 — priority order)
 
-- [~] **GATE-RED FIX (CRITICAL #1)** — full smoke suite was red for ~5 commits (since b84e700 Ctrl+P rebind).
+### ✅ SEALING PROGRESS (this session — commits after 01deb… base)
+- `c489c46` gate-red fixed (palette via **F1**; Ctrl+Shift+P is VS-Code-intercepted/legacy-unencodable) + **reserved global quit** (Ctrl+Q/F10 from any modal — untrap) + **pre-commit hook** (full gate every commit, `SKIP_GATE=1`/`SKIP_PERF=1` escapes).
+- `d2e1aa8` terminal freeze recovery (tab-defocus → suspend/resume re-asserts termios+mouse+focus+repaint).
+- `a28ddc3` theme+commands invariants bootstrapped (map-gate allowlist → `kernel storage syntax`).
+- `3460441` **hermetic git** (Processes strips GIT_*; tests use gitCleanEnv) — sealed a NON-DETERMINISTIC gate (green direct / red under-hook) + **check-unwired hardened** (require `.Class` call-site) + **perf-baselines soft-gated**.
+- `bot66l8a2`(pending) **SEAL A part 1**: reconciled 10/11 dangling invariant annotations (6 were MY OWN — freeze/quit annotations referenced records that never existed; checker wasn't gating). Added `The render loop never wedges` + `Reserved global chords fire from any mode` + `N open tabs do not cost N live documents`; re-pointed SettingsPanel + Bootstrap cross-module path. + merge-gate.sh unsets GIT_* (whole gate hermetic).
+
+**SEAL A REMAINING (finish → then wire checker into gate):** 1 orphan left = `project.invariants.md` pane invariant EMPTY Evidence. Fill via the **SEAL C#1 driven pane/DiffView contract** (they close each other): git fixture (modify an EARLY line so last line PLINE-119 is unchanged) → open file in editor, PageDown to true last line (record editorScrollTop) → Ctrl+G git panel → `o` opens change diff (git.openFile→openChangeAtRow) → Escape closes → editor reaches PLINE-119 + same scrollTop (pane extent survived the editorArea↔diffContainer swap). NEEDS: add a `showingDiff` status field to Bootstrap's publish (no field today) to confirm the diff opened. THEN: put the contract name in the pane Evidence field; verify `check_invariants.mjs --all --refs` exits 0; add `--all` + `--refs` as HARD steps in merge-gate.sh (AFTER 0 problems, else the hook blocks all commits). check_invariants at `.claude/skills/invariants/scripts/check_invariants.mjs`.
+
+**⚠️ OPERATIONAL: inotify exhaustion.** Long sessions leak bun app processes (each GitWatcher holds an inotify instance; max_user_instances=128). At ~123/128, smoke-git-watch + gitSplitRatio flake ("expected 0 got 5" / GitWatcher-non-recursive). FIX WHEN FLAKY: `for pid in $(pgrep -f main.ts); do kill -9 $pid; done` (frees instances). Consider a harness reap-on-kill fix. NOT a code bug — resource exhaustion from accumulated test launches.
+
+- [x] **GATE-RED FIX (CRITICAL #1)** — full smoke suite was red for ~5 commits (since b84e700 Ctrl+P rebind).
       Causes: (1) smoke-editor/smoke-wrap sent C-p expecting the palette (C-p is now go-to-file). FIX: added
       F1→palette binding (Ctrl+Shift+P is VS-Code-intercepted + unencodable on legacy pty; F1 always delivers)
       + smokes send F1. (2) smoke-wrap gutter offsets stale (tab bar shifted content down a row) → made the

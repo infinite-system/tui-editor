@@ -7,7 +7,7 @@
 // app owns the screen), and the offending cycle degrades to a no-op. A recover callback (request a
 // repaint) then keeps the app responsive on the next event, so one bad cycle never freezes the app.
 //
-// invariant: The immediate layer never blocks (project.invariants.md)
+// invariant: The render loop never wedges (project.invariants.md)
 import { Static } from 'ivue/extras';
 import { Logging } from '../system/Logging';
 

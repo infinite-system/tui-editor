@@ -3,7 +3,7 @@
 // live-applies through the reactive fields) and is persisted with Settings.save(). View-only over the
 // store — it owns no settings values itself.
 //
-// invariant: Settings changes live-apply through the reactive store (settings.invariants.md)
+// invariant: Every setting is a reactive cell read through its value ref (settings.invariants.md)
 import { Reactive } from 'ivue';
 import { ref } from 'vue';
 import { Settings, type SettingsValues, type ScrollModifier, type GlyphMode } from './Settings';

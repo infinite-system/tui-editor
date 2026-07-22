@@ -466,6 +466,41 @@ unaffected.
 
 **Last refined:** 2026-07-21
 
+### The render loop never wedges
+
+**Invariant:** If a frame, input, or background handler throws, OR the terminal session state is
+reset out from under the app (a hidden VS Code tab reverting termios / mouse / focus modes), then the
+demand-driven render loop keeps running and the app stays responsive — one bad cycle degrades to a
+logged no-op and the next event repaints; a lost terminal setup is re-asserted on focus-in. The app
+NEVER freezes while alive.
+
+**Scope:** The frame callback, the reactive paint effect, and every input/background handler
+(keypress, mouse, resize, focus) in `Bootstrap.ts`; the terminal-session recovery in
+`TerminalSession.ts`; the exception isolation in `HandlerGuard.ts`.
+
+**Mechanism:** Every handler runs inside `HandlerGuard.run` — a throw is caught, logged to the FILE
+(never the TTY), and a repaint is requested, so it degrades one cycle instead of stopping the pump.
+On focus-in, `TerminalSession.reenterTerminalModes` (OpenTUI suspend/resume) re-applies termios raw +
+mouse + focus reporting + a full repaint, so a tab-return never leaves the app frozen or input-dead.
+
+**Generates:** the freeze-resilience of the demand-driven loop; the tab-defocus recovery; the
+product guarantee that the app is never a black box the user must kill.
+
+**Evidence:** `src/modules/app/HandlerGuard.ts` (`run`); `src/modules/app/TerminalSession.ts`
+(`reenterTerminalModes`); `src/modules/app/Bootstrap.ts` (guarded frame/paint/keypress/mouse/resize/
+focus handlers, focus-in recovery); the `focus-recovery` behavioral contract (focus-out→focus-in
+emits a fresh frame and the app stays responsive).
+
+**Impossible if true:** a thrown handler stopping the render loop so the app freezes while the
+process is alive; a tab defocus→refocus leaving the screen stale or the mouse dead with no recovery.
+
+**Verification:** the `focus-recovery` contract in `scripts/behavioral-contracts.sh` +
+`terminal-session.test.ts` (a guarded throw is isolated and recovery still runs).
+
+**Status:** provisional
+
+**Last refined:** 2026-07-21
+
 ### Async results are revision-stamped and stale results discarded
 
 **Invariant:** If an async result (parse, LSP, git, ESLint) is applied, then it carries the

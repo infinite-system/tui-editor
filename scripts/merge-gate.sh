@@ -14,6 +14,13 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/.." && pwd)"
 cd "$ROOT"
 export PATH="$HOME/.bun/bin:$PATH"
+# Hermetic git for the WHOLE gate. When invoked from the pre-commit hook, git exports
+# GIT_DIR / GIT_INDEX_FILE / GIT_WORK_TREE / … into the environment; any `git` a test, smoke, or
+# fixture spawns would then operate on the PARENT repo instead of its own temp fixture — a
+# non-deterministic, parent-state-dependent failure (a fixture `git init` re-inits the parent, etc.).
+# The app is already hermetic (Processes.hermeticEnvironment); clearing here also covers the shell
+# fixtures. Harmless when run directly (these are normally unset). One boundary, whole gate hermetic.
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR GIT_PREFIX GIT_INDEX_VERSION GIT_NAMESPACE
 fail=0
 step() {
   local name="$1"; shift

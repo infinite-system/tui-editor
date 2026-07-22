@@ -17,7 +17,7 @@
 // on. OpenTUI's native setup enables it, but we also assert it explicitly at startup so a focus-in
 // always arrives — without it the app gets no event and cannot self-heal.
 //
-// invariant: The immediate layer never blocks (project.invariants.md)
+// invariant: The render loop never wedges (project.invariants.md)
 import { Static } from 'ivue/extras';
 
 /** The minimal terminal-control surface the re-assert needs (a CliRenderer satisfies it). */

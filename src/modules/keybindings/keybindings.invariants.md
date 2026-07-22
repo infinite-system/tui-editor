@@ -167,3 +167,38 @@ the hint.
 **Status:** provisional
 
 **Last refined:** 2026-07-21
+
+### Reserved global chords fire from any mode
+
+**Invariant:** If a binding is marked `reserved` (an escape hatch — quit), then it resolves and
+fires from EVERY mode, including while a modal or text input (find, replace, quick-open,
+find-in-files, settings) holds keyboard focus — the focused input must let it pass through instead
+of consuming it. A reserved chord is a single chord (no multi-step), so the pass-through check is
+stateless and cannot disturb the in-flight chord resolver.
+
+**Scope:** `KeybindingRegistry.resolveReservedGlobal` and the top of the key router in
+`Bootstrap.ts` (checked before any modal/context branch). The reserved set today: Ctrl+Q, F10 (quit).
+
+**Mechanism:** Reserved bindings carry a `reserved` flag in the binding data;
+`resolveReservedGlobal` matches a key against reserved single chords WITHOUT touching chord state,
+and the input router runs it FIRST — ahead of every modal input branch that would otherwise swallow
+the key. Printable + navigation keys still reach the focused input; only the reserved set bypasses it.
+
+**Generates:** the always-available quit escape hatch; the product's "no dead ends" guarantee that a
+user can leave any mode; one reserved-set rule instead of per-modal quit handling.
+
+**Evidence:** `src/modules/keybindings/KeybindingRegistry.ts` (`resolveReservedGlobal`, the
+`reserved` field); `src/modules/keybindings/keybindings.defaults.ts` (Ctrl+Q / F10 marked
+`reserved: true`); `src/modules/app/Bootstrap.ts` (reserved check at the top of `keyTick`); the
+`focus-recovery` and quit drive-verification (Ctrl+Q / F10 quit from normal / find / quick-open).
+
+**Impossible if true:** a focused search/modal input swallowing a reserved quit chord so the user is
+trapped with no way to quit; a reserved multi-step chord (which would need chord state and break the
+stateless pass-through).
+
+**Verification:** a driven test — open find / quick-open, type, press Ctrl+Q (and F10); assert the
+app quits (the pane returns to the shell); typing without a reserved chord keeps the app alive.
+
+**Status:** provisional
+
+**Last refined:** 2026-07-21

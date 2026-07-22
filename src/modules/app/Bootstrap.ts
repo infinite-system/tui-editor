@@ -209,7 +209,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     // The whole paint pass is exception-isolated: a throw while projecting model→renderables must
     // degrade this one frame (logged to file) and request a repaint, never wedge the demand-driven
     // loop. The signal reads stay first so reactive dependency tracking is unaffected by the guard.
-    // invariant: The immediate layer never blocks (project.invariants.md)
+    // invariant: The render loop never wedges (project.invariants.md)
     // Explicit subscriptions to the load-bearing signals (document.revision in particular is only
     // read indirectly by update(), so touch it here to guarantee content changes repaint).
     void editor.document.revision.value;
@@ -332,7 +332,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     FrameProbe.Class.dump(renderer, framePath);
   };
   // A throw in a frame tick (animation step, layout convergence) must not stop the pump: isolate it
-  // and keep the loop alive. invariant: The immediate layer never blocks (project.invariants.md)
+  // and keep the loop alive. invariant: The render loop never wedges (project.invariants.md)
   const onFrame = (): void => {
     HandlerGuard.Class.run('frame', frameTick, () => renderer.requestRender());
   };
@@ -625,7 +625,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     // every modal/search branch below, or a focused find/quick-open/settings input would swallow the
     // quit key and TRAP the user with no way out (a hard no-dead-ends / learnability failure). The
     // check is stateless (single-chord match only), so it never disturbs the chord resolver below.
-    // invariant: Reserved global chords fire from any mode (keybindings.invariants.md)
+    // invariant: Reserved global chords fire from any mode (src/modules/keybindings/keybindings.invariants.md)
     const reservedGlobalAction = keybindings.resolveReservedGlobal({
       name: key.name,
       ctrl: key.ctrl,
@@ -794,7 +794,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
     // No explicit render here — any model mutation above triggers the frame effect.
   };
   // A throw while handling a keystroke must not wedge the loop: isolate + repaint so the app stays
-  // responsive. invariant: The immediate layer never blocks (project.invariants.md)
+  // responsive. invariant: The render loop never wedges (project.invariants.md)
   const onKey = (key: KeyEvent): void => {
     HandlerGuard.Class.run('keypress', () => keyTick(key), () => app.requestRender());
   };
@@ -821,7 +821,7 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
   // restore it nor redraw on return — leaving termios raw mode reverted (Ctrl+Q eaten by XON flow
   // control), mouse SGR + focus reporting dropped (dead wheel/click), and a stale frame (looks
   // frozen). On focus-in we re-enter the FULL terminal setup + force a repaint, restoring all three.
-  // invariant: The immediate layer never blocks (project.invariants.md)
+  // invariant: The render loop never wedges (project.invariants.md)
   const writeSequence = (sequence: string): void => {
     try {
       process.stdout.write(sequence);
