@@ -70,4 +70,24 @@ describe('FileTree independent scroll window', () => {
     expect(tree.windowTop()).toBe(10); // rows.length(20) - viewportHeight(10)
     expect(tree.scrollTop.value).toBe(10); // and the clamp is written back
   });
+
+  test('horizontal scrolling uses the tree content width and live viewport width', () => {
+    const tree = new FileTree.Class();
+    writeFileSync(join(treeRoot, 'a-very-long-file-name-that-overflows-the-tree.txt'), 'x');
+    tree.open(treeRoot);
+    tree.viewportWidth.value = 18;
+
+    expect(tree.maxScrollLeft).toBeGreaterThan(0);
+    tree.scrollByColumns(10);
+    expect(tree.scrollLeft.value).toBe(10);
+    tree.scrollByColumns(10_000);
+    expect(tree.scrollLeft.value).toBe(tree.maxScrollLeft);
+    tree.scrollByColumns(-10_000);
+    expect(tree.scrollLeft.value).toBe(0);
+
+    tree.viewportWidth.value = tree.contentWidth + 1;
+    tree.clampHorizontalScroll();
+    expect(tree.maxScrollLeft).toBe(0);
+    expect(tree.scrollLeft.value).toBe(0);
+  });
 });

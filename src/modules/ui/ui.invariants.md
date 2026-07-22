@@ -336,32 +336,31 @@ editor unit tests. Persistence proven: highlight cells identical 1s after the dr
 
 ### A scrollbar track is derived per frame from its region rect
 
-**Invariant:** If a scrollbar renders, then its track occupies exactly the trailing inner edge of
-its region's CONTENT rect (right column vertical, bottom row horizontal, corner cell free), derived
-each frame from the region's ACTUAL rendered layout through the ONE geometry source — and a bar
-with no scrollable range does not exist at all.
+**Invariant:** If a pane overflows on an axis, then that axis has a scrollbar whose track occupies
+the trailing inner edge of the pane's CONTENT rect, derived each frame through the ONE geometry
+source; every non-overflowing axis has no bar, and scrollbar visual thickness is axis-independent.
 
-**Scope:** every scrollbar (editor vertical + horizontal, git changes, git commit log, and any
-future pane).
+**Scope:** every scrollbar (editor vertical + horizontal, file tree vertical + horizontal, git
+changes vertical + horizontal, git commit log vertical + horizontal, and any future pane).
 
 **Mechanism:** `ScrollbarGeometry.Class.scrollbarGeometry(orientation, region, scroll)` is the only
-authority: placement, track length, min-thumb inflation with an exact-extremes scale, and the
-hidden-when-fits predicate; `applyBarGeometry` applies it with explicit `visible` and an intended-
-thickness map (layout read-back returns 0 pre-layout). Regions are rebuilt per frame from the live
-layout (codeBody rect; gitPanelGeometry).
+authority for placement, track length, min-thumb inflation, exact-extremes scale, and hidden-when-
+fits. `RootView.applyBarGeometry` applies the configured cross-axis cell count; horizontal bars keep
+OpenTUI's native drag geometry and repaint with half-height `▂`/`▄` glyphs so N rows carry the same
+visual ink as N vertical columns on a roughly 2:1 terminal cell.
 
-**Generates:** aligned tracks across split positions; reachable extremes; grabbable thumbs; no
-phantom bars.
+**Generates:** a bar on every overflowing axis; aligned tracks across split positions; reachable
+clipped content; grabbable thumbs; no phantom bars; equal visual thickness across axes.
 
-**Evidence:** 17 property tests over region shapes (`scrollbar-geometry.test.ts`, incl the
-degenerate tiny-track case); FrameProbe sweeps — files view has ZERO bar cells, git view's log
-thumb starts exactly at the first log row within content columns.
+**Evidence:** `src/modules/ui/ScrollbarGeometry.test.ts` (17 region/property cases);
+`scripts/smoke-scrollbars.sh` (narrow tree/changes/log overflow, real SGR 75 reveal, half-height
+horizontal paint vs vertical columns, and fitting-pane absence), wired in `scripts/merge-gate.sh`.
 
-**Impossible if true:** a track cell outside its region's content rect; a bar visible with nothing
-to scroll; two bars deriving placement from different math; a thumb below the minimum size.
+**Impossible if true:** an overflowing tree, changes, or log row whose clipped tail cannot be
+reached; a bar visible with nothing to scroll; a horizontal thumb that reads twice as thick as the
+same configured vertical thumb; two bars deriving placement from different math.
 
-**Verification:** `bun test src/modules/ui/scrollbar-geometry.test.ts` + the FrameProbe block-glyph
-sweep at two layouts.
+**Verification:** `bun test src/modules/ui/ScrollbarGeometry.test.ts && bash scripts/smoke-scrollbars.sh`
 
 **Status:** established
 

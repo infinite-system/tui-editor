@@ -29,7 +29,19 @@ class $GitPanel {
   get changesScrollTop() {
     return ref(0);
   }
+  get changesScrollLeft() {
+    return ref(0);
+  }
+  get changesViewportWidth() {
+    return ref(1);
+  }
+  get changesContentWidth() {
+    return ref(0);
+  }
   get changesMomentum() {
+    return shallowRef<ScrollMomentum>(AT_REST);
+  }
+  get changesHorizontalMomentum() {
     return shallowRef<ScrollMomentum>(AT_REST);
   }
   get changesHovered() {
@@ -73,6 +85,18 @@ class $GitPanel {
   get logMomentum() {
     return shallowRef<ScrollMomentum>(AT_REST);
   }
+  get logScrollLeft() {
+    return ref(0);
+  }
+  get logViewportWidth() {
+    return ref(1);
+  }
+  get logContentWidth() {
+    return ref(0);
+  }
+  get logHorizontalMomentum() {
+    return shallowRef<ScrollMomentum>(AT_REST);
+  }
   /** Fraction of the sidebar height given to the top (changes+commit) region. */
   get splitRatio() {
     return ref(0.5);
@@ -84,6 +108,44 @@ class $GitPanel {
   /** Clamp and set the top/bottom split ratio (from a divider drag). */
   setSplit(ratio: number): void {
     this.splitRatio.value = Math.max(MIN_SPLIT, Math.min(MAX_SPLIT, ratio));
+  }
+
+  // invariant: A pane is a self-contained scrollable viewport (project.invariants.md)
+  get changesMaxScrollLeft(): number {
+    return Math.max(0, this.changesContentWidth.value - Math.max(1, this.changesViewportWidth.value));
+  }
+
+  get logMaxScrollLeft(): number {
+    return Math.max(0, this.logContentWidth.value - Math.max(1, this.logViewportWidth.value));
+  }
+
+  setChangesHorizontalExtent(contentWidth: number, viewportWidth: number): void {
+    this.changesContentWidth.value = Math.max(0, contentWidth);
+    this.changesViewportWidth.value = Math.max(1, viewportWidth);
+    this.changesScrollLeft.value = Math.max(
+      0,
+      Math.min(this.changesScrollLeft.value, this.changesMaxScrollLeft),
+    );
+  }
+
+  setLogHorizontalExtent(contentWidth: number, viewportWidth: number): void {
+    this.logContentWidth.value = Math.max(0, contentWidth);
+    this.logViewportWidth.value = Math.max(1, viewportWidth);
+    this.logScrollLeft.value = Math.max(0, Math.min(this.logScrollLeft.value, this.logMaxScrollLeft));
+  }
+
+  scrollChangesByColumns(deltaColumns: number): void {
+    this.changesScrollLeft.value = Math.max(
+      0,
+      Math.min(this.changesScrollLeft.value + deltaColumns, this.changesMaxScrollLeft),
+    );
+  }
+
+  scrollLogByColumns(deltaColumns: number): void {
+    this.logScrollLeft.value = Math.max(
+      0,
+      Math.min(this.logScrollLeft.value + deltaColumns, this.logMaxScrollLeft),
+    );
   }
 
 }

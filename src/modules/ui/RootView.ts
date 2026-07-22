@@ -13,9 +13,11 @@ import {
   bg,
   bold,
   ScrollBarRenderable,
+  parseColor,
   type TextChunk,
   type CliRenderer,
   type OptimizedBuffer,
+  type ColorInput,
 } from '@opentui/core';
 import { Static } from 'ivue/extras';
 import type { Workspace } from '../workspace/Workspace';
@@ -31,7 +33,7 @@ import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
 import { DiffView } from '../diff/DiffView';
 import { SelectableText } from './SelectableText';
 import { GitRows, type ChangeRow, type FileRow } from '../git/GitRows';
-import { GitLogRows } from '../git/GitLogRows';
+import { GitLogRows, type CommitLogRow } from '../git/GitLogRows';
 import { ScrollbarGeometry } from './ScrollbarGeometry';
 import type { ContextMenu, ContextMenuItem } from './ContextMenu';
 import type { Tooltip } from './Tooltip';
@@ -54,6 +56,47 @@ function roleColor(role: Role, palette: Palette): string {
     case 'added': return palette.added;
     case 'removed': return palette.deleted;
     default: return palette.fg;
+  }
+}
+
+/**
+ * OpenTUI paints a horizontal slider as a full-cell rectangle. Terminal cells are roughly twice as
+ * tall as they are wide, so a one-row bar reads about twice as thick as a one-column vertical bar.
+ * Keep OpenTUI's native slider for hit-testing and drag math, then repaint its exact thumb rectangle
+ * with half-height glyphs: one configured row now carries about one configured column of visual ink.
+ */
+function paintAxisBalancedHorizontalScrollbar(
+  scrollbar: ScrollBarRenderable,
+  buffer: OptimizedBuffer,
+  backgroundColor: ColorInput,
+  trackColor: ColorInput,
+  thumbColor: ColorInput,
+): void {
+  if (!scrollbar.visible) return;
+  const slider = scrollbar.slider;
+  const sliderGeometry = slider as unknown as {
+    getThumbRect?: () => { x: number; y: number; width: number; height: number };
+  };
+  const thumbRectangle = sliderGeometry.getThumbRect?.();
+  if (!thumbRectangle) return;
+  const parsedBackgroundColor = parseColor(backgroundColor);
+  const parsedTrackColor = parseColor(trackColor);
+  const parsedThumbColor = parseColor(thumbColor);
+  for (let row = slider.y; row < slider.y + slider.height; row += 1) {
+    for (let column = slider.x; column < slider.x + slider.width; column += 1) {
+      const insideThumb =
+        column >= thumbRectangle.x &&
+        column < thumbRectangle.x + thumbRectangle.width &&
+        row >= thumbRectangle.y &&
+        row < thumbRectangle.y + thumbRectangle.height;
+      buffer.setCellWithAlphaBlending(
+        column,
+        row,
+        insideThumb ? '▄' : '▂',
+        insideThumb ? parsedThumbColor : parsedTrackColor,
+        parsedBackgroundColor,
+      );
+    }
   }
 }
 
@@ -86,6 +129,39 @@ class HitTransparentText extends TextRenderable {
     } finally {
       context.addToHitGrid = originalAddToHitGrid;
     }
+  }
+}
+
+class AxisBalancedHorizontalScrollbarPaint extends HitTransparentText {
+  constructor(
+    renderer: CliRenderer,
+    private readonly scrollbar: ScrollBarRenderable,
+    private readonly palette: () => Palette,
+    private readonly backgroundColor: () => ColorInput,
+  ) {
+    super(renderer, {
+      id: `${scrollbar.id}-axis-balanced-paint`,
+      content: ' ',
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      width: 1,
+      height: 1,
+      zIndex: 100,
+      selectable: false,
+    });
+  }
+
+  override render(buffer: OptimizedBuffer, deltaTime: number): void {
+    super.render(buffer, deltaTime);
+    const palette = this.palette();
+    paintAxisBalancedHorizontalScrollbar(
+      this.scrollbar,
+      buffer,
+      this.backgroundColor(),
+      palette.border,
+      palette.accent,
+    );
   }
 }
 
@@ -435,15 +511,25 @@ function $buildRootView(
   // Scale map (reported->true position per bar) + intended thickness (cells; NEVER read back from
   // layout — pre-layout reads return 0).
   const barScales = new Map<object, number>();
-  // UNIFIED thickness: every scrollbar (both axes, every pane) is the SAME cell count, read LIVE from
-  // settings.scrollbarThickness so a change applies to all bars at once (one source of truth — the
-  // scrollbarThickness applied-effect test asserts the rendered bar occupies exactly this many cells).
+  // ONE configured thickness for every pane and axis. Vertical bars use that many columns; horizontal
+  // bars use that many rows painted with half-height glyphs, compensating for the terminal cell's
+  // roughly 2:1 height:width aspect ratio. The setting therefore changes visual thickness uniformly.
   const scrollbarThicknessCells = (): number => Math.max(1, Math.round(settings.scrollbarThickness.value));
   // True while applyBarGeometry is ASSIGNING scrollPosition: the widget fires onChange for
   // programmatic writes too, and treating those as user thumb-drags halted the momentum glide on
   // every paint (the 'wheel not smooth since scrollbars' regression). onChange handlers must act
   // only on USER-initiated changes — a real thumb drag then halts momentum and adopts authority.
   let applyingBarGeometry = false;
+  const createAxisBalancedHorizontalPaint = (
+    scrollbar: ScrollBarRenderable,
+    backgroundColor: () => ColorInput,
+  ): HitTransparentText => {
+    scrollbar.onMouseMove = (event) => {
+      tooltip.point('Horizontal scroll — drag or Option+wheel', event.x, event.y);
+    };
+    scrollbar.onMouseOut = () => tooltip.clear();
+    return new AxisBalancedHorizontalScrollbarPaint(renderer, scrollbar, readPalette, backgroundColor);
+  };
 
   // Thin draggable scrollbars (OpenTUI ScrollBar: built-in draggable thumb + onChange). Each bar
   // is a 1-cell strip INSIDE its pane's border; onChange writes the SAME model offset the wheel
@@ -466,16 +552,22 @@ function $buildRootView(
     position: 'absolute',
     height: 1,
     showArrows: false,
+    trackOptions: { backgroundColor: readPalette().bg, foregroundColor: readPalette().accent },
     onChange: (position) => {
       if (applyingBarGeometry) return;
       workspace.editor.viewport.haltScrollMomentum(); // real thumb drag adopts authority
       workspace.editor.viewport.scrollLeft.value = trueScrollPosition(editorHorizontalBar, position);
     },
   });
+  const editorHorizontalBarPaint = createAxisBalancedHorizontalPaint(
+    editorHorizontalBar,
+    () => readPalette().bg,
+  );
   editorArea.add(editorVerticalBar);
   editorArea.add(editorHorizontalBar);
-  const changesBar = new ScrollBarRenderable(renderer, {
-    id: 'git-changes-scrollbar',
+  editorArea.add(editorHorizontalBarPaint);
+  const changesVerticalBar = new ScrollBarRenderable(renderer, {
+    id: 'git-changes-scrollbar-v',
     orientation: 'vertical',
     position: 'absolute',
     width: 2,
@@ -483,11 +575,28 @@ function $buildRootView(
     onChange: (position) => {
       if (applyingBarGeometry) return;
       workspace.haltGitChangesScroll(); // real thumb drag adopts authority
-      workspace.gitPanel.changesScrollTop.value = trueScrollPosition(changesBar, position);
+      workspace.gitPanel.changesScrollTop.value = trueScrollPosition(changesVerticalBar, position);
     },
   });
-  const logBar = new ScrollBarRenderable(renderer, {
-    id: 'git-log-scrollbar',
+  const changesHorizontalBar = new ScrollBarRenderable(renderer, {
+    id: 'git-changes-scrollbar-h',
+    orientation: 'horizontal',
+    position: 'absolute',
+    height: 1,
+    showArrows: false,
+    trackOptions: { backgroundColor: readPalette().panel, foregroundColor: readPalette().accent },
+    onChange: (position) => {
+      if (applyingBarGeometry) return;
+      workspace.haltGitChangesHorizontalScroll();
+      workspace.gitPanel.changesScrollLeft.value = trueScrollPosition(changesHorizontalBar, position);
+    },
+  });
+  const changesHorizontalBarPaint = createAxisBalancedHorizontalPaint(
+    changesHorizontalBar,
+    () => readPalette().panel,
+  );
+  const logVerticalBar = new ScrollBarRenderable(renderer, {
+    id: 'git-log-scrollbar-v',
     orientation: 'vertical',
     position: 'absolute',
     width: 2,
@@ -495,14 +604,31 @@ function $buildRootView(
     onChange: (position) => {
       if (applyingBarGeometry) return; // ignore our own per-frame scrollPosition sync (One-Writer)
       workspace.haltGitLogScroll(); // a real thumb drag adopts authority
-      workspace.gitPanel.logScrollTop.value = trueScrollPosition(logBar, position);
+      workspace.gitPanel.logScrollTop.value = trueScrollPosition(logVerticalBar, position);
       workspace.ensureLogWindow(workspace.gitPanel.logScrollTop.value);
     },
   });
+  const logHorizontalBar = new ScrollBarRenderable(renderer, {
+    id: 'git-log-scrollbar-h',
+    orientation: 'horizontal',
+    position: 'absolute',
+    height: 1,
+    showArrows: false,
+    trackOptions: { backgroundColor: readPalette().panel, foregroundColor: readPalette().accent },
+    onChange: (position) => {
+      if (applyingBarGeometry) return;
+      workspace.haltGitLogHorizontalScroll();
+      workspace.gitPanel.logScrollLeft.value = trueScrollPosition(logHorizontalBar, position);
+    },
+  });
+  const logHorizontalBarPaint = createAxisBalancedHorizontalPaint(
+    logHorizontalBar,
+    () => readPalette().panel,
+  );
   // File-tree vertical scrollbar (files view). The tree owns an independent scrollTop; a thumb drag
   // adopts authority (halts the wheel-momentum) and writes the offset, the same One-Writer pattern.
   const treeVerticalBar = new ScrollBarRenderable(renderer, {
-    id: 'tree-scrollbar',
+    id: 'tree-scrollbar-v',
     orientation: 'vertical',
     position: 'absolute',
     width: 2,
@@ -513,9 +639,32 @@ function $buildRootView(
       workspace.tree.scrollTop.value = trueScrollPosition(treeVerticalBar, position);
     },
   });
+  const treeHorizontalBar = new ScrollBarRenderable(renderer, {
+    id: 'tree-scrollbar-h',
+    orientation: 'horizontal',
+    position: 'absolute',
+    height: 1,
+    showArrows: false,
+    trackOptions: { backgroundColor: readPalette().panel, foregroundColor: readPalette().accent },
+    onChange: (position) => {
+      if (applyingBarGeometry) return;
+      workspace.haltTreeHorizontalScroll();
+      workspace.tree.scrollLeft.value = trueScrollPosition(treeHorizontalBar, position);
+    },
+  });
+  const treeHorizontalBarPaint = createAxisBalancedHorizontalPaint(
+    treeHorizontalBar,
+    () => readPalette().panel,
+  );
   sidebar.add(treeVerticalBar);
-  sidebar.add(changesBar);
-  sidebar.add(logBar);
+  sidebar.add(treeHorizontalBar);
+  sidebar.add(changesVerticalBar);
+  sidebar.add(changesHorizontalBar);
+  sidebar.add(logVerticalBar);
+  sidebar.add(logHorizontalBar);
+  sidebar.add(treeHorizontalBarPaint);
+  sidebar.add(changesHorizontalBarPaint);
+  sidebar.add(logHorizontalBarPaint);
 
   // Draggable git changes↔log divider: a 1-row grab strip over the divider glyph row (git view only).
   // Dragging sets settings.gitSplitRatio LIVE via workspace.setGitSplit — the SAME persisted value the
@@ -570,11 +719,8 @@ function $buildRootView(
   // First visible tree row (the render window slides to keep the selection on screen); shared by
   // the renderer and the mouse hit-test so clicks land on the row the user actually sees.
   function treeWindowTop(): number {
-    // Publish the live viewport height so the model can clamp its independent scroll offset + reveal
-    // the selection minimally; the window top is that offset (NOT derived from the selection index,
-    // which used to snap the list to the selection on every click/open).
-    const height = Math.max(1, (sidebar.height as number) - 2);
-    workspace.tree.viewportHeight.value = height;
+    // The frame tick publishes live viewport geometry; the window top is the model offset (NOT
+    // derived from the selection index, which used to snap the list on every click/open).
     return workspace.tree.windowTop();
   }
 
@@ -638,6 +784,121 @@ function $buildRootView(
       );
   }
 
+  /** Grapheme-safe window over display columns; never splits a wide glyph at either edge. */
+  function displayColumnWindow(text: string, scrollLeft: number, viewportWidth: number): string {
+    const safeViewportWidth = Math.max(1, viewportWidth);
+    if (scrollLeft <= 0 && EditorCoordinates.Class.lineWidth(text) <= safeViewportWidth) return text;
+    let startGrapheme = EditorCoordinates.Class.graphemeAtDisplayColumn(text, Math.max(0, scrollLeft));
+    if (EditorCoordinates.Class.displayColumn(text, startGrapheme) < scrollLeft) startGrapheme += 1;
+    let endGrapheme =
+      EditorCoordinates.Class.graphemeAtDisplayColumn(text, Math.max(0, scrollLeft) + safeViewportWidth) + 1;
+    let windowText = text.slice(
+      EditorCoordinates.Class.graphemeToU16(text, startGrapheme),
+      EditorCoordinates.Class.graphemeToU16(text, endGrapheme),
+    );
+    while (endGrapheme > startGrapheme && EditorCoordinates.Class.lineWidth(windowText) > safeViewportWidth) {
+      endGrapheme -= 1;
+      windowText = text.slice(
+        EditorCoordinates.Class.graphemeToU16(text, startGrapheme),
+        EditorCoordinates.Class.graphemeToU16(text, endGrapheme),
+      );
+    }
+    return windowText;
+  }
+
+  function padToDisplayWidth(text: string, width: number): string {
+    return text + ' '.repeat(Math.max(0, width - EditorCoordinates.Class.lineWidth(text)));
+  }
+
+  function changeRowText(row: ChangeRow): string {
+    if (row.kind === 'header') return ` ${row.label} (${row.count})`;
+    if (row.kind === 'placeholder') return `  ${row.label}`;
+    const checkbox = row.bucket === 'staged' ? theme.checkboxIcons.checked : theme.checkboxIcons.unchecked;
+    return ` ${checkbox} ${row.glyph} ${row.path}`;
+  }
+
+  function commitLogRowText(row: CommitLogRow): string {
+    if (row.kind === 'commit') {
+      const chevron = row.expanded ? '▾' : '▸';
+      return row.record ? ` ${chevron} ${row.record.shortSha} ${row.record.subject}` : ' …';
+    }
+    if (row.kind === 'loading') return '      …loading';
+    return `    ${row.glyph} ${row.path}`;
+  }
+
+  function gitChangesContentWidth(rows: readonly ChangeRow[]): number {
+    return rows.reduce(
+      (widestWidth, row) => Math.max(widestWidth, EditorCoordinates.Class.lineWidth(changeRowText(row))),
+      0,
+    );
+  }
+
+  /** Longest retained log row: sparse commit cache + bounded expanded-file set, never full history. */
+  function gitLogContentWidth(): number {
+    let widestWidth = 0;
+    for (const record of workspace.commitLog.value?.cache.value.values() ?? []) {
+      widestWidth = Math.max(
+        widestWidth,
+        EditorCoordinates.Class.lineWidth(` ▸ ${record.shortSha} ${record.subject}`),
+      );
+    }
+    for (const expansion of workspace.commitExpansion.value?.entries.value ?? []) {
+      for (const file of expansion.files ?? []) {
+        widestWidth = Math.max(
+          widestWidth,
+          EditorCoordinates.Class.lineWidth(`    ${file.status} ${file.path}`),
+        );
+      }
+    }
+    return widestWidth;
+  }
+
+  const gitActionAreaWidth = 9;
+
+  /**
+   * Converge layout-derived pane inputs AFTER Yoga has laid out the frame. This is deliberately
+   * outside update(): render stays model -> view only, while each pane model owns its live extent.
+   */
+  function syncPaneViewportGeometry(): boolean {
+    let changed = false;
+    const sidebarInnerWidth = Math.max(1, sidebarWidth() - 2);
+    const treeViewportHeight = Math.max(1, (sidebar.height as number) - 2);
+    const treeViewportWidth = Math.max(1, sidebarInnerWidth - scrollbarThicknessCells());
+    if (workspace.tree.viewportHeight.value !== treeViewportHeight) {
+      workspace.tree.viewportHeight.value = treeViewportHeight;
+      changed = true;
+    }
+    if (workspace.tree.viewportWidth.value !== treeViewportWidth) {
+      workspace.tree.viewportWidth.value = treeViewportWidth;
+      changed = true;
+    }
+    workspace.tree.clampHorizontalScroll();
+
+    const gitAvailable = workspace.git.value !== null;
+    const changesViewportWidth = Math.max(
+      1,
+      sidebarInnerWidth - scrollbarThicknessCells() - gitActionAreaWidth,
+    );
+    const changesContentWidth = gitAvailable ? gitChangesContentWidth(gitChangeRowsNow()) : 0;
+    if (
+      workspace.gitPanel.changesViewportWidth.value !== changesViewportWidth ||
+      workspace.gitPanel.changesContentWidth.value !== changesContentWidth
+    ) {
+      workspace.gitPanel.setChangesHorizontalExtent(changesContentWidth, changesViewportWidth);
+      changed = true;
+    }
+    const logViewportWidth = Math.max(1, sidebarInnerWidth - scrollbarThicknessCells());
+    const logContentWidth = gitAvailable ? gitLogContentWidth() : 0;
+    if (
+      workspace.gitPanel.logViewportWidth.value !== logViewportWidth ||
+      workspace.gitPanel.logContentWidth.value !== logContentWidth
+    ) {
+      workspace.gitPanel.setLogHorizontalExtent(logContentWidth, logViewportWidth);
+      changed = true;
+    }
+    return changed;
+  }
+
   function syncScrollbars(): void {
     const editor = workspace.editor;
     const editorVisible = editor.hasDocument.value;
@@ -691,6 +952,17 @@ function $buildRootView(
         scrollPosition: workspace.tree.scrollTop.value,
       },
     );
+    const treeViewportWidth = workspace.tree.viewportWidth.value;
+    applyBarGeometry(
+      treeHorizontalBar,
+      'horizontal',
+      { top: 0, left: 0, width: sidebarInnerWidthFiles, height: treeViewportHeight },
+      {
+        scrollSize: filesVisible ? workspace.tree.contentWidth : 0,
+        viewportSize: treeViewportWidth,
+        scrollPosition: workspace.tree.scrollLeft.value,
+      },
+    );
 
     // Git regions, in the sidebar's content box: branch row 0; changes rows 1..; divider;
     // log rows below — offsets RECOMPUTED from the rendered geometry each frame (splitRatio and
@@ -698,10 +970,16 @@ function $buildRootView(
     const gitVisible = workspace.sidebarView.value === 'git' && workspace.git.value !== null;
     const sidebarInnerWidth = sidebarWidth() - 2;
     const changesRegion = { top: 1, left: 0, width: sidebarInnerWidth, height: Math.max(1, gitPanelGeometry.changesRows) };
-    applyBarGeometry(changesBar, 'vertical', changesRegion, {
+    applyBarGeometry(changesVerticalBar, 'vertical', changesRegion, {
       scrollSize: gitVisible ? gitChangeRowsNow().length : 0,
       viewportSize: gitPanelGeometry.changesRows,
       scrollPosition: workspace.gitPanel.changesScrollTop.value,
+    });
+    const changesViewportWidth = workspace.gitPanel.changesViewportWidth.value;
+    applyBarGeometry(changesHorizontalBar, 'horizontal', changesRegion, {
+      scrollSize: gitVisible ? workspace.gitPanel.changesContentWidth.value : 0,
+      viewportSize: changesViewportWidth,
+      scrollPosition: workspace.gitPanel.changesScrollLeft.value,
     });
     // Flat-row total: commit count PLUS the rows contributed by expanded commits (inline expansion).
     const logFlatEnd = workspace.logFlatEnd();
@@ -711,7 +989,7 @@ function $buildRootView(
       width: sidebarInnerWidth,
       height: Math.max(1, gitPanelGeometry.logRows),
     };
-    applyBarGeometry(logBar, 'vertical', logRegion, {
+    applyBarGeometry(logVerticalBar, 'vertical', logRegion, {
       // Unknown history length: a rolling virtual size keeps the thumb draggable; it refines once
       // the end is discovered (a short page sets knownEnd).
       scrollSize: gitVisible
@@ -721,6 +999,12 @@ function $buildRootView(
         : 0,
       viewportSize: gitPanelGeometry.logRows,
       scrollPosition: workspace.gitPanel.logScrollTop.value,
+    });
+    const logViewportWidth = workspace.gitPanel.logViewportWidth.value;
+    applyBarGeometry(logHorizontalBar, 'horizontal', logRegion, {
+      scrollSize: gitVisible ? workspace.gitPanel.logContentWidth.value : 0,
+      viewportSize: logViewportWidth,
+      scrollPosition: workspace.gitPanel.logScrollLeft.value,
     });
 
     // Git changes↔log divider grab strip: over the divider GLYPH row (dividerRow is the first LOG row,
@@ -744,6 +1028,7 @@ function $buildRootView(
     const hoveredIndex = workspace.tree.hoveredIndex.value;
     const height = Math.max(1, (sidebar.height as number) - 2);
     const innerWidth = sidebarWidth() - 2;
+    const viewportWidth = Math.max(1, innerWidth - scrollbarThicknessCells());
     // Flyweight: only render the visible window around the selection.
     const top = treeWindowTop();
     const visible = rows.slice(top, top + height);
@@ -755,10 +1040,11 @@ function $buildRootView(
       const marker = selected ? '›' : ' ';
       const indent = '  '.repeat(row.depth);
       const icon = theme.icon(row.name, row.isDir, row.expanded);
-      let label = `${marker}${indent}${icon} ${row.name}`;
-      if (label.length > innerWidth) label = label.slice(0, innerWidth);
+      const completeLabel = `${marker}${indent}${icon} ${row.name}`;
+      let label = displayColumnWindow(completeLabel, workspace.tree.scrollLeft.value, viewportWidth);
+      label = padToDisplayWidth(label, viewportWidth);
       // Pad to the pane's inner width so the row highlight spans the full row (VS Code-style).
-      label = label.padEnd(innerWidth, ' ');
+      label = padToDisplayWidth(label, innerWidth);
       // Two intensities: selection (stronger) over hover (subtle); bg is the primary signal.
       const rowBackground = selected ? palette.selection : hovered ? palette.cursorLine : null;
       const styled = fg(selected ? palette.accent : palette.fg)(label);
@@ -1229,10 +1515,18 @@ function $buildRootView(
     const pushRow = (
       text: string,
       color: string,
-      options: { background?: string | null; bold?: boolean; newline?: boolean } = {},
+      options: {
+        background?: string | null;
+        bold?: boolean;
+        newline?: boolean;
+        scrollLeft?: number;
+        viewportWidth?: number;
+      } = {},
     ) => {
-      let label = text.length > innerWidth ? text.slice(0, innerWidth) : text;
-      label = label.padEnd(innerWidth, ' ');
+      const viewportWidth = Math.max(1, Math.min(innerWidth, options.viewportWidth ?? innerWidth));
+      let label = displayColumnWindow(text, options.scrollLeft ?? 0, viewportWidth);
+      label = padToDisplayWidth(label, viewportWidth);
+      label = padToDisplayWidth(label, innerWidth);
       let chunk = fg(color)(label);
       if (options.bold) chunk = bold(chunk);
       if (options.background) chunk = bg(options.background)(chunk);
@@ -1245,6 +1539,11 @@ function $buildRootView(
     if (!git) return new StyledText([fg(palette.dim)('  no repository')]);
 
     const bodyHeight = Math.max(1, (sidebar.height as number) - 2);
+    const changesViewportWidth = Math.max(
+      1,
+      innerWidth - scrollbarThicknessCells() - gitActionAreaWidth,
+    );
+    const logViewportWidth = Math.max(1, innerWidth - scrollbarThicknessCells());
     pushRow(` ${git.branch.value || '(no branch)'}  ${git.head.value.slice(0, 7)}`, palette.accent);
     if (git.error.value) {
       pushRow(`  ${git.error.value}`, palette.deleted);
@@ -1264,9 +1563,16 @@ function $buildRootView(
     changeRows.slice(changesTop, changesTop + changesVisible).forEach((row, visibleIndex) => {
       const rowIndex = changesTop + visibleIndex;
       if (row.kind === 'header') {
-        pushRow(` ${row.label} (${row.count})`, palette.dim, { bold: true });
+        pushRow(changeRowText(row), palette.dim, {
+          bold: true,
+          scrollLeft: gitPanel.changesScrollLeft.value,
+          viewportWidth: changesViewportWidth,
+        });
       } else if (row.kind === 'placeholder') {
-        pushRow(`  ${row.label}`, palette.dim);
+        pushRow(changeRowText(row), palette.dim, {
+          scrollLeft: gitPanel.changesScrollLeft.value,
+          viewportWidth: changesViewportWidth,
+        });
       } else {
         const selected = active && gitPanel.region.value === 'changes' && rowIndex === gitPanel.changesIndex.value;
         const hovered = rowIndex === gitPanel.changesHovered.value;
@@ -1276,8 +1582,7 @@ function $buildRootView(
         const background = selected ? palette.selection : multiSelected || hovered ? palette.cursorLine : null;
         // ` ☑ M path…            o d ±` — ONE-glyph staging checkbox (theme ladder; click toggles);
         // the git-status letter (M/D/?) stays separate; action buttons appear on hover/selection.
-        const checkbox = row.bucket === 'staged' ? theme.checkboxIcons.checked : theme.checkboxIcons.unchecked;
-        const label = ` ${checkbox} ${row.glyph} ${row.path}`;
+        const label = changeRowText(row);
         if (selected || hovered) {
           // Action buttons: real glyphs from the theme icon ladder (nerd → unicode → ascii letter),
           // each theme-COLOURED and each ONE cell so the hit-zone columns (gitActionButtonAt) align:
@@ -1288,19 +1593,25 @@ function $buildRootView(
           const staged = row.bucket === 'staged';
           const stageGlyph = staged ? actionIcons.unstage : actionIcons.stage;
           const stageColor = staged ? palette.dim : palette.added;
-          const buttonCells = 8;
-          const pathWidth = innerWidth - buttonCells - 1;
-          const pathText = label.length > pathWidth ? label.slice(0, pathWidth) : label.padEnd(pathWidth, ' ');
+          const pathText = padToDisplayWidth(
+            displayColumnWindow(label, gitPanel.changesScrollLeft.value, changesViewportWidth),
+            changesViewportWidth,
+          );
           const paint = (text: string, color: string) =>
             background ? bg(background)(fg(color)(text)) : fg(color)(text);
           chunks.push(paint(pathText, glyphColor(row.glyph)));
           chunks.push(paint(` ${actionIcons.open}`, palette.accent));
           chunks.push(paint(`  ${actionIcons.discard}`, palette.deleted));
           chunks.push(paint(`  ${stageGlyph}`, stageColor));
-          chunks.push(paint(' ', palette.fg)); // pad the final cell to innerWidth
+          chunks.push(paint(' ', palette.fg));
+          chunks.push(paint(' '.repeat(scrollbarThicknessCells()), palette.fg));
           chunks.push(fg(palette.fg)('\n'));
         } else {
-          pushRow(label, glyphColor(row.glyph), { background });
+          pushRow(label, glyphColor(row.glyph), {
+            background,
+            scrollLeft: gitPanel.changesScrollLeft.value,
+            viewportWidth: changesViewportWidth,
+          });
         }
       }
     });
@@ -1338,14 +1649,26 @@ function $buildRootView(
         const background = selected ? palette.selection : hovered ? palette.cursorLine : null;
         const newline = index < flatRows.length - 1;
         if (row.kind === 'commit') {
-          const chevron = row.expanded ? '▾' : '▸';
-          if (row.record)
-            pushRow(` ${chevron} ${row.record.shortSha} ${row.record.subject}`, palette.fg, { background, newline });
-          else pushRow(' …', palette.dim, { background, newline });
+          pushRow(commitLogRowText(row), row.record ? palette.fg : palette.dim, {
+            background,
+            newline,
+            scrollLeft: gitPanel.logScrollLeft.value,
+            viewportWidth: logViewportWidth,
+          });
         } else if (row.kind === 'loading') {
-          pushRow('      …loading', palette.dim, { background, newline });
+          pushRow(commitLogRowText(row), palette.dim, {
+            background,
+            newline,
+            scrollLeft: gitPanel.logScrollLeft.value,
+            viewportWidth: logViewportWidth,
+          });
         } else {
-          pushRow(`    ${row.glyph} ${row.path}`, glyphColor(row.glyph), { background, newline });
+          pushRow(commitLogRowText(row), glyphColor(row.glyph), {
+            background,
+            newline,
+            scrollLeft: gitPanel.logScrollLeft.value,
+            viewportWidth: logViewportWidth,
+          });
         }
       });
     }
@@ -1673,16 +1996,26 @@ function $buildRootView(
   // (scrollTop / selection), never materializing the whole list — the frame effect observes those
   // signals and repaints. invariant: Cost tracks the actively observed set (project.invariants.md)
   sidebar.onMouseScroll = (event) => {
+    const direction = event.scroll?.direction;
+    const step = wheelStep(event);
+    const horizontal =
+      direction === 'left' ||
+      direction === 'right' ||
+      scrollModifierHeld(event, settings.horizontalScrollModifier.value);
+    const backward = direction === 'left' || direction === 'up';
     if (workspace.sidebarView.value === 'git') {
       // Route by pointer position: wheel over the changes region scrolls it; over the log, the
       // momentum glide (same gesture, per-region window).
       const row = event.y - sidebar.y;
       if (row < gitPanelGeometry.dividerRow) {
-        workspace.impulseGitChangesScroll(event.scroll?.direction === 'up' ? -1 : 1);
+        if (horizontal) workspace.impulseGitChangesHorizontalScroll((backward ? -1 : 1) * step);
+        else workspace.impulseGitChangesScroll((direction === 'up' ? -1 : 1) * step);
       } else {
-        workspace.impulseGitLog(event.scroll?.direction === 'up' ? -1 : 1);
+        if (horizontal) workspace.impulseGitLogHorizontalScroll((backward ? -1 : 1) * step);
+        else workspace.impulseGitLog((direction === 'up' ? -1 : 1) * step);
       }
-    } else workspace.impulseTreeScroll(event.scroll?.direction === 'up' ? -1 : 1);
+    } else if (horizontal) workspace.impulseTreeHorizontalScroll((backward ? -1 : 1) * step);
+    else workspace.impulseTreeScroll((direction === 'up' ? -1 : 1) * step);
   };
   // Vertical scroll of the editor window. Wrap mode: scrollTop stays a LOGICAL line index, but
   // tall (wrapped) lines mean the logical clamp `lineCount - height` could strand tail rows below
@@ -1843,7 +2176,10 @@ function $buildRootView(
   // invariant: One writer per scroll regime per frame (src/modules/ui/ui.invariants.md)
   let edgeScrollRemainder = { x: 0, y: 0 };
   function tickDragAutoScroll(dtSeconds: number): boolean {
-    if (!selectionDrag || !workspace.editor.hasDocument.value) return false;
+    // This hook already runs after each Yoga layout. Converge every sidebar pane's live geometry here
+    // too; returning true for the one changed frame guarantees a repaint, then quiescence resumes.
+    const paneViewportGeometryChanged = syncPaneViewportGeometry();
+    if (!selectionDrag || !workspace.editor.hasDocument.value) return paneViewportGeometryChanged;
     const leftEdge = codeBody.x;
     const rightEdge = codeBody.x + Math.max(1, editorViewportWidth()) - 1;
     const topEdge = codeBody.y;
@@ -1862,7 +2198,7 @@ function $buildRootView(
           : 0;
     if (overshootX === 0 && overshootY === 0) {
       edgeScrollRemainder = { x: 0, y: 0 };
-      return false;
+      return paneViewportGeometryChanged;
     }
     // Base 25 cells/sec, growing with how far past the edge the pointer sits (capped).
     const rate = (overshoot: number): number =>
@@ -1926,9 +2262,13 @@ function $buildRootView(
   type GitActionButton = 'open' | 'discard' | 'stageToggle';
   const gitActionButtonAt = (relativeX: number): GitActionButton | null => {
     const innerWidth = sidebarWidth() - 2;
-    if (relativeX >= innerWidth - 8 && relativeX <= innerWidth - 7) return 'open';
-    if (relativeX >= innerWidth - 5 && relativeX <= innerWidth - 4) return 'discard';
-    if (relativeX >= innerWidth - 2) return 'stageToggle';
+    const actionAreaStart = Math.max(
+      1,
+      innerWidth - scrollbarThicknessCells() - gitActionAreaWidth,
+    );
+    if (relativeX >= actionAreaStart && relativeX < actionAreaStart + 2) return 'open';
+    if (relativeX >= actionAreaStart + 2 && relativeX < actionAreaStart + 5) return 'discard';
+    if (relativeX >= actionAreaStart + 5 && relativeX < actionAreaStart + 8) return 'stageToggle';
     return null;
   };
 
