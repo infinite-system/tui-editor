@@ -549,8 +549,10 @@ is that frame's sole writer) and *The selected range renders with a background*.
 construction the moment it wires the shared behavior — no per-pane drag/autoscroll rules to drift.
 
 **Evidence:** `EditorPane` and `DiffView` have composed `SelectionDragBehavior` since the selection
-work; `HoverCard` now composes the identical behavior (drag-select the card text, drag past its
-bottom edge scrolls it, Ctrl+C copies via `lastCopyChars`).
+work; `HoverCard` now composes the identical behavior on BOTH axes (drag-select the card text, drag
+past its bottom OR right edge auto-scrolls via `scrollRows`/`scrollColumns`, a wheel scrolls it, and
+long content is reachable under a horizontal scrollbar rather than truncated; Ctrl+C copies via
+`lastCopyChars`).
 
 **Impossible if true:** a pane with a working scrollbar whose off-screen rows cannot be selected; a
 drag that selects but never auto-scrolls at the edge; two scrollable panes with divergent drag rules.
