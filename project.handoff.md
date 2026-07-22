@@ -84,6 +84,7 @@ checker + `bun test` before merging. Deprecate sub-par output (don't patch aroun
   `node .claude/skills/invariants/scripts/check_invariants.mjs --all|--refs|--score`
 - Deps: `ivue@2.0.0`, `vue@3.5.40`, `@opentui/core@0.4.5`, `web-tree-sitter@0.26.11`. Vendored `src/modules/system/Static.ts`.
 - codex worktrees: `.claude/worktrees/codex-<mod>` (branch `codex/<mod>`, node_modules symlinked). Prompts `scripts/codex/*.prompt.txt`. Drive: `codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -C <worktree> "$(cat prompt)"`.
+- **FLEET HEARTBEAT** (`scripts/fleet-heartbeat.sh`, see its `.readme.md`): while workers run, keep a heartbeat armed — `scripts/fleet-heartbeat.sh <worker>…`. It polls each worker's process-tree CPU (a silent hang = tree CPU flat; a real hang stalled 1.5h undetected once) and exits→notifies on STALL (kill+respawn) or all-done (verify+merge); re-arm it while any worker runs. Cap concurrency ~2-3 — over-parallelizing is what causes the hang.
 
 ## Key API / pattern facts (easy to forget after compaction)
 ### ivue
