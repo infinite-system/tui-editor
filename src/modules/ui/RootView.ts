@@ -875,9 +875,11 @@ function $buildRootView(
     workspace.tree.clampHorizontalScroll();
 
     const gitAvailable = workspace.git.value !== null;
+    // Full pane width (minus the scrollbar). The action area is reserved ONLY on the active row (which
+    // paints buttons) — non-active rows use the full width, so filenames are not clipped 9 cells short.
     const changesViewportWidth = Math.max(
       1,
-      sidebarInnerWidth - scrollbarThicknessCells() - gitActionAreaWidth,
+      sidebarInnerWidth - scrollbarThicknessCells(),
     );
     const changesContentWidth = gitAvailable ? gitChangesContentWidth(gitChangeRowsNow()) : 0;
     if (
@@ -1541,8 +1543,10 @@ function $buildRootView(
     const bodyHeight = Math.max(1, (sidebar.height as number) - 2);
     const changesViewportWidth = Math.max(
       1,
-      innerWidth - scrollbarThicknessCells() - gitActionAreaWidth,
+      innerWidth - scrollbarThicknessCells(),
     );
+    // The active (hovered/selected) row paints action buttons on its right, so its NAME clips further.
+    const changesActiveNameWidth = Math.max(1, changesViewportWidth - gitActionAreaWidth);
     const logViewportWidth = Math.max(1, innerWidth - scrollbarThicknessCells());
     pushRow(` ${git.branch.value || '(no branch)'}  ${git.head.value.slice(0, 7)}`, palette.accent);
     if (git.error.value) {
@@ -1594,8 +1598,8 @@ function $buildRootView(
           const stageGlyph = staged ? actionIcons.unstage : actionIcons.stage;
           const stageColor = staged ? palette.dim : palette.added;
           const pathText = padToDisplayWidth(
-            displayColumnWindow(label, gitPanel.changesScrollLeft.value, changesViewportWidth),
-            changesViewportWidth,
+            displayColumnWindow(label, gitPanel.changesScrollLeft.value, changesActiveNameWidth),
+            changesActiveNameWidth,
           );
           const paint = (text: string, color: string) =>
             background ? bg(background)(fg(color)(text)) : fg(color)(text);
