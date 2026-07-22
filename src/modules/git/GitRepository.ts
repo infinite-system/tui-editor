@@ -18,8 +18,13 @@ export interface LoadHistoryOptions {
   cursor?: string;
 }
 
+export interface GitRefreshOptions {
+  background?: boolean;
+}
+
 class $GitRepository {
   private refreshRequestId = 0;
+  private backgroundRefreshInFlight = false;
   private historyRequestId = 0;
   private operationId = 0;
 
@@ -74,11 +79,16 @@ class $GitRepository {
   }
 
   // invariant: Only the newest Git request mutates state (src/modules/git/git.invariants.md)
-  async refresh(): Promise<void> {
+  async refresh(options: GitRefreshOptions = {}): Promise<void> {
+    const background = options.background === true;
+    if (background && (this.backgroundRefreshInFlight || this.refreshing.value)) return;
+    if (background) this.backgroundRefreshInFlight = true;
     const requestId = ++this.refreshRequestId;
-    this.refreshing.value = true;
-    this.error.value = null;
-    this.publishStatus();
+    if (!background) {
+      this.refreshing.value = true;
+      this.error.value = null;
+      this.publishStatus();
+    }
 
     try {
       const result = await GitCommands.Class.statusPorcelainV2Branch(this.cwd);
@@ -94,21 +104,48 @@ class $GitRepository {
         this.historyRequestId++;
         this.historyPage.value = [];
       }
-      this.branch.value = status.branch;
-      this.head.value = status.head;
-      this.staged.value = status.staged;
-      this.unstaged.value = status.unstaged;
-      this.untracked.value = status.untracked;
+      if (status.branch !== this.branch.value) this.branch.value = status.branch;
+      if (status.head !== this.head.value) this.head.value = status.head;
+      if (!this.fileRecordsMatch(this.staged.value, status.staged)) {
+        this.staged.value = status.staged;
+      }
+      if (!this.fileRecordsMatch(this.unstaged.value, status.unstaged)) {
+        this.unstaged.value = status.unstaged;
+      }
+      if (!this.fileRecordsMatch(this.untracked.value, status.untracked)) {
+        this.untracked.value = status.untracked;
+      }
+      this.error.value = null;
       this.lastRefreshAt.value = Clock.Class.now();
     } catch (error) {
       if (requestId !== this.refreshRequestId) return;
       this.error.value = `git status failed: ${String(error)}`;
     } finally {
+      if (background) this.backgroundRefreshInFlight = false;
       if (requestId === this.refreshRequestId) {
-        this.refreshing.value = false;
+        if (!background) this.refreshing.value = false;
         this.publishStatus();
       }
     }
+  }
+
+  // invariant: The git panel converges without watcher notifications (src/modules/git/git.invariants.md)
+  // An unchanged background reconcile must not replace panel-observed refs, or the polling floor
+  // would wake an otherwise quiescent render loop on every interval.
+  private fileRecordsMatch(
+    currentRecords: GitFileRecord[],
+    nextRecords: GitFileRecord[],
+  ): boolean {
+    if (currentRecords.length !== nextRecords.length) return false;
+    return currentRecords.every((currentRecord, recordIndex) => {
+      const nextRecord = nextRecords[recordIndex];
+      return nextRecord !== undefined
+        && currentRecord.path === nextRecord.path
+        && currentRecord.xy === nextRecord.xy
+        && currentRecord.x === nextRecord.x
+        && currentRecord.y === nextRecord.y
+        && currentRecord.originalPath === nextRecord.originalPath;
+    });
   }
 
   // invariant: Only the newest Git request mutates state (src/modules/git/git.invariants.md)
@@ -197,6 +234,7 @@ class $GitRepository {
 
   dispose(): void {
     this.refreshRequestId++;
+    this.backgroundRefreshInFlight = false;
     this.historyRequestId++;
     this.operationId++;
     this.refreshing.value = false;
