@@ -44,7 +44,7 @@ import {
   VERTICAL_MOMENTUM,
   type ScrollMomentum,
   type MomentumOptions,
-} from '../ui/Momentum';
+} from '../system/Momentum';
 import type { Settings } from '../settings/Settings';
 import type { FindBar, FindBarTarget } from '../search/FindBar';
 import type { FindInBufferMatch } from '../search/FindInBuffer';

@@ -164,6 +164,30 @@ function $clampCol(line: string, column: number): number {
   return Math.max(0, Math.min(column, $graphemeCount(line)));
 }
 
+/**
+ * Window `text` to a horizontal viewport: return the substring covering the display-column span
+ * [scrollLeft, scrollLeft + viewportWidth), trimming any wide-glyph overhang so the result never
+ * exceeds the viewport width. The shared horizontal-scroll primitive for every list/text pane.
+ */
+function $displayColumnWindow(text: string, scrollLeft: number, viewportWidth: number): string {
+  const safeViewportWidth = Math.max(1, viewportWidth);
+  if (scrollLeft <= 0 && $lineWidth(text) <= safeViewportWidth) return text;
+  let startGrapheme = $graphemeAtDisplayColumn(text, Math.max(0, scrollLeft));
+  if ($displayColumn(text, startGrapheme) < scrollLeft) startGrapheme += 1;
+  let endGrapheme = $graphemeAtDisplayColumn(text, Math.max(0, scrollLeft) + safeViewportWidth) + 1;
+  let windowText = text.slice($graphemeToU16(text, startGrapheme), $graphemeToU16(text, endGrapheme));
+  while (endGrapheme > startGrapheme && $lineWidth(windowText) > safeViewportWidth) {
+    endGrapheme -= 1;
+    windowText = text.slice($graphemeToU16(text, startGrapheme), $graphemeToU16(text, endGrapheme));
+  }
+  return windowText;
+}
+
+/** Right-pad `text` with spaces to fill `width` display columns (no-op when already at least wide). */
+function $padToDisplayWidth(text: string, width: number): string {
+  return text + ' '.repeat(Math.max(0, width - $lineWidth(text)));
+}
+
 // invariant: Construction goes through overridable seams (project.invariants.md)
 class $EditorCoordinates {
   static graphemeBoundaries = $graphemeBoundaries;
@@ -177,6 +201,8 @@ class $EditorCoordinates {
   static lineWidth = $lineWidth;
   static graphemeAtDisplayColumn = $graphemeAtDisplayColumn;
   static clampCol = $clampCol;
+  static displayColumnWindow = $displayColumnWindow;
+  static padToDisplayWidth = $padToDisplayWidth;
 }
 
 export namespace EditorCoordinates {

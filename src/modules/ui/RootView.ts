@@ -916,30 +916,11 @@ function $buildRootView(
   }
 
   /** Grapheme-safe window over display columns; never splits a wide glyph at either edge. */
-  function displayColumnWindow(text: string, scrollLeft: number, viewportWidth: number): string {
-    const safeViewportWidth = Math.max(1, viewportWidth);
-    if (scrollLeft <= 0 && EditorCoordinates.Class.lineWidth(text) <= safeViewportWidth) return text;
-    let startGrapheme = EditorCoordinates.Class.graphemeAtDisplayColumn(text, Math.max(0, scrollLeft));
-    if (EditorCoordinates.Class.displayColumn(text, startGrapheme) < scrollLeft) startGrapheme += 1;
-    let endGrapheme =
-      EditorCoordinates.Class.graphemeAtDisplayColumn(text, Math.max(0, scrollLeft) + safeViewportWidth) + 1;
-    let windowText = text.slice(
-      EditorCoordinates.Class.graphemeToU16(text, startGrapheme),
-      EditorCoordinates.Class.graphemeToU16(text, endGrapheme),
-    );
-    while (endGrapheme > startGrapheme && EditorCoordinates.Class.lineWidth(windowText) > safeViewportWidth) {
-      endGrapheme -= 1;
-      windowText = text.slice(
-        EditorCoordinates.Class.graphemeToU16(text, startGrapheme),
-        EditorCoordinates.Class.graphemeToU16(text, endGrapheme),
-      );
-    }
-    return windowText;
-  }
-
-  function padToDisplayWidth(text: string, width: number): string {
-    return text + ' '.repeat(Math.max(0, width - EditorCoordinates.Class.lineWidth(text)));
-  }
+  // displayColumnWindow / padToDisplayWidth now live on EditorCoordinates (the display-column-math
+  // capability) so every pane renderer shares one horizontal-windowing primitive. Local aliases keep
+  // the call sites terse.
+  const displayColumnWindow = EditorCoordinates.Class.displayColumnWindow;
+  const padToDisplayWidth = EditorCoordinates.Class.padToDisplayWidth;
 
   function changeRowText(row: ChangeRow): string {
     if (row.kind === 'header') return ` ${row.label} (${row.count})`;

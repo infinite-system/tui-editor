@@ -6,7 +6,7 @@
 import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
 import { Files, type DirEntry } from '../system/Files';
-import { AT_REST, type ScrollMomentum } from '../ui/Momentum';
+import { AT_REST, type ScrollMomentum } from '../system/Momentum';
 import { EditorCoordinates } from '../editor/EditorCoordinates';
 
 export interface TreeRow {
