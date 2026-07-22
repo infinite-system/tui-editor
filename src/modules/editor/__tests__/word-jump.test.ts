@@ -1,4 +1,5 @@
-// Ctrl+Left/Right word jumps: land on word starts, grapheme-safe, cross line boundaries.
+// Ctrl+Left/Right word jumps: use the same word/whitespace/punctuation/newline boundaries as
+// delete-previous-word, stay grapheme-safe, and cross line boundaries.
 import { test, expect } from 'bun:test';
 import { Editor } from '../Editor';
 
@@ -20,11 +21,15 @@ test('word-jump right lands on successive word starts', () => {
   expect(editor.cursor.col.value).toBe(22); // input
 });
 
-test('word-jump left mirrors back to word starts', () => {
+test('word-jump left treats punctuation as its own run before word starts', () => {
   const editor = editorWith(['const value = compute(input);']);
   editor.placeCursor(0, 22);
   editor.moveWordHorizontal(-1);
+  expect(editor.cursor.col.value).toBe(21); // opening punctuation before input
+  editor.moveWordHorizontal(-1);
   expect(editor.cursor.col.value).toBe(14);
+  editor.moveWordHorizontal(-1);
+  expect(editor.cursor.col.value).toBe(12); // equals punctuation after its leading whitespace
   editor.moveWordHorizontal(-1);
   expect(editor.cursor.col.value).toBe(6);
   editor.moveWordHorizontal(-1);
@@ -37,8 +42,10 @@ test('word-jump crosses line boundaries', () => {
   editor.moveWordHorizontal(1);
   expect(editor.cursor.line.value).toBe(1);
   expect(editor.cursor.col.value).toBe(0);
-  editor.moveWordHorizontal(-1); // back over the boundary... lands at line 0 word start
+  editor.moveWordHorizontal(-1); // newline is its own boundary: land at the preceding line end
   expect(editor.cursor.line.value).toBe(0);
+  expect(editor.cursor.col.value).toBe(3);
+  editor.moveWordHorizontal(-1);
   expect(editor.cursor.col.value).toBe(0);
 });
 

@@ -5,6 +5,7 @@
 import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
 import type { TextDocument } from '../editor/TextDocument';
+import { TextEditing } from '../editor/TextEditing';
 import { FindInBuffer } from './FindInBuffer';
 
 export type FindBarMode = 'find' | 'replace';
@@ -71,6 +72,18 @@ class $FindBar {
       engine.replacement.value = engine.replacement.value.slice(0, -1);
     } else {
       engine.query.value = engine.query.value.slice(0, -1);
+      engine.findAll();
+    }
+  }
+
+  // invariant: Word deletion uses the navigation boundary (src/modules/editor/editor.invariants.md)
+  deletePreviousWord(): void {
+    const engine = this.engine;
+    if (!engine) return;
+    if (this.editingReplacement) {
+      engine.replacement.value = TextEditing.Class.deletePreviousWord(engine.replacement.value).text;
+    } else {
+      engine.query.value = TextEditing.Class.deletePreviousWord(engine.query.value).text;
       engine.findAll();
     }
   }

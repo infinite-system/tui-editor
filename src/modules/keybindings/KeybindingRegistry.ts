@@ -25,7 +25,7 @@ export interface Keybinding {
   /** Multi-step chord, e.g. Ctrl+X then Ctrl+C. */
   steps?: ChordPattern[];
   /** Focus context this binding applies in; 'global' applies everywhere. */
-  context?: 'global' | 'editor' | 'files' | 'git' | 'palette' | 'menu' | 'settings';
+  context?: 'global' | 'editor' | 'files' | 'git' | 'palette' | 'menu' | 'settings' | 'quickopen' | 'find';
   /** Named guard (host-registered predicate) that must be true for the binding to fire. */
   when?: string;
   /** A RESERVED-GLOBAL escape hatch (e.g. quit): fires from ANY mode — even while a modal/search

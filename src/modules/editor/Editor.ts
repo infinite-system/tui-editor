@@ -9,6 +9,7 @@ import { TextDocument } from './TextDocument';
 import { Viewport } from './Viewport';
 import { Cursor } from './Cursor';
 import { EditorCoordinates } from './EditorCoordinates';
+import { TextEditing } from './TextEditing';
 import { EditorWrap } from './EditorWrap';
 import { UndoStore, type EditKind } from '../storage/UndoStore';
 import { Files } from '../system/Files';
@@ -279,6 +280,33 @@ class $Editor {
     this.document.deleteForward(this.cursor.line.value, this.cursor.col.value);
   }
 
+  /** Delete exactly [wordLeft(cursor), cursor], or the active selection, as one undo step. */
+  deletePreviousWord(): void {
+    if (this.readOnly.value || !this.hasDocument.value) return;
+    if (this.hasSelection) {
+      this.captureBefore('delete');
+      this.removeSelection();
+      this.scrollLineIntoView(this.cursor.line.value);
+      return;
+    }
+
+    const deletionStart = this.previousWordPosition(true);
+    if (
+      deletionStart.line === this.cursor.line.value &&
+      deletionStart.col === this.cursor.col.value
+    ) {
+      return;
+    }
+
+    this.captureBefore('delete');
+    this.document.deleteRange(
+      deletionStart,
+      { line: this.cursor.line.value, col: this.cursor.col.value },
+    );
+    this.placeCursor(deletionStart.line, deletionStart.col);
+    this.scrollLineIntoView(deletionStart.line);
+  }
+
   // --- clipboard ------------------------------------------------------------
 
   /** Copy the selection to the clipboard; returns the number of characters copied (0 = nothing). */
@@ -414,34 +442,60 @@ class $Editor {
   moveWordHorizontal(direction: -1 | 1, extend = false): void {
     if (!this.hasDocument.value) return;
     this.beginMove(extend);
+    if (direction < 0) {
+      const target = this.previousWordPosition(false);
+      this.placeCursor(target.line, target.col);
+      this.scrollLineIntoView(target.line);
+      return;
+    }
+
     const isWordCharacter = (cluster: string): boolean => /[\p{L}\p{N}_]/u.test(cluster);
     let line = this.cursor.line.value;
     let column = this.cursor.col.value;
     const clusters = () => EditorCoordinates.Class.graphemes(this.document.line(line));
-    if (direction > 0) {
-      let row = clusters();
-      if (column >= row.length) {
-        if (line >= this.document.lineCount - 1) return;
-        line += 1;
-        column = 0;
-        row = clusters();
-      } else {
-        while (column < row.length && isWordCharacter(row[column] ?? '')) column += 1;
-      }
-      while (column < row.length && !isWordCharacter(row[column] ?? '')) column += 1;
+    let lineClusters = clusters();
+    if (column >= lineClusters.length) {
+      if (line >= this.document.lineCount - 1) return;
+      line += 1;
+      column = 0;
+      lineClusters = clusters();
     } else {
-      let row = clusters();
-      if (column === 0) {
-        if (line === 0) return;
-        line -= 1;
-        row = clusters();
-        column = row.length;
-      }
-      while (column > 0 && !isWordCharacter(row[column - 1] ?? '')) column -= 1;
-      while (column > 0 && isWordCharacter(row[column - 1] ?? '')) column -= 1;
+      while (column < lineClusters.length && isWordCharacter(lineClusters[column] ?? '')) column += 1;
     }
+    while (column < lineClusters.length && !isWordCharacter(lineClusters[column] ?? '')) column += 1;
     this.placeCursor(line, column);
     this.scrollLineIntoView(line);
+  }
+
+  /**
+   * Convert the shared string boundary back into an editor line/grapheme position. The local text
+   * window includes only the preceding line and current prefix: enough to represent the newline
+   * boundary without materializing the document, so cost is independent of document length.
+   */
+  private previousWordPosition(useDeletionRange: boolean): { line: number; col: number } {
+    const currentLineIndex = this.cursor.line.value;
+    const currentLineText = this.document.line(currentLineIndex);
+    const currentPrefixEndUtf16Offset = EditorCoordinates.Class.graphemeToU16(
+      currentLineText,
+      this.cursor.col.value,
+    );
+    const currentPrefix = currentLineText.slice(0, currentPrefixEndUtf16Offset);
+    const previousLineText = currentLineIndex > 0 ? this.document.line(currentLineIndex - 1) : '';
+    const currentLineStart = currentLineIndex > 0
+      ? EditorCoordinates.Class.graphemeCount(previousLineText) + 1
+      : 0;
+    const localText = currentLineIndex > 0
+      ? `${previousLineText}\n${currentPrefix}`
+      : currentPrefix;
+    const localCursor = EditorCoordinates.Class.graphemeCount(localText);
+    const localStart = useDeletionRange
+      ? TextEditing.Class.deletePreviousWord(localText, localCursor).start
+      : TextEditing.Class.wordLeft(localText, localCursor);
+
+    if (currentLineIndex > 0 && localStart < currentLineStart) {
+      return { line: currentLineIndex - 1, col: localStart };
+    }
+    return { line: currentLineIndex, col: localStart - currentLineStart };
   }
 
   /** Ctrl+Home / Ctrl+End: jump to the document start/end. */

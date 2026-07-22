@@ -2,6 +2,7 @@ import { test, expect, describe } from 'bun:test';
 import { KeybindingRegistry, type ChordEvent } from '../KeybindingRegistry';
 import { canonicalBindings } from '../keybindings.defaults';
 import { macOverlayBindings } from '../keybindings.mac';
+import { parseKeypress } from '@opentui/core';
 
 function chord(name: string, modifiers: Partial<ChordEvent> = {}): ChordEvent {
   return { name, ctrl: false, shift: false, option: false, ...modifiers };
@@ -105,6 +106,47 @@ describe('the canonical floor', () => {
     const registry = registryWithDefaults();
     expect(registry.resolve(chord('c', { super: true }), 'editor', 0).action).toBe('editor.copy');
     expect(registry.resolve(chord('left', { super: true }), 'editor', 0).action).toBe('editor.lineStart');
+  });
+
+  test('actual Option Backspace and modified Delete sequences resolve to word deletion never close', () => {
+    const registry = registryWithDefaults();
+    const sequences = [
+      parseKeypress('\x1b\x7f'),
+      parseKeypress('\x1b[3;3~'),
+      parseKeypress('\x1b[127;3u', { useKittyKeyboard: true }),
+      parseKeypress('\x1b[57349;3u', { useKittyKeyboard: true }),
+    ];
+
+    for (const key of sequences) {
+      expect(key).not.toBeNull();
+      const resolution = registry.resolve(
+        {
+          name: key!.name,
+          ctrl: key!.ctrl,
+          shift: key!.shift,
+          option: key!.option || key!.meta,
+          super: key!.super,
+        },
+        'editor',
+        0,
+      );
+      expect(resolution.action).toBe('edit.deletePreviousWord');
+      expect(resolution.action).not.toBe('buffer.close');
+    }
+  });
+
+  test('Alt Backspace and Alt Delete resolve in every present text-input context', () => {
+    const registry = registryWithDefaults();
+    const expectedActions = new Map([
+      ['editor', 'edit.deletePreviousWord'],
+      ['palette', 'palette.eraseWord'],
+      ['quickopen', 'quickopen.eraseWord'],
+      ['find', 'find.eraseWord'],
+    ]);
+    for (const [context, expectedAction] of expectedActions) {
+      expect(registry.resolve(chord('backspace', { option: true }), context, 0).action).toBe(expectedAction);
+      expect(registry.resolve(chord('delete', { option: true }), context, 0).action).toBe(expectedAction);
+    }
   });
 });
 

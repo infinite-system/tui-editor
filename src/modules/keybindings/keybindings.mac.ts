@@ -9,6 +9,8 @@
 import type { Keybinding } from './KeybindingRegistry';
 
 export const macOverlayBindings: Keybinding[] = [
+  // Deliberately no Alt/Option+Delete -> buffer.close alias. Word deletion lives in the canonical
+  // text-input bindings; closing a buffer remains Ctrl+W (and any independently deliverable Cmd alias).
   // Option word-jumps. Terminals encode Option+arrow either as alt+arrow, or as the readline
   // forms ESC-b / ESC-f (Terminal.app default profile) — both patterns, one intent.
   { chord: { key: 'left', alt: true }, action: 'editor.wordLeft', context: 'editor' },

@@ -495,6 +495,12 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'palette.previous': () => commands.moveSelection(-1),
     'palette.next': () => commands.moveSelection(1),
     'palette.erase': () => commands.backspaceQuery(),
+    'palette.eraseWord': () => commands.deletePreviousQueryWord(),
+    'quickopen.eraseWord': () => quickOpen.deletePreviousWord(),
+    'find.eraseWord': () => {
+      findBar.deletePreviousWord();
+      revealFindMatch();
+    },
     'focus.toggle': () => workspace.toggleFocus(),
     'settings.toggle': () => settingsPanel.toggle(),
     'settings.close': () => settingsPanel.close(),
@@ -609,6 +615,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'editor.newline': () => workspace.editor.insertNewline(),
     'editor.backspace': () => workspace.editor.backspace(),
     'editor.delete': () => workspace.editor.deleteChar(),
+    'edit.deletePreviousWord': () => commands.run('edit.deletePreviousWord'),
     'editor.escape': () => {
       if (workspace.editor.hasSelection) workspace.editor.cursor.clearSelection();
       else workspace.focusFiles();
@@ -697,9 +704,22 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
             ? 'find'
             : workspace.focus.value;
 
+    const normalizedChordEvent = {
+      name: key.name,
+      ctrl: key.ctrl,
+      shift: key.shift,
+      option: key.option || key.meta,
+      super: key.super,
+    };
+
     // Quick-open (Ctrl+P) modal: type filters the fuzzy file list live, ↑/↓ move, Enter opens the
     // selected file as a tab (add-or-focus), Esc closes. Inline like the palette's query editing.
     if (context === 'quickopen') {
+      const quickOpenResolution = keybindings.resolve(normalizedChordEvent, 'quickopen', Date.now());
+      if (quickOpenResolution.action) {
+        actionHandlers[quickOpenResolution.action]?.(key);
+        return;
+      }
       if (key.name === 'escape') {
         quickOpen.close();
         return;
@@ -734,6 +754,11 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     // matches, Ctrl+Enter replaces, Tab switches field, Esc closes. Handled inline (not via the registry)
     // because it composes typed input with the match-reveal, like the palette's query editing.
     if (context === 'find') {
+      const findResolution = keybindings.resolve(normalizedChordEvent, 'find', Date.now());
+      if (findResolution.action) {
+        actionHandlers[findResolution.action]?.(key);
+        return;
+      }
       if (key.name === 'escape') {
         findBar.close();
         return;
@@ -799,7 +824,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     const resolution = keybindings.resolve(
       // Alt-family collapse: mac terminals surface Option as `option` OR `meta` (ESC-prefixed
       // forms); both mean the alt slot of a chord pattern.
-      { name: key.name, ctrl: key.ctrl, shift: key.shift, option: key.option || key.meta, super: key.super },
+      normalizedChordEvent,
       context,
       Date.now(),
     );

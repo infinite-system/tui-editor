@@ -18,6 +18,14 @@ function fixedProjectFileEnumerator(
 }
 
 describe('QuickOpen', () => {
+  test('deletePreviousWord edits the query through the shared text boundary', async () => {
+    const quickOpen = new QuickOpen.Class({ enumerateProjectFiles: async () => ['foo bar.ts'] });
+    await quickOpen.show('/project');
+    quickOpen.setQuery('foo bar');
+    quickOpen.deletePreviousWord();
+    expect(quickOpen.query.value).toBe('foo ');
+  });
+
   test('show uses the injected enumerator and an empty query lists every file alphabetically', async () => {
     const enumeratedProjectRoots: string[] = [];
     const quickOpen = new QuickOpen.Class({

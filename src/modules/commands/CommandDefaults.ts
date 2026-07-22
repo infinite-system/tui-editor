@@ -58,6 +58,13 @@ function $registerDefaultCommands(
       run: () => getEditor().performRedo(),
     },
     {
+      id: 'edit.deletePreviousWord',
+      title: 'Edit: Delete Previous Word',
+      category: 'Edit',
+      when: hasDocument,
+      run: () => getEditor().deletePreviousWord(),
+    },
+    {
       id: 'view.focusFiles',
       title: 'View: Focus File Explorer',
       category: 'View',
