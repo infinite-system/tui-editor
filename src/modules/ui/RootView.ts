@@ -907,6 +907,18 @@ function $buildRootView(
       sidebarInnerWidth - scrollbarThicknessCells(),
     );
     const changesContentWidth = gitAvailable ? gitChangesContentWidth(gitChangeRowsNow()) : 0;
+    const changesViewportHeight = Math.max(1, gitPanelGeometry.changesRows);
+    const logViewportHeight = Math.max(1, gitPanelGeometry.logRows);
+    if (
+      workspaceSet.active.gitPanel.changesViewportHeight.value !== changesViewportHeight ||
+      workspaceSet.active.gitPanel.logViewportHeight.value !== logViewportHeight
+    ) {
+      workspaceSet.active.gitPanel.setVerticalViewportHeights(
+        changesViewportHeight,
+        logViewportHeight,
+      );
+      changed = true;
+    }
     if (
       workspaceSet.active.gitPanel.changesViewportWidth.value !== changesViewportWidth ||
       workspaceSet.active.gitPanel.changesContentWidth.value !== changesContentWidth
@@ -1062,7 +1074,11 @@ function $buildRootView(
     const chunks: TextChunk[] = [];
     visible.forEach((row, visibleIndex) => {
       const rowIndex = top + visibleIndex;
-      const selected = rowIndex === selectedIndex && workspaceSet.active.focus.value === 'files';
+      // Selection truth is independent of focus, hover, and viewport position. Focus changes only
+      // its intensity: full while keyboard-active, dim while the editor or another pane owns keys.
+      // invariant: Selection is item-anchored, click-set, keyboard-moved, and stays (src/modules/ui/ui.invariants.md)
+      const selected = rowIndex === selectedIndex;
+      const selectionFocused = workspaceSet.active.focus.value === 'files';
       const hovered = rowIndex === hoveredIndex;
       const marker = selected ? '›' : ' ';
       const indent = '  '.repeat(row.depth);
@@ -1073,8 +1089,14 @@ function $buildRootView(
       // Pad to the pane's inner width so the row highlight spans the full row (VS Code-style).
       label = padToDisplayWidth(label, innerWidth);
       // Two intensities: selection (stronger) over hover (subtle); bg is the primary signal.
-      const rowBackground = selected ? palette.selection : hovered ? palette.cursorLine : null;
-      const styled = fg(selected ? palette.accent : palette.fg)(label);
+      const rowBackground = selected
+        ? selectionFocused
+          ? palette.selection
+          : palette.cursorLine
+        : hovered
+          ? palette.cursorLine
+          : null;
+      const styled = fg(selected && selectionFocused ? palette.accent : palette.fg)(label);
       chunks.push(rowBackground ? bg(rowBackground)(styled) : styled);
       if (visibleIndex < visible.length - 1) chunks.push(fg(palette.fg)('\n'));
     });
@@ -1870,16 +1892,23 @@ function $buildRootView(
           viewportWidth: changesViewportWidth,
         });
       } else {
-        const selected = active && gitPanel.region.value === 'changes' && rowIndex === gitPanel.changesIndex.value;
+        const selected = rowIndex === gitPanel.changesIndex.value;
+        const selectionFocused = active && gitPanel.region.value === 'changes';
         const hovered = rowIndex === gitPanel.changesHovered.value;
         // Multi-selected rows (Ctrl/Shift-click, right-click) share the hover token — a lower
         // intensity than the focused row's `selection` bg — until the palette grows a third token.
         const multiSelected = gitPanel.selectedPaths.value.has(row.path);
-        const background = selected ? palette.selection : multiSelected || hovered ? palette.cursorLine : null;
+        const background = selected
+          ? selectionFocused
+            ? palette.selection
+            : palette.cursorLine
+          : multiSelected || hovered
+            ? palette.cursorLine
+            : null;
         // ` ☑ M path…            o d ±` — ONE-glyph staging checkbox (theme ladder; click toggles);
         // the git-status letter (M/D/?) stays separate; action buttons appear on hover/selection.
         const label = changeRowText(row);
-        if (selected || hovered) {
+        if ((selected && selectionFocused) || hovered) {
           // Action buttons: real glyphs from the theme icon ladder (nerd → unicode → ascii letter),
           // each theme-COLOURED and each ONE cell so the hit-zone columns (gitActionButtonAt) align:
           // ` <open>  <discard>  <stage|unstage>` = 8 cells. Rendered as separate chunks so each
@@ -1940,9 +1969,16 @@ function $buildRootView(
       );
       flatRows.forEach((row, index) => {
         const flatIndex = flatTop + index;
-        const selected = active && gitPanel.region.value === 'log' && flatIndex === gitPanel.logIndex.value;
+        const selected = flatIndex === gitPanel.logIndex.value;
+        const selectionFocused = active && gitPanel.region.value === 'log';
         const hovered = flatIndex === gitPanel.logHovered.value;
-        const background = selected ? palette.selection : hovered ? palette.cursorLine : null;
+        const background = selected
+          ? selectionFocused
+            ? palette.selection
+            : palette.cursorLine
+          : hovered
+            ? palette.cursorLine
+            : null;
         const newline = index < flatRows.length - 1;
         if (row.kind === 'commit') {
           pushRow(commitLogRowText(row), row.record ? palette.fg : palette.dim, {
@@ -2583,7 +2619,7 @@ function $buildRootView(
   const openChangesContextMenu = (rowIndex: number, row: FileRow, rows: ChangeRow[], pointerX: number, pointerY: number): void => {
     const gitPanel = workspaceSet.active.gitPanel;
     if (!gitPanel.selectedPaths.value.has(row.path)) gitPanel.replaceSelected([row.path]);
-    gitPanel.changesIndex.value = rowIndex;
+    gitPanel.setChangesSelection(rowIndex);
     const selectedFileRows = rows.filter(
       (candidate): candidate is FileRow =>
         candidate.kind === 'file' && gitPanel.selectedPaths.value.has(candidate.path),
@@ -2647,7 +2683,7 @@ function $buildRootView(
           return;
         }
         const wasCurrent = workspaceSet.active.gitPanel.changesIndex.value === hit.index;
-        workspaceSet.active.gitPanel.changesIndex.value = hit.index;
+        workspaceSet.active.gitPanel.setChangesSelection(hit.index);
         const relativeX = event.x - (sidebar.x + 1);
         const actionButton = gitActionButtonAt(relativeX);
         const buttonsShowing = wasCurrent || workspaceSet.active.gitPanel.changesHovered.value === hit.index;
@@ -2664,7 +2700,7 @@ function $buildRootView(
         }
       } else {
         workspaceSet.active.gitPanel.region.value = 'log';
-        workspaceSet.active.gitPanel.logIndex.value = hit.index;
+        workspaceSet.active.gitPanel.setLogSelection(hit.index);
         // Row body = select + ACTIVATE (consistent with tree/changes): a commit header toggles its
         // inline expansion (lazy fetch); a file row opens that file's diff for that commit.
         workspaceSet.active.activateLogRow(hit.index);

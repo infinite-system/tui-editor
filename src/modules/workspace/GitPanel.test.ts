@@ -47,3 +47,41 @@ describe('GitPanel horizontal pane windows', () => {
     expect(panel.logScrollLeft.value).toBe(15);
   });
 });
+
+describe('GitPanel persistent list selection', () => {
+  test('click selection leaves both pane windows untouched', () => {
+    const panel = new GitPanel.Class();
+    panel.changesScrollTop.value = 8;
+    panel.logScrollTop.value = 20;
+
+    panel.setChangesSelection(11);
+    panel.setLogSelection(24);
+
+    expect(panel.changesIndex.value).toBe(11);
+    expect(panel.logIndex.value).toBe(24);
+    expect(panel.changesScrollTop.value).toBe(8);
+    expect(panel.logScrollTop.value).toBe(20);
+  });
+
+  test('keyboard movement minimally reveals from the persistent selection', () => {
+    const panel = new GitPanel.Class();
+    panel.setVerticalViewportHeights(5, 6);
+    panel.changesScrollTop.value = 10;
+    panel.logScrollTop.value = 20;
+    panel.setChangesSelection(12);
+    panel.setLogSelection(23);
+
+    panel.moveChangesSelection(15);
+    panel.moveLogSelection(4, 100);
+
+    expect(panel.changesIndex.value).toBe(15);
+    expect(panel.changesScrollTop.value).toBe(11);
+    expect(panel.logIndex.value).toBe(27);
+    expect(panel.logScrollTop.value).toBe(22);
+
+    panel.moveChangesSelection(9);
+    panel.moveLogSelection(-10, 100);
+    expect(panel.changesScrollTop.value).toBe(9);
+    expect(panel.logScrollTop.value).toBe(17);
+  });
+});
