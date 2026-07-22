@@ -32,6 +32,8 @@ import { GitPaneRenderer } from './GitPaneRenderer';
 import { EditorPaneRenderer } from './EditorPaneRenderer';
 import { StatusBar } from './StatusBar';
 import { TabBar } from './TabBar';
+import { ScrollGesture, type WheelModifiers } from './ScrollGesture';
+import { Sidebar } from './Sidebar';
 import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
 import { DiffView } from '../diff/DiffView';
 import { MarkdownSplitView } from '../markdown/MarkdownSplitView';
@@ -1714,28 +1716,6 @@ function $buildRootView(
   // onMouseScroll (events bubble to the box). Each scrollable pane mutates only its own window
   // (scrollTop / selection), never materializing the whole list — the frame effect observes those
   // signals and repaints. invariant: Cost tracks the actively observed set (project.invariants.md)
-  sidebar.onMouseScroll = (event) => {
-    const direction = event.scroll?.direction;
-    const step = wheelStep(event);
-    const horizontal =
-      direction === 'left' ||
-      direction === 'right' ||
-      scrollModifierHeld(event, settings.horizontalScrollModifier.value);
-    const backward = direction === 'left' || direction === 'up';
-    if (workspaceSet.active.sidebarView.value === 'git') {
-      // Route by pointer position: wheel over the changes region scrolls it; over the log, the
-      // momentum glide (same gesture, per-region window).
-      const row = event.y - sidebar.y;
-      if (row < gitPanelGeometry.dividerRow) {
-        if (horizontal) workspaceSet.active.impulseGitChangesHorizontalScroll((backward ? -1 : 1) * step);
-        else workspaceSet.active.impulseGitChangesScroll((direction === 'up' ? -1 : 1) * step);
-      } else {
-        if (horizontal) workspaceSet.active.impulseGitLogHorizontalScroll((backward ? -1 : 1) * step);
-        else workspaceSet.active.impulseGitLog((direction === 'up' ? -1 : 1) * step);
-      }
-    } else if (horizontal) workspaceSet.active.impulseTreeHorizontalScroll((backward ? -1 : 1) * step);
-    else workspaceSet.active.impulseTreeScroll((direction === 'up' ? -1 : 1) * step);
-  };
   // Vertical scroll of the editor window. Wrap mode: scrollTop stays a LOGICAL line index, but
   // tall (wrapped) lines mean the logical clamp `lineCount - height` could strand tail rows below
   // the fold — so the clamp relaxes to let the LAST line reach the top of the window.
@@ -1745,28 +1725,12 @@ function $buildRootView(
   // through momentum (impulse) below.
   // Is the configured scroll modifier held on this wheel event? 'none' is never held (the control is
   // off, not misleading). Single source: the modifier comes from Settings, never hardcoded.
-  const scrollModifierHeld = (event: { modifiers: { alt: boolean; shift: boolean; ctrl: boolean } }, modifier: ScrollModifier): boolean => {
-    switch (modifier) {
-      case 'alt':
-        return event.modifiers.alt;
-      case 'shift':
-        return event.modifiers.shift;
-      case 'ctrl':
-        return event.modifiers.ctrl;
-      default:
-        return false; // 'none'
-    }
-  };
+  const scrollModifierHeld = (event: WheelModifiers, modifier: ScrollModifier): boolean =>
+    ScrollGesture.Class.modifierHeld(event, modifier);
   // Rows per wheel notch = settings.linesPerNotch (was a hardcoded 3), multiplied by the fast-scroll
   // factor when the fast-scroll modifier is held (settings.fastScrollMultiplier; modifier defaults to
   // 'none' = off). One expression feeds BOTH the wrap-mode direct step and the momentum impulse.
-  const wheelStep = (event: { modifiers: { alt: boolean; shift: boolean; ctrl: boolean } }): number => {
-    const notch = Math.max(1, Math.round(settings.linesPerNotch.value));
-    const fast = scrollModifierHeld(event, settings.fastScrollModifier.value)
-      ? Math.max(1, Math.round(settings.fastScrollMultiplier.value))
-      : 1;
-    return notch * fast;
-  };
+  const wheelStep = (event: WheelModifiers): number => ScrollGesture.Class.wheelStep(event, settings);
   const scrollEditorVertically = (delta: number): void => {
     const editor = workspaceSet.active.editor;
     const editorViewport = editor.viewport;
@@ -1931,178 +1895,39 @@ function $buildRootView(
   // is model view-state so the frame effect repaints when it changes; cost is one marker cell.
   // Map a sidebar-relative screen row to a git-panel target using the SAME geometry the renderer
   // wrote (changes row / divider / log row).
-  const gitRowAt = (screenY: number): { region: 'changes' | 'log'; index: number } | null => {
-    const row = screenY - sidebar.y;
-    if (row >= 2 && row < gitPanelGeometry.dividerRow) {
-      return { region: 'changes', index: gitPanelGeometry.changesTop + (row - 2) };
-    }
-    if (row > gitPanelGeometry.dividerRow) {
-      return { region: 'log', index: gitPanelGeometry.logTop + (row - gitPanelGeometry.dividerRow - 1) };
-    }
-    return null;
-  };
   const gitChangeRowsNow = () => {
     const git = workspaceSet.active.git.value;
     return git ? GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value) : [];
   };
-  // The git action-button hit zones (right-aligned ` o  d  ±` on a hovered/selected file row).
-  // ONE definition shared by the click dispatch and the tooltip arming, so the tooltip always
-  // names exactly what a click at that cell would do.
-  type GitActionButton = 'open' | 'discard' | 'stageToggle';
-  const gitActionButtonAt = (relativeX: number): GitActionButton | null => {
-    const innerWidth = sidebarWidth() - 2;
-    const actionAreaStart = Math.max(
-      1,
-      innerWidth - scrollbarThicknessCells() - gitActionAreaWidth,
-    );
-    if (relativeX >= actionAreaStart && relativeX < actionAreaStart + 2) return 'open';
-    if (relativeX >= actionAreaStart + 2 && relativeX < actionAreaStart + 5) return 'discard';
-    if (relativeX >= actionAreaStart + 5 && relativeX < actionAreaStart + 8) return 'stageToggle';
-    return null;
-  };
 
-  sidebar.onMouseMove = (event) => {
-    if (workspaceSet.active.sidebarView.value === 'git') {
-      const hit = gitRowAt(event.y);
-      const rows = gitChangeRowsNow();
-      workspaceSet.active.gitPanel.changesHovered.value =
-        hit?.region === 'changes' && rows[hit.index]?.kind === 'file' ? hit.index : -1;
-      workspaceSet.active.gitPanel.logHovered.value = hit?.region === 'log' ? hit.index : -1;
-      // Tooltip: arm the dwell while the pointer rests on an action button of a file row
-      // (hovering the row is what makes the buttons visible); anything else disarms.
-      const hoveredRow = hit?.region === 'changes' ? rows[hit.index] : undefined;
-      const button =
-        hoveredRow?.kind === 'file' ? gitActionButtonAt(event.x - (sidebar.x + 1)) : null;
-      if (button && hoveredRow?.kind === 'file') {
-        const label =
-          button === 'open'
-            ? 'Open diff'
-            : button === 'discard'
-              ? 'Discard…'
-              : hoveredRow.bucket === 'staged'
-                ? 'Unstage'
-                : 'Stage';
-        tooltip.point(label, event.x, event.y); // anchor the pointed cell; view places above (auto-flip)
-      } else {
-        tooltip.clear();
-      }
-      return;
-    }
-    tooltip.clear();
-    const rowIndex = treeWindowTop() + (event.y - (sidebar.y + 1));
-    workspaceSet.active.tree.hoveredIndex.value =
-      rowIndex >= 0 && rowIndex < workspaceSet.active.tree.rows.length ? rowIndex : -1;
-  };
-  sidebar.onMouseOut = () => {
-    workspaceSet.active.tree.hoveredIndex.value = -1;
-    workspaceSet.active.gitPanel.changesHovered.value = -1;
-    workspaceSet.active.gitPanel.logHovered.value = -1;
-    tooltip.clear();
-  };
+  // The sidebar input CONTROLLER owns the tree+git mouse behaviour (wheel/move/out/down + git
+  // hit-testers). RootView keeps rendering the sidebar and owns the geometry the hit-tests read, so
+  // it passes those in as accessors — the controller reads the SAME geometry the renderer wrote.
+  const sidebarController = new Sidebar.Class({
+    renderer,
+    sidebar,
+    workspaceSet,
+    tooltip,
+    overlayCoordinator,
+    contextMenu,
+    settings,
+    gitPanelGeometry: () => gitPanelGeometry,
+    treeWindowTop,
+    gitChangeRowsNow,
+    sidebarWidth,
+    scrollbarThicknessCells,
+    gitActionAreaWidth,
+  });
+  void sidebarController;
+
 
   // Right-click on a changes FILE row: normalize the selection (an unselected row becomes THE
   // selection; a selected row keeps the whole multi-selection) and open the context menu at the
   // pointer with the COLLECTIVE actions the selection's buckets support.
-  const openChangesContextMenu = (rowIndex: number, row: FileRow, rows: ChangeRow[], pointerX: number, pointerY: number): void => {
-    const gitPanel = workspaceSet.active.gitPanel;
-    if (!gitPanel.selectedPaths.value.has(row.path)) gitPanel.replaceSelected([row.path]);
-    gitPanel.setChangesSelection(rowIndex);
-    const selectedFileRows = rows.filter(
-      (candidate): candidate is FileRow =>
-        candidate.kind === 'file' && gitPanel.selectedPaths.value.has(candidate.path),
-    );
-    const stageableCount = selectedFileRows.filter((fileRow) => fileRow.bucket !== 'staged').length;
-    const unstageableCount = selectedFileRows.filter((fileRow) => fileRow.bucket === 'staged').length;
-    const items: ContextMenuItem[] = [
-      { id: 'git.stageSelected', label: `Stage (${stageableCount})`, enabled: stageableCount > 0 },
-      { id: 'git.unstageSelected', label: `Unstage (${unstageableCount})`, enabled: unstageableCount > 0 },
-      { id: 'git.discardSelected', label: `Discard… (${selectedFileRows.length})`, enabled: selectedFileRows.length > 0 },
-      { id: 'git.openDiff', label: 'Open diff', enabled: selectedFileRows.length > 0 },
-    ];
-    const firstSelectedIndex = rows.findIndex(
-      (candidate) => candidate.kind === 'file' && gitPanel.selectedPaths.value.has(candidate.path),
-    );
-    overlayCoordinator.openExclusiveOverlay('contextMenu', () =>
-      contextMenu.openAt(items, pointerX, pointerY, { width: renderer.width, height: renderer.height }, (itemId) => {
-        if (itemId === 'git.stageSelected') void workspaceSet.active.stageSelected();
-        else if (itemId === 'git.unstageSelected') void workspaceSet.active.unstageSelected();
-        else if (itemId === 'git.discardSelected') workspaceSet.active.requestDiscardSelected(); // y/N confirm
-        else if (itemId === 'git.openDiff' && firstSelectedIndex >= 0) void workspaceSet.active.openChangeAtRow(firstSelectedIndex);
-      }),
-    );
-  };
 
   // Shift+click: select the file rows in the range between the focused row and the clicked row
   // (headers in between are skipped), REPLACING the previous selection.
-  const selectChangesRange = (anchorIndex: number, targetIndex: number, rows: ChangeRow[]): void => {
-    const start = Math.min(anchorIndex, targetIndex);
-    const end = Math.max(anchorIndex, targetIndex);
-    const paths: string[] = [];
-    for (let rowIndex = start; rowIndex <= end; rowIndex++) {
-      const row = rows[rowIndex];
-      if (row?.kind === 'file') paths.push(row.path);
-    }
-    workspaceSet.active.gitPanel.replaceSelected(paths);
-  };
 
-  sidebar.onMouseDown = (event) => {
-    if (workspaceSet.active.sidebarView.value === 'git') {
-      workspaceSet.active.focusGit();
-      const hit = gitRowAt(event.y);
-      if (!hit) return;
-      if (hit.region === 'changes') {
-        workspaceSet.active.haltGitChangesScroll();
-        const rows = gitChangeRowsNow();
-        const row = rows[hit.index];
-        if (row?.kind !== 'file') return;
-        workspaceSet.active.gitPanel.region.value = 'changes';
-        // Multi-select gestures come FIRST; plain left-click behavior below is unchanged.
-        if (event.button === 2) {
-          openChangesContextMenu(hit.index, row, rows, event.x, event.y); // right-click menu
-          return;
-        }
-        if (event.modifiers.ctrl) {
-          workspaceSet.active.gitPanel.toggleSelected(row.path); // toggle in/out of the selection; no menu
-          return;
-        }
-        if (event.modifiers.shift) {
-          selectChangesRange(workspaceSet.active.gitPanel.changesIndex.value, hit.index, rows); // range
-          return;
-        }
-        const wasCurrent = workspaceSet.active.gitPanel.changesIndex.value === hit.index;
-        workspaceSet.active.gitPanel.setChangesSelection(hit.index);
-        const relativeX = event.x - (sidebar.x + 1);
-        const actionButton = gitActionButtonAt(relativeX);
-        const buttonsShowing = wasCurrent || workspaceSet.active.gitPanel.changesHovered.value === hit.index;
-        if (relativeX === 1) {
-          void workspaceSet.active.toggleStageAtRow(hit.index); // the single-glyph CHECKBOX cell is the staging control
-        } else if (buttonsShowing && actionButton === 'open') {
-          void workspaceSet.active.openChangeAtRow(hit.index); // [o]pen
-        } else if (buttonsShowing && actionButton === 'discard') {
-          workspaceSet.active.requestDiscardAtRow(hit.index); // [d]iscard — arms the y/N confirm
-        } else if (buttonsShowing && actionButton === 'stageToggle') {
-          void workspaceSet.active.toggleStageAtRow(hit.index); // [+/-] stage/unstage
-        } else {
-          void workspaceSet.active.openChangeAtRow(hit.index); // row body = select + OPEN (consistent with tree)
-        }
-      } else {
-        workspaceSet.active.gitPanel.region.value = 'log';
-        workspaceSet.active.gitPanel.setLogSelection(hit.index);
-        // Row body = select + ACTIVATE (consistent with tree/changes): a commit header toggles its
-        // inline expansion (lazy fetch); a file row opens that file's diff for that commit.
-        workspaceSet.active.activateLogRow(hit.index);
-      }
-      return;
-    }
-    workspaceSet.active.focusFiles(); // click-to-focus
-    workspaceSet.active.haltTreeScroll();
-    const rowIndex = treeWindowTop() + (event.y - (sidebar.y + 1)); // +1: sidebar top border
-    if (rowIndex < 0 || rowIndex >= workspaceSet.active.tree.rows.length) return;
-    // Single-click activation: one click selects AND opens the file / toggles the folder. setSelection
-    // does NOT reveal/scroll, so clicking a visible row leaves the scroll position exactly where it is.
-    workspaceSet.active.tree.setSelection(rowIndex);
-    workspaceSet.active.activate();
-  };
 
   update();
 
