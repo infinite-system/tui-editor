@@ -44,6 +44,17 @@ Change a convention → change it HERE (and note the why in decisions.md).
   a subclass/other module needs the raw form (parallel to `$Class`); (b) manifest-shape only — a tiny
   inline-body capability needs no `$name` backing. CHECK: conventions-gate grep for the `…Implementation`
   suffix.
+- MANIFEST-ON-TOP (file layout, STANDARD): the `class $X { static … }` + `export namespace X { … }`
+  manifest block goes at the TOP of the file — directly after imports and any public types, ABOVE the
+  `$name` implementations. You open a capability file and read its whole surface (the Class and its
+  members) first, then drill into the bodies below. This is SAFE ONLY because `$name` impls are FUNCTION
+  DECLARATIONS: `function $foo(){}` is hoisted and initialized before the `class` statement executes, so
+  `static foo = $foo` binds the real function even though it appears above it. HARD REQUIREMENT (what
+  makes the layout safe): a manifest `$name` impl MUST be a `function` declaration — NEVER
+  `const $foo = () => …` or a function expression; those live in the temporal dead zone, so a top-placed
+  manifest referencing them throws `Cannot access '$foo' before initialization` at load. Reference file:
+  `src/modules/commands/CommandDefaults.ts`. (A gate check enforcing "manifest impls are function
+  declarations" belongs in `scripts/check-exported-capabilities.mjs`.)
 - Reactive state = ref-returning getters; cheap derived state = PLAIN getters (never `computed()`
   unless memoization is proven). Cross-module deps are read LATE (getters/method bodies) — never
   top-level `new`/snapshot. Owned constructions go through overridable `createX()` seams.

@@ -14,6 +14,18 @@ export interface CommandContext {
   requestRender: () => void;
 }
 
+// Manifest first — the capability's surface reads at the top of the file; implementations follow.
+// The `$` impls below are FUNCTION DECLARATIONS (hoisted + initialized before this class statement
+// runs), so the static fields bind the real functions despite appearing above them.
+class $CommandDefaults {
+  static registerDefaultCommands = $registerDefaultCommands;
+}
+
+export namespace CommandDefaults {
+  export const $Class = $CommandDefaults;
+  export const Class = Static($CommandDefaults);
+}
+
 function $registerDefaultCommands(
   registry: CommandRegistry.Instance,
   context: CommandContext,
@@ -98,13 +110,4 @@ function $registerDefaultCommands(
       run: () => context.quit(),
     },
   ]);
-}
-
-class $CommandDefaults {
-  static registerDefaultCommands = $registerDefaultCommands;
-}
-
-export namespace CommandDefaults {
-  export const $Class = $CommandDefaults;
-  export const Class = Static($CommandDefaults);
 }

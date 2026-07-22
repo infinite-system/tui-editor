@@ -151,6 +151,39 @@ function inspectNode(sourceFile, node) {
     }
   }
 
+  // Manifest impls must be FUNCTION DECLARATIONS. A `static foo = $foo` static-field initializer runs
+  // at class-definition time; only a hoisted `function $foo(){}` is guaranteed initialized by then, so
+  // this is precisely what makes MANIFEST-ON-TOP safe. An arrow/const `$foo` sits in the TDZ and a
+  // top-placed manifest referencing it throws at load — reject it before it can regress.
+  if (typescript.isClassDeclaration(node) && (node.name?.text ?? '').startsWith('$')) {
+    for (const member of node.members) {
+      if (
+        !typescript.isPropertyDeclaration(member) ||
+        !hasModifier(member, typescript.SyntaxKind.StaticKeyword) ||
+        member.initializer === undefined ||
+        !typescript.isIdentifier(member.initializer) ||
+        !member.initializer.text.startsWith('$')
+      ) {
+        continue;
+      }
+      const declarations = resolvedSymbolAt(member.initializer)?.declarations ?? [];
+      const isFunctionDeclaration = declarations.some((declaration) =>
+        typescript.isFunctionDeclaration(declaration),
+      );
+      const isVariableImpl = declarations.some((declaration) =>
+        typescript.isVariableDeclaration(declaration),
+      );
+      if (!isFunctionDeclaration && isVariableImpl) {
+        recordViolation(
+          sourceFile,
+          member,
+          member.initializer.text,
+          'manifest impl must be a function declaration (arrow/const breaks hoisting-safe manifest-on-top)',
+        );
+      }
+    }
+  }
+
   if (
     typescript.isExportDeclaration(node) &&
     node.exportClause !== undefined &&
