@@ -2,6 +2,8 @@
 // wheel notch moves (linesPerNotch × the fast-scroll factor when its modifier is held). Both the
 // sidebar and the editor scroll handlers use these, so they live in one Static capability rather than
 // duplicated in each pane controller. Pure: reads only the event modifiers and the settings values.
+//
+// invariant: The wheel gesture resolves through one settings-sourced step (src/modules/ui/ui.invariants.md)
 import { Static } from 'ivue/extras';
 import type { ScrollModifier, Settings } from '../settings/Settings';
 

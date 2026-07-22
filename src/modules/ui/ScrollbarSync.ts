@@ -1,0 +1,280 @@
+// The scrollbar geometry controller: each frame it derives every bar's track rect from the ACTUAL
+// rendered layout and writes the bar's reported viewport/position, and it converges the panes' live
+// viewport extents (heights/widths) after Yoga lays the frame out. RootView still CONSTRUCTS the bars
+// and the split divider (their onChange handlers call trueScrollPosition + read applyingGeometry here);
+// this controller owns the per-frame geometry math and the reported↔true scale map.
+//
+// invariant: A scrollbar track is derived per frame from its region rect (src/modules/ui/ui.invariants.md)
+// invariant: One writer per scroll regime per frame (src/modules/ui/ui.invariants.md)
+// invariant: A scrollable pane height is an input not an output (src/modules/ui/ui.invariants.md)
+import type { BoxRenderable, CliRenderer, ScrollBarRenderable } from '@opentui/core';
+import { Reactive } from 'ivue';
+import { ScrollbarGeometry } from './ScrollbarGeometry';
+import { EditorCoordinates } from '../editor/EditorCoordinates';
+import { EditorWrap } from '../editor/EditorWrap';
+import { GitPaneRenderer, type GitPanelGeometry } from './GitPaneRenderer';
+import { Logging } from '../system/Logging';
+import type { WorkspaceSet } from '../workspace/WorkspaceSet';
+import type { Theme } from '../theme/Theme';
+
+export interface ScrollbarSyncDeps {
+  renderer: CliRenderer;
+  workspaceSet: WorkspaceSet.Instance;
+  theme: Theme.Instance;
+  // Pane renderables the scroll regions are measured against.
+  editorArea: BoxRenderable;
+  codeBody: { x: number; y: number; width: number | string };
+  sidebar: BoxRenderable;
+  // The eight bars + the split divider (constructed by RootView; mutated here each frame).
+  editorVerticalBar: ScrollBarRenderable;
+  editorHorizontalBar: ScrollBarRenderable;
+  treeVerticalBar: ScrollBarRenderable;
+  treeHorizontalBar: ScrollBarRenderable;
+  changesVerticalBar: ScrollBarRenderable;
+  changesHorizontalBar: ScrollBarRenderable;
+  logVerticalBar: ScrollBarRenderable;
+  logHorizontalBar: ScrollBarRenderable;
+  gitSplitDivider: BoxRenderable;
+  // Geometry accessors owned elsewhere.
+  editorViewportHeight: () => number;
+  editorViewportWidth: () => number;
+  sidebarWidth: () => number;
+  scrollbarThicknessCells: () => number;
+  gitPanelGeometry: () => GitPanelGeometry;
+  gitChangeRowsNow: () => readonly unknown[];
+}
+
+class $ScrollbarSync {
+  private readonly barScales = new Map<object, number>();
+  private applying = false;
+
+  constructor(private readonly deps: ScrollbarSyncDeps) {}
+
+  /** True while applyBarGeometry is writing a bar's reported position — the bars' onChange handlers
+   *  read this to ignore our own per-frame sync (One-Writer: only a real user drag writes the model). */
+  get applyingGeometry(): boolean {
+    return this.applying;
+  }
+
+  /** Map a bar's reported (min-thumb-clamped) onChange position back to the true model offset. */
+  trueScrollPosition(bar: ScrollBarRenderable, reportedPosition: number): number {
+    return Math.max(0, Math.round(reportedPosition * (this.barScales.get(bar) ?? 1)));
+  }
+
+  /** First visible tree row (the render window slides to keep the selection on screen); shared by the
+   *  renderer and the mouse hit-test so clicks land on the row the user actually sees. */
+  treeWindowTop(): number {
+    return this.deps.workspaceSet.active.tree.windowTop();
+  }
+
+  private applyBarGeometry(
+    bar: ScrollBarRenderable,
+    orientation: 'vertical' | 'horizontal',
+    region: { top: number; left: number; width: number; height: number },
+    scroll: { scrollSize: number; viewportSize: number; scrollPosition: number },
+  ): void {
+    const geometry = ScrollbarGeometry.Class.scrollbarGeometry(orientation, region, scroll);
+    if (!geometry) {
+      // The ONE visibility rule for every bar: no scrollable range -> the bar does not exist.
+      bar.visible = false;
+      bar.scrollSize = 0;
+      this.barScales.set(bar, 0);
+      return;
+    }
+    bar.visible = true;
+    const thickness = this.deps.scrollbarThicknessCells();
+    bar.top = orientation === 'vertical' ? geometry.trackTop : geometry.trackTop - (thickness - 1);
+    bar.left = orientation === 'vertical' ? geometry.trackLeft - (thickness - 1) : geometry.trackLeft;
+    if (orientation === 'vertical') {
+      bar.height = geometry.trackLength;
+      bar.width = thickness;
+    } else {
+      bar.width = geometry.trackLength;
+      bar.height = thickness;
+    }
+    const slider = (bar as unknown as { slider?: { width?: number; height?: number } }).slider;
+    if (slider) {
+      if (orientation === 'vertical') slider.width = thickness;
+      else slider.height = thickness;
+    }
+    this.applying = true;
+    try {
+      bar.scrollSize = scroll.scrollSize;
+      bar.viewportSize = geometry.reportedViewportSize;
+      bar.scrollPosition = geometry.reportedPosition;
+    } finally {
+      this.applying = false;
+    }
+    this.barScales.set(bar, geometry.reportedToTrueScale);
+    if (process.env.TUI_DEBUG_BARS === '1')
+      Logging.Class.info(
+        `bar ${bar.id}: thickness=${thickness} trackLeft=${geometry.trackLeft} -> left=${bar.left} top=${bar.top} laidX=${bar.x} laidY=${bar.y} laidW=${bar.width} laidH=${bar.height}`,
+      );
+  }
+
+  /** Converge layout-derived pane inputs AFTER Yoga has laid out the frame (each pane model owns its
+   *  live extent). Returns true when any extent changed (the caller repaints once, then quiesces). */
+  syncPaneViewportGeometry(): boolean {
+    const { workspaceSet, theme } = this.deps;
+    let changed = false;
+    const sidebarInnerWidth = Math.max(1, this.deps.sidebarWidth() - 2);
+    const treeViewportHeight = Math.max(1, (this.deps.sidebar.height as number) - 2);
+    const treeViewportWidth = Math.max(1, sidebarInnerWidth - this.deps.scrollbarThicknessCells());
+    if (workspaceSet.active.tree.viewportHeight.value !== treeViewportHeight) {
+      workspaceSet.active.tree.viewportHeight.value = treeViewportHeight;
+      changed = true;
+    }
+    if (workspaceSet.active.tree.viewportWidth.value !== treeViewportWidth) {
+      workspaceSet.active.tree.viewportWidth.value = treeViewportWidth;
+      changed = true;
+    }
+    workspaceSet.active.tree.clampHorizontalScroll();
+
+    const gitAvailable = workspaceSet.active.git.value !== null;
+    const changesViewportWidth = Math.max(1, sidebarInnerWidth - this.deps.scrollbarThicknessCells());
+    const changesContentWidth = gitAvailable
+      ? GitPaneRenderer.Class.changesContentWidth(this.deps.gitChangeRowsNow() as never, theme.checkboxIcons)
+      : 0;
+    const geometry = this.deps.gitPanelGeometry();
+    const changesViewportHeight = Math.max(1, geometry.changesRows);
+    const logViewportHeight = Math.max(1, geometry.logRows);
+    if (
+      workspaceSet.active.gitPanel.changesViewportHeight.value !== changesViewportHeight ||
+      workspaceSet.active.gitPanel.logViewportHeight.value !== logViewportHeight
+    ) {
+      workspaceSet.active.gitPanel.setVerticalViewportHeights(changesViewportHeight, logViewportHeight);
+      changed = true;
+    }
+    if (
+      workspaceSet.active.gitPanel.changesViewportWidth.value !== changesViewportWidth ||
+      workspaceSet.active.gitPanel.changesContentWidth.value !== changesContentWidth
+    ) {
+      workspaceSet.active.gitPanel.setChangesHorizontalExtent(changesContentWidth, changesViewportWidth);
+      changed = true;
+    }
+    const logViewportWidth = Math.max(1, sidebarInnerWidth - this.deps.scrollbarThicknessCells());
+    const logContentWidth = gitAvailable ? GitPaneRenderer.Class.logContentWidth(workspaceSet.active) : 0;
+    if (
+      workspaceSet.active.gitPanel.logViewportWidth.value !== logViewportWidth ||
+      workspaceSet.active.gitPanel.logContentWidth.value !== logContentWidth
+    ) {
+      workspaceSet.active.gitPanel.setLogHorizontalExtent(logContentWidth, logViewportWidth);
+      changed = true;
+    }
+    return changed;
+  }
+
+  /** Place + scale every bar from the current rendered layout (the per-frame geometry sync). */
+  syncScrollbars(): void {
+    const { workspaceSet, editorArea, codeBody, sidebar, gitSplitDivider } = this.deps;
+    const editor = workspaceSet.active.editor;
+    const editorVisible = editor.hasDocument.value;
+    const viewportHeight = this.deps.editorViewportHeight();
+    const viewportWidth = this.deps.editorViewportWidth();
+    const editorRegion = {
+      top: 0,
+      left: Math.max(0, codeBody.x - (editorArea.x + 1)),
+      width: Math.max(1, (codeBody.width as number) || viewportWidth + 1),
+      height: viewportHeight,
+    };
+    this.applyBarGeometry(this.deps.editorVerticalBar, 'vertical', editorRegion, {
+      scrollSize: editorVisible
+        ? editor.wordWrap.value
+          ? EditorWrap.Class.totalVisualRows(editor.document, editor.wrapWidth())
+          : editor.document.lineCount
+        : 0,
+      viewportSize: viewportHeight,
+      scrollPosition: editor.viewport.scrollTop.value,
+    });
+    let widestVisibleLineWidth = 0;
+    if (editorVisible && !editor.wordWrap.value) {
+      const firstVisibleLine = editor.viewport.scrollTop.value;
+      for (const line of editor.document.slice(firstVisibleLine, viewportHeight)) {
+        widestVisibleLineWidth = Math.max(widestVisibleLineWidth, EditorCoordinates.Class.lineWidth(line));
+      }
+    }
+    this.applyBarGeometry(this.deps.editorHorizontalBar, 'horizontal', editorRegion, {
+      scrollSize: widestVisibleLineWidth,
+      viewportSize: viewportWidth,
+      scrollPosition: editor.viewport.scrollLeft.value,
+    });
+
+    const filesVisible = workspaceSet.active.sidebarView.value !== 'git';
+    const sidebarInnerWidthFiles = this.deps.sidebarWidth() - 2;
+    const treeViewportHeight = Math.max(1, (sidebar.height as number) - 2);
+    this.applyBarGeometry(
+      this.deps.treeVerticalBar,
+      'vertical',
+      { top: 0, left: 0, width: sidebarInnerWidthFiles, height: treeViewportHeight },
+      {
+        scrollSize: filesVisible ? workspaceSet.active.tree.rows.length : 0,
+        viewportSize: treeViewportHeight,
+        scrollPosition: workspaceSet.active.tree.scrollTop.value,
+      },
+    );
+    const treeViewportWidth = workspaceSet.active.tree.viewportWidth.value;
+    this.applyBarGeometry(
+      this.deps.treeHorizontalBar,
+      'horizontal',
+      { top: 0, left: 0, width: sidebarInnerWidthFiles, height: treeViewportHeight },
+      {
+        scrollSize: filesVisible ? workspaceSet.active.tree.contentWidth : 0,
+        viewportSize: treeViewportWidth,
+        scrollPosition: workspaceSet.active.tree.scrollLeft.value,
+      },
+    );
+
+    const gitVisible = workspaceSet.active.sidebarView.value === 'git' && workspaceSet.active.git.value !== null;
+    const sidebarInnerWidth = this.deps.sidebarWidth() - 2;
+    const geometry = this.deps.gitPanelGeometry();
+    const changesRegion = { top: 1, left: 0, width: sidebarInnerWidth, height: Math.max(1, geometry.changesRows) };
+    this.applyBarGeometry(this.deps.changesVerticalBar, 'vertical', changesRegion, {
+      scrollSize: gitVisible ? this.deps.gitChangeRowsNow().length : 0,
+      viewportSize: geometry.changesRows,
+      scrollPosition: workspaceSet.active.gitPanel.changesScrollTop.value,
+    });
+    const changesViewportWidth = workspaceSet.active.gitPanel.changesViewportWidth.value;
+    this.applyBarGeometry(this.deps.changesHorizontalBar, 'horizontal', changesRegion, {
+      scrollSize: gitVisible ? workspaceSet.active.gitPanel.changesContentWidth.value : 0,
+      viewportSize: changesViewportWidth,
+      scrollPosition: workspaceSet.active.gitPanel.changesScrollLeft.value,
+    });
+    const logFlatEnd = workspaceSet.active.logFlatEnd();
+    const logRegion = {
+      top: geometry.dividerRow,
+      left: 0,
+      width: sidebarInnerWidth,
+      height: Math.max(1, geometry.logRows),
+    };
+    this.applyBarGeometry(this.deps.logVerticalBar, 'vertical', logRegion, {
+      scrollSize: gitVisible
+        ? Number.isFinite(logFlatEnd)
+          ? logFlatEnd
+          : workspaceSet.active.gitPanel.logScrollTop.value + geometry.logRows * 4
+        : 0,
+      viewportSize: geometry.logRows,
+      scrollPosition: workspaceSet.active.gitPanel.logScrollTop.value,
+    });
+    const logViewportWidth = workspaceSet.active.gitPanel.logViewportWidth.value;
+    this.applyBarGeometry(this.deps.logHorizontalBar, 'horizontal', logRegion, {
+      scrollSize: gitVisible ? workspaceSet.active.gitPanel.logContentWidth.value : 0,
+      viewportSize: logViewportWidth,
+      scrollPosition: workspaceSet.active.gitPanel.logScrollLeft.value,
+    });
+
+    if (gitVisible) {
+      gitSplitDivider.visible = true;
+      gitSplitDivider.top = Math.max(1, geometry.dividerRow - 1);
+      gitSplitDivider.left = 0;
+      gitSplitDivider.width = sidebarInnerWidth;
+    } else {
+      gitSplitDivider.visible = false;
+    }
+  }
+}
+
+export namespace ScrollbarSync {
+  export const $Class = $ScrollbarSync;
+  export let Class = Reactive($Class);
+  export type Instance = typeof Class.Instance;
+}

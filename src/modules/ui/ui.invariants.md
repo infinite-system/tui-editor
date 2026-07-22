@@ -142,6 +142,35 @@ scroll-to's offset, not a blend.
 
 **Last refined:** 2026-07-21
 
+### The wheel gesture resolves through one settings-sourced step
+
+**Invariant:** How far one wheel notch moves — the rows-per-notch and the fast-scroll multiplier —
+and whether a wheel event counts as horizontal are computed in exactly ONE place, read from
+`Settings`, never hardcoded. Every scroll consumer (the editor in wrap mode, the editor in
+non-wrap/momentum mode, the file tree, and each git region) feeds through that same step, so a
+settings change moves all regimes identically and no two consumers can drift apart.
+
+**Scope:** every wheel handler — `EditorPane`, `Sidebar` (tree + git), and any future scrollable pane.
+
+**Mechanism:** `ScrollGesture.Class.wheelStep(event, settings)` and `.modifierHeld(event, modifier)`
+are the sole definitions; a handler NEVER re-derives notch size, the fast multiplier, or the
+horizontal-modifier test locally. One expression feeds both the wrap-mode direct step and the
+non-wrap momentum impulse. Pairs with *One writer per scroll regime per frame* (that governs who
+WRITES the offset; this governs how the gesture is MEASURED before the write).
+
+**Generates:** uniform, configurable scroll feel across every pane from one settings source.
+
+**Evidence:** `ScrollGesture` is the single module; the sidebar and editor handlers both call it.
+
+**Impossible if true:** two panes scrolling at different speeds for the same `linesPerNotch`; a wheel
+handler that ignores a settings change; a hardcoded notch count anywhere.
+
+**Verification:** review + smoke-scrollbars / smoke-tree-scroll drive wheel steps against settings.
+
+**Status:** provisional
+
+**Last refined:** 2026-07-22
+
 ### A context menu is modal and single-consumer
 
 **Invariant:** If a context menu is open, then every pointer and keyboard event belongs to the menu
