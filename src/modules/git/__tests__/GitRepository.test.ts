@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { GitCommands, type GitCommandResult } from '../GitCommands';
 import { GitRepository } from '../GitRepository';
+import { gitCleanEnv } from './gitCleanEnv';
 
 interface DeferredResult {
   promise: Promise<GitCommandResult>;
@@ -86,6 +87,7 @@ function runGit(cwd: string, arguments_: string[]): string {
     cwd,
     stdout: 'pipe',
     stderr: 'pipe',
+    env: gitCleanEnv(), // hermetic: never inherit a leaked GIT_INDEX_FILE/GIT_DIR (e.g. under the commit hook)
   });
   if (result.exitCode !== 0) {
     throw new Error(new TextDecoder().decode(result.stderr));

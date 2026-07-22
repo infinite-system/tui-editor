@@ -40,9 +40,13 @@ while IFS= read -r file; do
   [ -n "$name" ] || continue
 
   testfile="${file%.ts}.test.ts"
-  # Any reference to the identifier in a NON-test file that is not this module's own source = wired.
-  # (Its own test does not count — an isolated test is exactly what hides the disease.)
-  refs="$(grep -rlE "\\b${name}\\b" src --include="*.ts" 2>/dev/null \
+  # A real CALL-SITE in a NON-test file that is not this module's own source = wired. We require a use
+  # of the capability's runtime Class (`${name}.Class` — covers `new ${name}.Class(` and
+  # `${name}.Class.method(`), NOT the bare identifier: an `import { ${name} }` line or a type-only
+  # `${name}.Instance` annotation contains the identifier but consumes nothing at runtime, so
+  # import-only-dead capabilities (the exact hole a human, not this gate, caught for TerminalSession)
+  # would have passed. Requiring `.Class` closes that. (Its own test never counts.)
+  refs="$(grep -rlE "\\b${name}\\.Class\\b" src --include="*.ts" 2>/dev/null \
     | grep -vxF "$file" \
     | grep -vxF "$testfile" \
     | grep -v "\.test\.ts$" || true)"

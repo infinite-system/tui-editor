@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { GitRepository } from '../GitRepository';
+import { gitCleanEnv } from './gitCleanEnv';
 import { GitWatcher } from '../GitWatcher';
 
 // These tests exercise the REAL fs.watch inotify path. A resource-starved sandbox (exhausted inotify
@@ -38,7 +39,7 @@ function wait(milliseconds: number): Promise<void> {
 }
 
 function git(cwd: string, arguments_: string[]): void {
-  const result = spawnSync('git', arguments_, { cwd, encoding: 'utf8' });
+  const result = spawnSync('git', arguments_, { cwd, encoding: 'utf8', env: gitCleanEnv() });
   if (result.status !== 0) {
     throw new Error(`git ${arguments_.join(' ')} failed: ${result.stderr}`);
   }

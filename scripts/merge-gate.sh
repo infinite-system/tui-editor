@@ -26,6 +26,19 @@ step() {
   fi
   rm -f /tmp/merge-gate-step.$$.log
 }
+# A SOFT step: it RUNS and REPORTS (so a regression surfaces in the gate), but a non-zero exit does
+# NOT block the commit. Use only where the numbers are informational and the load-bearing invariant is
+# hard-gated elsewhere (perf's idle-quiescence is enforced by behavioral-contracts).
+soft_step() {
+  local name="$1"; shift
+  echo "== merge-gate: $name (SOFT — reports, does not block) =="
+  if "$@" >/tmp/merge-gate-soft.$$.log 2>&1; then
+    echo "  OK    $name"
+  else
+    echo "  WARN  $name — target miss or measurement gap (soft, not blocking)"; tail -20 /tmp/merge-gate-soft.$$.log | sed 's/^/    | /'
+  fi
+  rm -f /tmp/merge-gate-soft.$$.log
+}
 
 # 1) Fast inner gate: tsc + conventions + unwired-capability + settings-applied META.
 step "conventions-gate (tsc + conventions + unwired + settings-meta)" bash scripts/conventions-gate.sh
@@ -45,6 +58,15 @@ if [ "${FAST:-0}" != "1" ]; then
   step "smoke: quick-open"  bash scripts/smoke-quickopen.sh
   # 5) The REAL settings applied-effect drives (all 13 fields, not just the --meta enumeration).
   step "settings applied-effect (all 13 driven)" bash scripts/smoke-settings-applied.sh
+  # 6) Perf baselines — SOFT: memory/CPU/latency are measured + REPORTED so a regression surfaces in
+  #    the gate (it was previously unwired = a perf regression could ship). Non-blocking: the numbers
+  #    are informational and the load-bearing idle-quiescence invariant is hard-gated above. Slow
+  #    (idle-hold + lifecycle) — SKIP_PERF=1 to skip for fast local iteration.
+  if [ "${SKIP_PERF:-0}" != "1" ]; then
+    soft_step "perf-baselines (memory/CPU/latency)" bash scripts/perf-baselines.sh
+  else
+    echo "== merge-gate: (SKIP_PERF=1) skipped perf-baselines =="
+  fi
 else
   echo "== merge-gate: (FAST) skipped the multi-launch smokes + real settings drives =="
 fi

@@ -15,7 +15,11 @@ fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 export PATH="$HOME/.bun/bin:$PATH"
-echo "pre-commit: running the full merge-gate (SKIP_GATE=1 to bypass)…" >&2
+# Skip the SOFT, slow perf-baselines on commit (informational; its load-bearing idle-quiescence
+# invariant is HARD-gated in behavioral-contracts, which this run includes). Full `merge-gate.sh`
+# (manual/CI) still measures perf. Set SKIP_PERF=0 to include it here too.
+export SKIP_PERF="${SKIP_PERF:-1}"
+echo "pre-commit: running the merge-gate (hard gates; perf soft-skipped; SKIP_GATE=1 to bypass)…" >&2
 if bash "$REPO_ROOT/scripts/merge-gate.sh"; then
   echo "pre-commit: merge-gate GREEN — commit allowed." >&2
   exit 0
