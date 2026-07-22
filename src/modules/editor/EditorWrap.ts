@@ -16,12 +16,7 @@
 // invariant: Word wrap is a pure view mapping (editor.invariants.md)
 // invariant: Cost tracks the actively observed set (project.invariants.md)
 import { Static } from 'ivue/extras';
-import {
-  graphemes,
-  graphemeWidth,
-  displayColumn,
-  graphemeAtDisplayColumn,
-} from './editor.coordinates';
+import { EditorCoordinates } from './EditorCoordinates';
 
 export interface WrapSegment {
   /** First grapheme of the segment (inclusive). */
@@ -71,7 +66,7 @@ function $wrapLine(lineText: string, wrapWidth: number): WrapSegment[] {
   const cached = wrapMemo.get(memoKey);
   if (cached !== undefined) return cached;
 
-  const clusters = graphemes(lineText);
+  const clusters = EditorCoordinates.Class.graphemes(lineText);
   const segments: WrapSegment[] = [];
   if (clusters.length === 0) {
     segments.push({ startGrapheme: 0, endGrapheme: 0, startDisplayColumn: 0 });
@@ -83,7 +78,7 @@ function $wrapLine(lineText: string, wrapWidth: number): WrapSegment[] {
       const cluster = clusters[index] ?? '';
       const previousColumn = columns[index] ?? 0;
       const clusterWidth =
-        cluster === '\t' ? TAB_WIDTH - (previousColumn % TAB_WIDTH) : graphemeWidth(cluster);
+        cluster === '\t' ? TAB_WIDTH - (previousColumn % TAB_WIDTH) : EditorCoordinates.Class.graphemeWidth(cluster);
       columns[index + 1] = previousColumn + clusterWidth;
     }
 
@@ -223,7 +218,7 @@ function $moveByVisualRows(
   const segment = segments[segmentIndex];
   if (!segment) return { line: lineIndex, col: 0 };
   const lineText = document.line(lineIndex);
-  const landing = graphemeAtDisplayColumn(
+  const landing = EditorCoordinates.Class.graphemeAtDisplayColumn(
     lineText,
     segment.startDisplayColumn + Math.max(0, goalVisualColumn),
   );

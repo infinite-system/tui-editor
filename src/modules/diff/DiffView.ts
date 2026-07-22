@@ -27,7 +27,7 @@ import {
 } from '@opentui/core';
 import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
-import { displayColumn, graphemeAtDisplayColumn, graphemeToU16, lineWidth } from '../editor/editor.coordinates';
+import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { Highlighter, type LangId, type Role } from '../syntax/Highlighter';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import type { Theme } from '../theme/Theme';
@@ -469,7 +469,7 @@ class $DiffView {
         const visibleLine = this.sliceLineWindow(sourceLine, codeViewportWidth);
         const lineChunks = this.highlightLine(visibleLine, language, palette, rowBackgroundColor);
         codeChunks.push(...lineChunks);
-        const remainingColumns = Math.max(0, codeViewportWidth - lineWidth(visibleLine));
+        const remainingColumns = Math.max(0, codeViewportWidth - EditorCoordinates.Class.lineWidth(visibleLine));
         if (remainingColumns > 0) {
           const paddingChunk = fg(palette.fg)(' '.repeat(remainingColumns));
           codeChunks.push(rowBackgroundColor ? bg(rowBackgroundColor)(paddingChunk) : paddingChunk);
@@ -502,13 +502,13 @@ class $DiffView {
   sliceLineWindow(sourceLine: string, codeViewportWidth: number): string {
     const horizontalScrollOffset = this.horizontalScrollOffset.value;
     if (horizontalScrollOffset === 0 && sourceLine.length <= codeViewportWidth) return sourceLine;
-    let startGraphemeIndex = graphemeAtDisplayColumn(sourceLine, horizontalScrollOffset);
-    if (displayColumn(sourceLine, startGraphemeIndex) < horizontalScrollOffset) startGraphemeIndex++;
+    let startGraphemeIndex = EditorCoordinates.Class.graphemeAtDisplayColumn(sourceLine, horizontalScrollOffset);
+    if (EditorCoordinates.Class.displayColumn(sourceLine, startGraphemeIndex) < horizontalScrollOffset) startGraphemeIndex++;
     const endGraphemeIndex =
-      graphemeAtDisplayColumn(sourceLine, horizontalScrollOffset + codeViewportWidth) + 1;
+      EditorCoordinates.Class.graphemeAtDisplayColumn(sourceLine, horizontalScrollOffset + codeViewportWidth) + 1;
     return sourceLine.slice(
-      graphemeToU16(sourceLine, startGraphemeIndex),
-      graphemeToU16(sourceLine, endGraphemeIndex),
+      EditorCoordinates.Class.graphemeToU16(sourceLine, startGraphemeIndex),
+      EditorCoordinates.Class.graphemeToU16(sourceLine, endGraphemeIndex),
     );
   }
 
@@ -659,7 +659,7 @@ class $DiffView {
 
   lineWidthForAlignedRow(alignedRow: AlignedRow, side: 'previous' | 'current'): number {
     const lineNumber = side === 'previous' ? alignedRow.leftLineNumber : alignedRow.rightLineNumber;
-    return lineNumber === null ? 0 : lineWidth(this.lineForSide(side, lineNumber));
+    return lineNumber === null ? 0 : EditorCoordinates.Class.lineWidth(this.lineForSide(side, lineNumber));
   }
 
   clampAlignedRowOffset(alignedRowIndex: number): number {

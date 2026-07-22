@@ -1,7 +1,7 @@
 import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
 import type { TextDocument } from '../editor/TextDocument';
-import { u16ToGrapheme } from '../editor/editor.coordinates';
+import { EditorCoordinates } from '../editor/EditorCoordinates';
 
 export interface FindInBufferMatch {
   line: number;
@@ -119,8 +119,8 @@ class $FindInBuffer {
         const endUtf16Offset = startUtf16Offset + regularExpressionMatch[0].length;
         matches.push({
           line: lineIndex,
-          startColumn: u16ToGrapheme(lineText, startUtf16Offset),
-          endColumn: u16ToGrapheme(lineText, endUtf16Offset),
+          startColumn: EditorCoordinates.Class.u16ToGrapheme(lineText, startUtf16Offset),
+          endColumn: EditorCoordinates.Class.u16ToGrapheme(lineText, endUtf16Offset),
         });
         replacementContexts.push({
           matchedText: regularExpressionMatch[0],

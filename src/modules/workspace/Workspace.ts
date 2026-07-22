@@ -19,7 +19,7 @@ import type { Settings } from '../settings/Settings';
 import { GitRows } from '../git/GitRows';
 import { GitLogRows, type CommitLogRow } from '../git/GitLogRows';
 import { GitCommands } from '../git/GitCommands';
-import { lineWidth } from '../editor/editor.coordinates';
+import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { EditorWrap } from '../editor/EditorWrap';
 import { Logging } from '../system/Logging';
 
@@ -406,7 +406,7 @@ class $Workspace {
     if (editorHorizontalStep.rows !== 0) {
       let widestVisibleLineWidth = 0;
       for (const line of this.editor.document.slice(editorViewport.scrollTop.value, editorViewport.height.value)) {
-        widestVisibleLineWidth = Math.max(widestVisibleLineWidth, lineWidth(line));
+        widestVisibleLineWidth = Math.max(widestVisibleLineWidth, EditorCoordinates.Class.lineWidth(line));
       }
       editorViewport.scrollByColumns(editorHorizontalStep.rows, widestVisibleLineWidth);
     }

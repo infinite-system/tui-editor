@@ -1,43 +1,35 @@
 // Unicode coordinate matrix + grapheme-safe editing.
 // Covers the editor invariant "A cursor position resolves to three distinct coordinates".
 import { test, expect } from 'bun:test';
-import {
-  graphemeCount,
-  graphemeToU16,
-  u16ToGrapheme,
-  displayColumn,
-  graphemeWidth,
-  lineWidth,
-  graphemeAtDisplayColumn,
-} from '../editor.coordinates';
+import { EditorCoordinates } from '../EditorCoordinates';
 import { TextDocument } from '../TextDocument';
 
 test('grapheme count treats emoji and combining marks as one character', () => {
-  expect(graphemeCount('abc')).toBe(3);
-  expect(graphemeCount('a😀b')).toBe(3); // emoji is one grapheme (two UTF-16 units)
-  expect(graphemeCount('é')).toBe(1); // e + combining acute = one cluster
-  expect(graphemeCount('')).toBe(0);
+  expect(EditorCoordinates.Class.graphemeCount('abc')).toBe(3);
+  expect(EditorCoordinates.Class.graphemeCount('a😀b')).toBe(3); // emoji is one grapheme (two UTF-16 units)
+  expect(EditorCoordinates.Class.graphemeCount('é')).toBe(1); // e + combining acute = one cluster
+  expect(EditorCoordinates.Class.graphemeCount('')).toBe(0);
   expect('a😀b'.length).toBe(4); // sanity: UTF-16 length differs from grapheme count
 });
 
 test('grapheme <-> UTF-16 mapping', () => {
-  expect(graphemeToU16('a😀b', 0)).toBe(0);
-  expect(graphemeToU16('a😀b', 1)).toBe(1);
-  expect(graphemeToU16('a😀b', 2)).toBe(3); // after 'a'(1) + emoji(2)
-  expect(graphemeToU16('a😀b', 3)).toBe(4);
-  expect(u16ToGrapheme('a😀b', 3)).toBe(2);
-  expect(u16ToGrapheme('a😀b', 1)).toBe(1);
+  expect(EditorCoordinates.Class.graphemeToU16('a😀b', 0)).toBe(0);
+  expect(EditorCoordinates.Class.graphemeToU16('a😀b', 1)).toBe(1);
+  expect(EditorCoordinates.Class.graphemeToU16('a😀b', 2)).toBe(3); // after 'a'(1) + emoji(2)
+  expect(EditorCoordinates.Class.graphemeToU16('a😀b', 3)).toBe(4);
+  expect(EditorCoordinates.Class.u16ToGrapheme('a😀b', 3)).toBe(2);
+  expect(EditorCoordinates.Class.u16ToGrapheme('a😀b', 1)).toBe(1);
 });
 
 test('display column: wide chars, combining marks, and tabs', () => {
-  expect(graphemeWidth('中')).toBe(2);
-  expect(displayColumn('中x', 1)).toBe(2);
-  expect(displayColumn('中x', 2)).toBe(3);
-  expect(displayColumn('áb', 1)).toBe(1); // combining adds no width
-  expect(displayColumn('áb', 2)).toBe(2);
-  expect(displayColumn('\tx', 1, 4)).toBe(4); // tab to next stop
-  expect(displayColumn('ab\tx', 3, 4)).toBe(4);
-  expect(lineWidth('中\tx', 4)).toBe(5); // 中(2) then tab to col 4, then x -> 5
+  expect(EditorCoordinates.Class.graphemeWidth('中')).toBe(2);
+  expect(EditorCoordinates.Class.displayColumn('中x', 1)).toBe(2);
+  expect(EditorCoordinates.Class.displayColumn('中x', 2)).toBe(3);
+  expect(EditorCoordinates.Class.displayColumn('áb', 1)).toBe(1); // combining adds no width
+  expect(EditorCoordinates.Class.displayColumn('áb', 2)).toBe(2);
+  expect(EditorCoordinates.Class.displayColumn('\tx', 1, 4)).toBe(4); // tab to next stop
+  expect(EditorCoordinates.Class.displayColumn('ab\tx', 3, 4)).toBe(4);
+  expect(EditorCoordinates.Class.lineWidth('中\tx', 4)).toBe(5); // 中(2) then tab to col 4, then x -> 5
 });
 
 test('backspace deletes a whole emoji, not half a surrogate pair', () => {
@@ -73,27 +65,27 @@ test('split line at a grapheme boundary keeps the emoji intact', () => {
 
 test('graphemeAtDisplayColumn inverts displayColumn on plain text', () => {
   const line = 'hello world';
-  for (let graphemeIndex = 0; graphemeIndex <= graphemeCount(line); graphemeIndex++) {
-    expect(graphemeAtDisplayColumn(line, displayColumn(line, graphemeIndex))).toBe(graphemeIndex);
+  for (let graphemeIndex = 0; graphemeIndex <= EditorCoordinates.Class.graphemeCount(line); graphemeIndex++) {
+    expect(EditorCoordinates.Class.graphemeAtDisplayColumn(line, EditorCoordinates.Class.displayColumn(line, graphemeIndex))).toBe(graphemeIndex);
   }
 });
 
 test('graphemeAtDisplayColumn: a hit inside a wide glyph resolves to that glyph', () => {
   const line = 'a中b'; // cells: a=0, 中=1..2 (wide), b=3
-  expect(graphemeAtDisplayColumn(line, 0)).toBe(0); // on 'a'
-  expect(graphemeAtDisplayColumn(line, 1)).toBe(1); // left cell of 中
-  expect(graphemeAtDisplayColumn(line, 2)).toBe(1); // right cell of 中 -> still 中
-  expect(graphemeAtDisplayColumn(line, 3)).toBe(2); // on 'b'
+  expect(EditorCoordinates.Class.graphemeAtDisplayColumn(line, 0)).toBe(0); // on 'a'
+  expect(EditorCoordinates.Class.graphemeAtDisplayColumn(line, 1)).toBe(1); // left cell of 中
+  expect(EditorCoordinates.Class.graphemeAtDisplayColumn(line, 2)).toBe(1); // right cell of 中 -> still 中
+  expect(EditorCoordinates.Class.graphemeAtDisplayColumn(line, 3)).toBe(2); // on 'b'
 });
 
 test('graphemeAtDisplayColumn: a hit inside a tab resolves to the tab', () => {
   const line = '\ta'; // tab covers cells 0..3 (tabWidth 4), 'a' at cell 4
-  expect(graphemeAtDisplayColumn(line, 0)).toBe(0);
-  expect(graphemeAtDisplayColumn(line, 3)).toBe(0); // still inside the tab
-  expect(graphemeAtDisplayColumn(line, 4)).toBe(1); // on 'a'
+  expect(EditorCoordinates.Class.graphemeAtDisplayColumn(line, 0)).toBe(0);
+  expect(EditorCoordinates.Class.graphemeAtDisplayColumn(line, 3)).toBe(0); // still inside the tab
+  expect(EditorCoordinates.Class.graphemeAtDisplayColumn(line, 4)).toBe(1); // on 'a'
 });
 
 test('graphemeAtDisplayColumn clamps past end-of-line and below zero', () => {
-  expect(graphemeAtDisplayColumn('ab', 99)).toBe(2); // caret after the last char
-  expect(graphemeAtDisplayColumn('ab', -5)).toBe(0);
+  expect(EditorCoordinates.Class.graphemeAtDisplayColumn('ab', 99)).toBe(2); // caret after the last char
+  expect(EditorCoordinates.Class.graphemeAtDisplayColumn('ab', -5)).toBe(0);
 });
