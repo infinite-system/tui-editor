@@ -34,6 +34,7 @@ import { TabBar } from './TabBar';
 import { ScrollGesture, type WheelModifiers } from './ScrollGesture';
 import { Sidebar } from './Sidebar';
 import { EditorPane } from './EditorPane';
+import { EditorContentMount } from './EditorContentMount';
 import { EditorWrap } from '../editor/EditorWrap';
 import { DiffView } from '../diff/DiffView';
 import { MarkdownSplitView } from '../markdown/MarkdownSplitView';
@@ -1196,130 +1197,35 @@ function $buildRootView(
   // renderStatus moved into the StatusBar controller (it composes the same parts from workspace/app
   // state + the markdown-preview-focused flag RootView passes to statusBar.update).
 
-  // The rich side-by-side DiffView overlays the editor area when a git diff is open (mirrors the old
-  // showingDiff overlay, but the DiffView renderable replaces the unified-text diffEditor). DiffView has
-  // no re-open, so it is reconstructed whenever the diff request's token changes; disposed when cleared.
-  let activeDiffView: DiffView.Instance | null = null;
-  let shownDiffIdentifier = '';
-  let activeMarkdownSplitView: MarkdownSplitView.Instance | null = null;
-  let shownMarkdownIdentifier = '';
-  let mountedEditorContent: 'editor' | 'diff' | 'markdown' | null = 'editor';
-  let lastDiffLaidHeight = -1;
+  // The editor content-area MOUNT controller owns what occupies the editor column (plain editor /
+  // side-by-side DiffView / Markdown split) and the diff+markdown instance lifecycle. update() calls
+  // sync() each paint; the frame loop calls tickDiff()/tickMarkdown(); readers (caret, status, find
+  // target, editor pane) reach the active instances through its getters.
+  const editorContentMount = new EditorContentMount.Class({
+    renderer,
+    theme,
+    settings,
+    findBar,
+    workspaceSet,
+    keybindings,
+    tooltip,
+    editorColumn,
+    editorArea,
+    diffContainer,
+    markdownContainer,
+  });
 
-  function unmountEditorContent(): void {
-    if (mountedEditorContent === 'editor') editorColumn.remove(editorArea);
-    else if (mountedEditorContent === 'diff') editorColumn.remove(diffContainer);
-    else if (mountedEditorContent === 'markdown') editorColumn.remove(markdownContainer);
-    mountedEditorContent = null;
-  }
-
-  function mountEditorContent(content: 'editor' | 'diff' | 'markdown'): void {
-    if (mountedEditorContent === content) return;
-    unmountEditorContent();
-    if (content === 'editor') editorColumn.add(editorArea);
-    else if (content === 'diff') editorColumn.add(diffContainer);
-    else editorColumn.add(markdownContainer);
-    mountedEditorContent = content;
-  }
-
-  function syncDiffView(): void {
-    // invariant: A Markdown file offers a live source preview split (src/modules/markdown/markdown.invariants.md)
-    const request = workspaceSet.active.diffRequest.value;
-    const diffIdentifier = `${workspaceSet.active.root}:${request?.token ?? 'none'}`;
-    if (diffIdentifier !== shownDiffIdentifier) {
-      shownDiffIdentifier = diffIdentifier;
-      lastDiffLaidHeight = -1; // the frame loop re-renders once the new instance has a laid-out height
-      if (activeDiffView) {
-        activeDiffView.dispose();
-        activeDiffView = null;
-      }
-      if (request) {
-        activeDiffView = new DiffView.Class(renderer, theme, {
-          previousVersionText: request.previousVersionText,
-          currentVersionText: request.currentVersionText,
-          previousVersionPath: request.previousVersionPath,
-          currentVersionPath: request.currentVersionPath,
-          parentRenderable: diffContainer, // definite-size host (added below in place of editorArea)
-          onOpenFull: () => {
-            // Git diff requests carry workspace-relative paths. Resolve through the existing
-            // confinement seam before promoting the working side to a real editable tab.
-            const currentWorkingPath = Files.Class.confineToRoot(workspaceSet.active.root, request.currentVersionPath);
-            if (currentWorkingPath) workspaceSet.active.openFileInTab(currentWorkingPath);
-          },
-          onNextChange: () => renderer.requestRender(),
-          onPrevChange: () => renderer.requestRender(),
-        });
-        activeDiffView.attachSettings(settings); // live scroll physics, same as the editor
-        activeDiffView.attachFindBar(findBar, diffIdentifier);
-      }
-    }
-    const diffActive = activeDiffView !== null && workspaceSet.active.showingDiff.value;
-    const markdownIdentifier = workspaceSet.active.showingMarkdownPreview
-      ? `${workspaceSet.active.root}:${workspaceSet.active.editor.document.path}`
-      : '';
-
-    if (diffActive) {
-      if (activeMarkdownSplitView) {
-        if (mountedEditorContent === 'markdown') unmountEditorContent();
-        activeMarkdownSplitView.dispose();
-        activeMarkdownSplitView = null;
-        shownMarkdownIdentifier = '';
-      }
-      mountEditorContent('diff');
-    } else if (markdownIdentifier) {
-      if (shownMarkdownIdentifier !== markdownIdentifier || !activeMarkdownSplitView) {
-        if (activeMarkdownSplitView) {
-          if (mountedEditorContent === 'markdown') unmountEditorContent();
-          activeMarkdownSplitView.dispose();
-        }
-        shownMarkdownIdentifier = markdownIdentifier;
-        unmountEditorContent();
-        activeMarkdownSplitView = new MarkdownSplitView.Class(renderer, theme, {
-          source: workspaceSet.active.editor.document,
-          sourcePath: workspaceSet.active.editor.document.path,
-          sourceRenderable: editorArea,
-          parentRenderable: markdownContainer,
-          settings,
-          findBar,
-          resolveReference: (reference) => workspaceSet.active.resolveFileReference(reference),
-          openReference: (path) => workspaceSet.active.openFileInTab(path),
-          showReferenceTooltip: (path, screenColumn, screenRow) => {
-            const label = Files.Class.relative(workspaceSet.active.root, path);
-            const bindingHint = keybindings.bindingHint('markdown.openHoveredReference', 'editor');
-            tooltip.point(
-              `Open ${label} (Ctrl/Cmd+click${bindingHint ? ` · ${bindingHint}` : ''})`,
-              screenColumn,
-              screenRow,
-            );
-          },
-          clearReferenceTooltip: () => tooltip.clear(),
-        });
-      }
-      mountEditorContent('markdown');
-      activeMarkdownSplitView.update();
-    } else {
-      if (activeMarkdownSplitView) {
-        if (mountedEditorContent === 'markdown') unmountEditorContent();
-        activeMarkdownSplitView.dispose();
-        activeMarkdownSplitView = null;
-        shownMarkdownIdentifier = '';
-      }
-      mountEditorContent('editor');
-    }
-    // NOTE: the DiffView's first paint at its real laid-out height is driven from the FRAME LOOP
-    // (tickDiffMomentum), NOT here — syncDiffView runs in the reactive paint (fires only on signal
-    // changes), which happens BEFORE OpenTUI lays out the freshly-swapped container, so root height is
-    // still 0 here. The frame loop re-checks the laid-out height each frame and repaints when it changes.
-  }
 
   function findTarget(): FindBarTarget | null {
     // invariant: Markdown panes keep independent find state (src/modules/markdown/markdown.invariants.md)
     // invariant: Diff panes keep independent find state (src/modules/diff/diff.invariants.md)
-    if (workspaceSet.active.showingDiff.value && activeDiffView) {
-      return activeDiffView.findTarget();
+    const diffView = editorContentMount.diffView;
+    if (workspaceSet.active.showingDiff.value && diffView) {
+      return diffView.findTarget();
     }
-    if (activeMarkdownSplitView?.previewFocused) {
-      return activeMarkdownSplitView.findTarget();
+    const markdownSplitView = editorContentMount.markdownSplitView;
+    if (markdownSplitView?.previewFocused) {
+      return markdownSplitView.findTarget();
     }
     const editor = workspaceSet.active.editor;
     if (!editor.hasDocument.value) return null;
@@ -1328,7 +1234,7 @@ function $buildRootView(
       document: editor.document,
       replaceAllowed: !editor.readOnly.value,
       revealMatch: (match) => {
-        activeMarkdownSplitView?.focusSource();
+        editorContentMount.markdownSplitView?.focusSource();
         editor.placeCursor(match.line, match.endColumn);
         editor.cursor.anchor.value = { line: match.line, col: match.startColumn };
         editor.revealCursor();
@@ -1339,7 +1245,7 @@ function $buildRootView(
   function update(): void {
     const palette = readPalette();
     synchronizeWorkspaceTabMount();
-    syncDiffView();
+    editorContentMount.sync();
     column.backgroundColor = palette.bg;
     const gitView = workspaceSet.active.sidebarView.value === 'git';
     sidebar.width = sidebarWidth(); // live width from the draggable splitter (persisted to settings)
@@ -1352,7 +1258,7 @@ function $buildRootView(
     sidebar.title = gitView ? 'Git' : 'Files';
     editorArea.backgroundColor = palette.bg;
     const sourcePaneFocused = workspaceSet.active.focus.value === 'editor' &&
-      !(activeMarkdownSplitView?.previewFocused ?? false);
+      !(editorContentMount.markdownSplitView?.previewFocused ?? false);
     editorArea.borderColor = sourcePaneFocused ? palette.borderActive : palette.border;
     editorArea.title = workspaceSet.active.editor.hasDocument.value ? workspaceSet.active.editor.title : 'Editor';
     editorArea.titleColor = sourcePaneFocused ? palette.accent : palette.dim;
@@ -1375,7 +1281,7 @@ function $buildRootView(
     codeBody.fg = palette.fg;
     codeBody.selectionBg = palette.selection;
     editorController.applySelection(); // after content is set, so selection maps onto the current buffer
-    statusBar.update(palette, activeMarkdownSplitView?.previewFocused ?? false);
+    statusBar.update(palette, editorContentMount.markdownSplitView?.previewFocused ?? false);
 
     // Palette overlay.
     const open = commands.open.value;
@@ -1591,7 +1497,7 @@ function $buildRootView(
       // tmux's own #{cursor_x},#{cursor_y}.
       // invariant: The caret renders at the cursor display column (ui.invariants.md)
       const caretPosition =
-        editor.hasDocument.value && workspaceSet.active.focus.value === 'editor' && !activeMarkdownSplitView?.previewFocused && !open
+        editor.hasDocument.value && workspaceSet.active.focus.value === 'editor' && !editorContentMount.markdownSplitView?.previewFocused && !open
           ? editorController.wrapVisualPosition(cursorLine, editor.cursor.col.value)
           : null;
       if (caretPosition && typeof caretPosition === 'object') {
@@ -1608,7 +1514,7 @@ function $buildRootView(
         editor.viewport.scrollLeft.value &&
       EditorCoordinates.Class.displayColumn(editor.document.line(Math.min(cursorLine, editor.document.lineCount - 1)), editor.cursor.col.value) <
         editor.viewport.scrollLeft.value + editorViewportWidth();
-    if (editor.hasDocument.value && workspaceSet.active.focus.value === 'editor' && !activeMarkdownSplitView?.previewFocused && !open && cursorLine >= scrollTop && cursorLine < scrollTop + viewportHeight && caretVisibleHorizontally) {
+    if (editor.hasDocument.value && workspaceSet.active.focus.value === 'editor' && !editorContentMount.markdownSplitView?.previewFocused && !open && cursorLine >= scrollTop && cursorLine < scrollTop + viewportHeight && caretVisibleHorizontally) {
       const cursorDisplayColumn = EditorCoordinates.Class.displayColumn(editor.document.line(cursorLine), editor.cursor.col.value);
       // Anchor the caret to the code renderable's ACTUAL laid-out screen cell (codeBody.x/y from
       // yoga), not hand-derived layout constants — the constants drifted from the real layout (the
@@ -1711,7 +1617,7 @@ function $buildRootView(
     readPalette,
     editorViewportHeight,
     editorViewportWidth,
-    focusMarkdownSource: () => activeMarkdownSplitView?.focusSource(),
+    focusMarkdownSource: () => editorContentMount.markdownSplitView?.focusSource(),
   });
 
   update();
@@ -1726,27 +1632,18 @@ function $buildRootView(
     // 0 -> real a frame or two after the container swap). Repaint-on-height-change keeps frames live until
     // the layout settles, then stops (returns momentum-moving) so idle-quiescence holds.
     tickDiffMomentum(dtSeconds: number): boolean {
-      if (!activeDiffView) return false;
-      let live = activeDiffView.tickScrollMomentum(dtSeconds);
-      const laidHeight = Number(activeDiffView.rootRenderable.height) || 0;
-      if (laidHeight !== lastDiffLaidHeight) {
-        lastDiffLaidHeight = laidHeight;
-        activeDiffView.update(); // now at the real height -> renders the full window
-        live = true; // keep frames coming until the height stabilizes
-      }
-      return live;
+      return editorContentMount.tickDiff(dtSeconds);
     },
     tickMarkdownPreview(dtSeconds: number): boolean {
-      return activeMarkdownSplitView?.tick(dtSeconds) ?? false;
+      return editorContentMount.tickMarkdown(dtSeconds);
     },
-    activeDiffView: () => activeDiffView,
-    activeMarkdownSplitView: () => activeMarkdownSplitView,
+    activeDiffView: () => editorContentMount.diffView,
+    activeMarkdownSplitView: () => editorContentMount.markdownSplitView,
     findTarget,
     shortcutHelpViewportRows,
     dispose() {
       try {
-        activeMarkdownSplitView?.dispose();
-        activeDiffView?.dispose();
+        editorContentMount.dispose();
         root.remove(column);
         column.destroyRecursively();
       } catch {
