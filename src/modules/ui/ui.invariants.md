@@ -402,3 +402,39 @@ same configured vertical thumb; two bars deriving placement from different math.
 **Status:** established
 
 **Last refined:** 2026-07-21
+
+### Selection is item-anchored, click-set, keyboard-moved, and stays
+
+**Invariant:** In every selectable list — the file tree, git changes/staging, the commit log, stashes,
+and any future list — the SELECTION is persistent state anchored to an ITEM, mutated ONLY by a click
+(sets it) and the keyboard (moves it while the list is focused). It is independent of the mouse HOVER (a
+separate transient highlight, never selection truth) and of the SCROLL position (scrolling the list never
+changes what is selected). The selected item stays HIGHLIGHTED even when its pane is not focused (dimmed
+when unfocused, full when focused), so the selection is always visible and the keyboard resumes from it
+when the pane regains focus. Opening a FILE additionally moves keyboard focus to the editor (the settled
+focus decision) — but that neither moves nor clears the list's selection.
+
+**Scope:** file tree, git changes/staging, git commit log, git stashes, and any future selectable list.
+
+**Mechanism:** selection = an item index/identity in the list model; hover = a separate pointer-row
+index; scroll = a viewport offset. Three orthogonal states, each written only by its own input (click,
+pointer-move, wheel/scrollbar) — never one by another.
+
+**Generates:** click → set selection (+ open/focus-editor for a file); ↑/↓ while focused → move
+selection + reveal; wheel/scrollbar → move viewport only; hover → transient highlight only; blur →
+selection stays, highlight dims.
+
+**Evidence:** `FileTree.selectedIndex` vs `hoveredIndex` ("hover highlight only, never selection truth")
+vs `scrollTop`; `GitPanel.changesIndex`/`logIndex` vs `changesHovered`.
+
+**Impossible if true:** selection following the mouse hover or the scroll position; a clicked selection
+vanishing on scroll or on losing focus; a list where click selects but the keyboard cannot move from
+there; different list panes disagreeing on the selection model.
+
+**Verification:** click a row → highlights; wheel-scroll → the SAME item stays selected (highlight rides
+the item, not the viewport); focus away → still highlighted (dimmed); Tab back → arrows move it from
+there; identical in tree, changes, commits, stashes.
+
+**Status:** provisional
+
+**Last refined:** 2026-07-22
