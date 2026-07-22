@@ -35,6 +35,7 @@ import {
   type WorkspaceTabBarSegment,
 } from './TabBarRenderer';
 import { EditorPaneRenderer } from './EditorPaneRenderer';
+import { StatusBar } from './StatusBar';
 import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
 import { DiffView } from '../diff/DiffView';
 import { MarkdownSplitView } from '../markdown/MarkdownSplitView';
@@ -374,61 +375,17 @@ function $buildRootView(
   mainRow.add(sidebarDivider);
   mainRow.add(editorColumn);
 
-  const statusBar = new BoxRenderable(renderer, {
-    id: 'status-bar',
-    width: '100%',
-    height: 1,
-    flexDirection: 'row',
-    backgroundColor: readPalette().statusBg,
+  // The status bar is a self-contained pane controller: it owns its renderables (bar/text/`?` button),
+  // the button's hover state, and its handlers. RootView mounts statusBar.bar and calls update().
+  const statusBar = new StatusBar.Class({
+    renderer,
+    workspaceSet,
+    app,
+    shortcutHelp,
+    overlayCoordinator,
+    keybindings,
+    tooltip,
   });
-  const statusText = new TextRenderable(renderer, { id: 'status-text', content: '' });
-  statusBar.add(statusText);
-  // Clickable shortcut-help affordance: a real hit-tested `?` cell span pinned to the RIGHT end of
-  // the status bar (the spacer's flexGrow pushes it there). Click toggles the cheat-sheet through
-  // the exclusive-overlay coordinator; hover shows a tooltip with the bound open chord.
-  // invariant: The shortcut sheet lists the effective bindings (src/modules/ui/ui.invariants.md)
-  const statusSpacer = new BoxRenderable(renderer, {
-    id: 'status-spacer',
-    flexGrow: 1,
-    height: 1,
-  });
-  const shortcutHelpButton = new TextRenderable(renderer, {
-    id: 'status-help-button',
-    content: ' ? ',
-    width: 3,
-    height: 1,
-    selectable: false, // a click must only toggle the sheet, never start a text selection
-  });
-  statusBar.add(statusSpacer);
-  statusBar.add(shortcutHelpButton);
-  let shortcutHelpButtonHover = false;
-  const toggleShortcutHelp = (): void => {
-    if (shortcutHelp.open.value) shortcutHelp.close();
-    else overlayCoordinator.openExclusiveOverlay('shortcutHelp', () => shortcutHelp.show());
-  };
-  shortcutHelpButton.onMouseDown = () => {
-    toggleShortcutHelp();
-    renderer.requestRender();
-  };
-  shortcutHelpButton.onMouseMove = (event) => {
-    if (!shortcutHelpButtonHover) {
-      shortcutHelpButtonHover = true;
-      renderer.requestRender();
-    }
-    const openChordHint = keybindings.bindingHint('help.shortcuts', 'global');
-    tooltip.point(
-      `Keyboard shortcuts${openChordHint ? ` (${openChordHint})` : ''}`,
-      event.x,
-      event.y,
-    );
-  };
-  shortcutHelpButton.onMouseOut = () => {
-    if (shortcutHelpButtonHover) {
-      shortcutHelpButtonHover = false;
-      renderer.requestRender();
-    }
-    tooltip.clear();
-  };
 
   if (settings.workspaceTabPosition.value === 'left') {
     mainRow.add(workspaceTabBar, 0);
@@ -436,7 +393,7 @@ function $buildRootView(
     column.add(workspaceTabBar);
   }
   column.add(mainRow);
-  column.add(statusBar);
+  column.add(statusBar.bar);
   root.add(column);
 
   // Command palette overlay — added last so it renders on top; shown only when open.
@@ -1522,29 +1479,8 @@ function $buildRootView(
     return result.text;
   }
 
-  function renderStatus(): string {
-    const editor = workspaceSet.active.editor;
-    const parts: string[] = [` ${workspaceSet.active.name.value || '—'}`];
-    if (editor.hasDocument.value) {
-      parts.push(editor.title);
-      parts.push(`Ln ${editor.cursor.line.value + 1}, Col ${editor.cursor.col.value + 1}`);
-      parts.push(`${editor.document.lineCount} lines`);
-    }
-    parts.push(
-      workspaceSet.active.focus.value === 'files'
-        ? '[Files]'
-        : activeMarkdownSplitView?.previewFocused
-          ? '[Markdown Preview]'
-          : '[Editor Source]',
-    );
-    if (workspaceSet.active.focus.value === 'git')
-      parts.push('checkbox/Space stage · row/o open · d discard');
-    if (app.copyNotice.value) parts.push(app.copyNotice.value);
-    parts.push(
-      app.quitChordArmed.value ? 'Ctrl+X armed — Ctrl+C quits' : 'Ctrl+Q/F10 quit',
-    );
-    return parts.join('  ·  ');
-  }
+  // renderStatus moved into the StatusBar controller (it composes the same parts from workspace/app
+  // state + the markdown-preview-focused flag RootView passes to statusBar.update).
 
   // The rich side-by-side DiffView overlays the editor area when a git diff is open (mirrors the old
   // showingDiff overlay, but the DiffView renderable replaces the unified-text diffEditor). DiffView has
@@ -1709,7 +1645,6 @@ function $buildRootView(
     tabBar.content = renderTabBar();
     workspaceTabBar.content = renderWorkspaceTabBar();
     workspaceTabBar.fg = palette.fg;
-    statusBar.backgroundColor = palette.statusBg;
 
     sidebarBody.content = gitView ? renderGitPanel() : renderTree();
     sidebarBody.fg = palette.fg;
@@ -1726,11 +1661,7 @@ function $buildRootView(
     codeBody.fg = palette.fg;
     codeBody.selectionBg = palette.selection;
     applySelection(); // after content is set, so selection maps onto the current buffer
-    statusText.content = renderStatus();
-    statusText.fg = palette.dim;
-    // The `?` help affordance brightens on hover and while its sheet is open.
-    shortcutHelpButton.fg =
-      shortcutHelpButtonHover || shortcutHelp.open.value ? palette.accent : palette.dim;
+    statusBar.update(palette, activeMarkdownSplitView?.previewFocused ?? false);
 
     // Palette overlay.
     const open = commands.open.value;
