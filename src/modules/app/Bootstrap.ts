@@ -384,6 +384,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     void tooltip.text.value;
     void tooltip.anchorX.value;
     void tooltip.anchorY.value;
+    view.observeHoverRepaint(); // the LSP hover card projects on its reactive paint signal (async landing)
     void commands.open.value;
     void commands.query.value;
     void quickOpen.open.value; // repaint the quick-open modal on open/query/selection change
@@ -448,6 +449,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     // Tooltip dwell: the frame tick advances the timer; it's just another animation source, so it
     // folds into the SAME single-live-request model (holds a frame while counting, false at rest).
     animating = tooltip.tick(deltaTimeSeconds) || animating;
+    // The LSP hover-card dwell advances on the SAME frame tick (holds a frame while counting or while a
+    // hover request is in flight, false once the card is shown or disarmed).
+    animating = view.tickHover(deltaTimeSeconds) || animating;
     syncAnimationLiveness(animating);
     // Converge the viewport size with the LAID-OUT layout (gutter width changes when a file opens
     // or its line count crosses a digit boundary; boot/resize alone goes stale). Mutating outside
@@ -873,6 +877,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
 
   const keyTick = (key: KeyEvent): void => {
     tooltip.clear(); // any keypress hides the tooltip (display-only affordance)
+    view.dismissHover(); // any keypress hides the LSP hover card (VS Code behaviour)
     // RESERVED GLOBAL CHORDS (quit) are escape hatches that must fire from ANY mode — checked BEFORE
     // every modal/search branch below, or a focused find/quick-open/settings input would swallow the
     // quit key and TRAP the user with no way out (a hard no-dead-ends / learnability failure). The
@@ -1108,6 +1113,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     HandlerGuard.Class.run('mouse', () => {
       lastMouse = { type: event.type, x: event.x, y: event.y, button: event.button };
       if (event.type === 'down') tooltip.clear(); // any click hides the tooltip, wherever it lands
+      if (event.type === 'down') view.dismissHover(); // any click hides the hover card (mouse-MOVE over it does not)
       paint();
     }, () => renderer.requestRender());
   };

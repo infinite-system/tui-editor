@@ -32,6 +32,8 @@ export interface EditorPaneDeps {
   editorViewportWidth: () => number;
   /** Focus the markdown split's source pane on an editor click (no-op when no split is mounted). */
   focusMarkdownSource: () => void;
+  /** The LSP hover-card handle: a mouse-move over a symbol points it; leaving the code clears it. */
+  hover: { pointAt(position: { line: number; column: number }, screenX: number, screenY: number): void; clear(): void };
 }
 
 class $EditorPane {
@@ -145,7 +147,8 @@ class $EditorPane {
     );
   }
 
-  private documentPositionAtCell(cellX: number, cellY: number): { line: number; column: number } | null {
+  // Public so RootView/HoverCard can map a screen cell to a document position (mirrors wrapVisualPosition).
+  documentPositionAtCell(cellX: number, cellY: number): { line: number; column: number } | null {
     const { workspaceSet, codeBody } = this.deps;
     if (!workspaceSet.active.editor.hasDocument.value) return null;
     if (workspaceSet.active.editor.wordWrap.value) {
@@ -239,7 +242,7 @@ class $EditorPane {
   }
 
   private wireHandlers(): void {
-    const { editorArea, codeBody, workspaceSet, settings, focusMarkdownSource } = this.deps;
+    const { editorArea, codeBody, workspaceSet, settings, focusMarkdownSource, hover } = this.deps;
 
     editorArea.onMouseScroll = (event) => {
       if (!workspaceSet.active.editor.hasDocument.value) return;
@@ -290,6 +293,18 @@ class $EditorPane {
     };
     codeBody.onMouseUp = () => this.drag.end();
     codeBody.onMouseDragEnd = () => this.drag.end();
+    // Mouse-move over a code cell arms the LSP hover card for the symbol there (a >0.5s dwell shows
+    // the language server's type/docs). Moving off any document, or over an empty cell, clears it.
+    // invariant: A hover card reflects the language server's type at the pointed symbol (src/modules/ui/ui.invariants.md)
+    codeBody.onMouseMove = (event) => {
+      if (!workspaceSet.active.editor.hasDocument.value) {
+        hover.clear();
+        return;
+      }
+      const position = this.documentPositionAtCell(event.x, event.y);
+      if (position) hover.pointAt(position, event.x, event.y);
+      else hover.clear();
+    };
   }
 }
 
