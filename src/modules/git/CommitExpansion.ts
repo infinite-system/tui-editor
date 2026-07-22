@@ -32,11 +32,6 @@ class $CommitExpansion {
     readonly options: CommitExpansionOptions = {},
   ) {}
 
-  // Late-read dependency (never snapshot at construction).
-  protected get GitCommands() {
-    return GitCommands.Class;
-  }
-
   /** Expanded commits sorted by commitIndex; `files` is null while the lazy fetch is in flight.
    *  Identity-replaced on every change so observers re-run. */
   get entries() {
@@ -112,7 +107,7 @@ class $CommitExpansion {
    *  (the commit shows expanded with no file rows — never a thrown error). */
   protected async fetchFiles(sha: string): Promise<readonly CommitFileChange[]> {
     if (this.options.fetch) return this.options.fetch(sha);
-    const result = await this.GitCommands.showNameStatus(this.cwd, sha);
+    const result = await GitCommands.Class.showNameStatus(this.cwd, sha);
     if (result.code !== 0) return [];
     return GitParsers.Class.parseNameStatus(result.stdout);
   }

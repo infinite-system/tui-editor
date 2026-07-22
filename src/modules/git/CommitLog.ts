@@ -24,11 +24,6 @@ class $CommitLog {
     readonly options: CommitLogOptions = {},
   ) {}
 
-  // Late-read dependency (never snapshot at construction).
-  protected get GitCommands() {
-    return GitCommands.Class;
-  }
-
   // invariant: Cost tracks the actively observed set (project.invariants.md)
   // Sparse cache: commit index -> record. Identity is replaced on every write so observers re-run.
   get cache() {
@@ -60,7 +55,7 @@ class $CommitLog {
   /** Fetch one page `[skip, skip+limit)`. Overridable via constructor `fetch` (tests inject a fake). */
   protected async fetchPage(skip: number, limit: number): Promise<CommitRecord[]> {
     if (this.options.fetch) return this.options.fetch(skip, limit);
-    const result = await this.GitCommands.log({ cwd: this.cwd, branch: this.options.branch, skip, limit });
+    const result = await GitCommands.Class.log({ cwd: this.cwd, branch: this.options.branch, skip, limit });
     if (result.code !== 0) return [];
     return GitParsers.Class.parseLog(result.stdout);
   }

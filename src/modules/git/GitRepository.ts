@@ -54,23 +54,13 @@ class $GitRepository {
     return ref<string | null>(null);
   }
 
-  protected get GitCommands() {
-    return GitCommands.Class;
-  }
-  protected get Clock() {
-    return Clock.Class;
-  }
-  protected get StatusChannel() {
-    return StatusChannel.Class;
-  }
-
   private commandError(action: string, result: GitCommandResult): string {
     const detail = result.stderr.trim() || result.stdout.trim();
     return detail || `${action} exited with code ${result.code}`;
   }
 
   private publishStatus(): void {
-    this.StatusChannel.update({
+    StatusChannel.Class.update({
       gitBranch: this.branch.value,
       gitHead: this.head.value,
       gitStaged: this.staged.value.length,
@@ -91,7 +81,7 @@ class $GitRepository {
     this.publishStatus();
 
     try {
-      const result = await this.GitCommands.statusPorcelainV2Branch(this.cwd);
+      const result = await GitCommands.Class.statusPorcelainV2Branch(this.cwd);
       if (requestId !== this.refreshRequestId) return;
       if (result.code !== 0) {
         this.error.value = this.commandError('git status', result);
@@ -109,7 +99,7 @@ class $GitRepository {
       this.staged.value = status.staged;
       this.unstaged.value = status.unstaged;
       this.untracked.value = status.untracked;
-      this.lastRefreshAt.value = this.Clock.now();
+      this.lastRefreshAt.value = Clock.Class.now();
     } catch (error) {
       if (requestId !== this.refreshRequestId) return;
       this.error.value = `git status failed: ${String(error)}`;
@@ -128,7 +118,7 @@ class $GitRepository {
     const branch = options.branch ?? this.branch.value;
 
     try {
-      const result = await this.GitCommands.log({
+      const result = await GitCommands.Class.log({
         cwd: this.cwd,
         branch: branch && branch !== '(detached)' ? branch : undefined,
         limit,
@@ -158,12 +148,12 @@ class $GitRepository {
   }
 
   async stage(paths: string[]): Promise<boolean> {
-    return this.runOperation('git add', () => this.GitCommands.stage(this.cwd, paths));
+    return this.runOperation('git add', () => GitCommands.Class.stage(this.cwd, paths));
   }
 
   async unstage(paths: string[]): Promise<boolean> {
     return this.runOperation('git unstage', () =>
-      this.GitCommands.unstage(this.cwd, paths),
+      GitCommands.Class.unstage(this.cwd, paths),
     );
   }
 
