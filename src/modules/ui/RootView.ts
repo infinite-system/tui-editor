@@ -53,7 +53,7 @@ import type { ScrollModifier } from '../settings/Settings';
 import type { FindBar, FindBarTarget } from '../search/FindBar';
 import type { KeybindingRegistry } from '../keybindings/KeybindingRegistry';
 import type { QuickOpen } from '../search/QuickOpen';
-import { SplitterModel } from '../layout/SplitterModel';
+import { PaneSplitters } from './PaneSplitters';
 import { Logging } from '../system/Logging';
 import type { TabStrip } from './TabStrip';
 
@@ -186,28 +186,9 @@ function $buildRootView(
   // context the tooltip masks addToHitGrid through) routes EVERY subsequent drag to that renderable
   // regardless of where the pointer travels — the robust pattern for any thin divider/thumb. OpenTUI
   // releases the capture itself on the up event (firing drag-end), so no manual clear is needed.
-  const captureDragTarget = (target: object): void => {
-    const withContext = target as {
-      _ctx?: { setCapturedRenderable?: (renderable: unknown) => void };
-    };
-    withContext._ctx?.setCapturedRenderable?.(target);
-  };
 
   // Sidebar↔editor width divider: a vertical SplitterModel in CELLS whose size IS the sidebar width,
   // bound to settings.sidebarWidth so a drag persists + live-applies. onSizeChange writes the setting.
-  const sidebarSplitter = new SplitterModel.Class({
-    orientation: 'vertical',
-    mode: 'cells',
-    initialSize: settings.sidebarWidth.value,
-    minimumSize: 18,
-    maximumSize: 70,
-    // LIVE update only — update the reactive value on every drag tick so the resize is smooth, but do
-    // NOT persist here: settings.save() is a SYNCHRONOUS disk write, and calling it at mouse-move
-    // frequency stalls the event loop (app-wide lag). Persist ONCE on drag end (endSidebarDrag).
-    onSizeChange: (width) => {
-      settings.sidebarWidth.value = Math.round(width);
-    },
-  });
   // settings.sidebarWidth is the SINGLE source of truth: the settings panel AND the drag both write
   // it, and the layout reads it here — so changing it in Ctrl+, resizes live, and dragging persists.
   const sidebarWidth = (): number => Math.round(settings.sidebarWidth.value);
@@ -323,42 +304,8 @@ function $buildRootView(
     flexShrink: 0, // keep the 1-cell grab column (flex must not squeeze it to zero)
     backgroundColor: readPalette().border, // a visible bg also puts it in the mouse hit grid
   });
-  let sidebarDividerHover = false;
   // OpenTUI fires BOTH drag-end AND up on release, so guard the persist with an active-drag flag —
   // otherwise the release saves twice (still a per-drag write, but the invariant is exactly one).
-  let sidebarDragActive = false;
-  sidebarDivider.onMouseDown = (event) => {
-    captureDragTarget(sidebarDivider); // capture on down so a 1-cell divider survives the drag
-    sidebarSplitter.size.value = settings.sidebarWidth.value; // anchor from the live width
-    sidebarSplitter.beginDrag(event.x);
-    sidebarDragActive = true;
-    renderer.requestRender();
-  };
-  sidebarDivider.onMouseDrag = (event) => {
-    sidebarSplitter.dragTo(event.x);
-    renderer.requestRender();
-  };
-  const endSidebarDrag = (): void => {
-    if (!sidebarDragActive) return;
-    sidebarDragActive = false;
-    sidebarSplitter.endDrag();
-    settings.save(); // persist ONCE, on release — never per drag tick (sync disk write = frame stall)
-    renderer.requestRender();
-  };
-  sidebarDivider.onMouseUp = endSidebarDrag;
-  sidebarDivider.onMouseDragEnd = endSidebarDrag;
-  sidebarDivider.onMouseMove = () => {
-    if (!sidebarDividerHover) {
-      sidebarDividerHover = true;
-      renderer.requestRender();
-    }
-  };
-  sidebarDivider.onMouseOut = () => {
-    if (sidebarDividerHover) {
-      sidebarDividerHover = false;
-      renderer.requestRender();
-    }
-  };
 
   mainRow.add(sidebar);
   mainRow.add(sidebarDivider);
@@ -556,30 +503,6 @@ function $buildRootView(
     visible: false,
   });
   sidebar.add(gitSplitDivider);
-  const gitSplitRatioAtPointer = (pointerScreenY: number): number => {
-    const bodyTopScreenY = (sidebar.y as number) + 1; // +1 = sidebar top border
-    const bodyHeight = Math.max(1, (sidebar.height as number) - 2);
-    return (pointerScreenY - bodyTopScreenY) / bodyHeight;
-  };
-  let gitSplitDragActive = false;
-  gitSplitDivider.onMouseDown = (event) => {
-    captureDragTarget(gitSplitDivider);
-    gitSplitDragActive = true;
-    workspaceSet.active.setGitSplit(gitSplitRatioAtPointer(event.y));
-    renderer.requestRender();
-  };
-  gitSplitDivider.onMouseDrag = (event) => {
-    workspaceSet.active.setGitSplit(gitSplitRatioAtPointer(event.y));
-    renderer.requestRender();
-  };
-  const endGitSplitDrag = (): void => {
-    if (!gitSplitDragActive) return; // both drag-end + up fire on release; persist exactly once
-    gitSplitDragActive = false;
-    workspaceSet.active.persistGitSplit(); // persist ONCE on release — setGitSplit only updated memory per tick
-    renderer.requestRender();
-  };
-  gitSplitDivider.onMouseUp = endGitSplitDrag;
-  gitSplitDivider.onMouseDragEnd = endGitSplitDrag;
 
   // Interior height of a bordered box = box height - 2 (top+bottom border).
   // invariant: A scrollable pane height is an input not an output (ui.invariants.md)
@@ -811,7 +734,7 @@ function $buildRootView(
     sidebar.borderColor = workspaceSet.active.focus.value === 'files' || gitView ? palette.borderActive : palette.border;
     // Divider: brighten while hovered or dragging so it reads as a grab handle.
     sidebarDivider.backgroundColor =
-      sidebarSplitter.dragging.value || sidebarDividerHover ? palette.accent : palette.border;
+      paneSplitters.sidebarDividerActive() ? palette.accent : palette.border;
     sidebar.titleColor = workspaceSet.active.focus.value === 'files' || gitView ? palette.accent : palette.dim;
     sidebar.title = gitView ? 'Git' : 'Files';
     editorArea.backgroundColor = palette.bg;
@@ -987,6 +910,16 @@ function $buildRootView(
   // frame loop calls syncPaneViewportGeometry().
   // The overlay layer constructs + drives every modal/floating overlay (palette, find, quick-open,
   // confirm, settings, shortcut sheet, context menu, tooltip). update() calls overlayLayer.update().
+  // The pane-splitter controller wires the two draggable dividers (sidebar width + git split ratio).
+  const paneSplitters = new PaneSplitters.Class({
+    renderer,
+    settings,
+    workspaceSet,
+    sidebar,
+    sidebarDivider,
+    gitSplitDivider,
+  });
+
   const overlayLayer = new OverlayLayer.Class({
     renderer,
     commands,
