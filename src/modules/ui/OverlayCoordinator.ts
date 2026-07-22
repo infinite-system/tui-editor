@@ -8,7 +8,8 @@ export type ExclusiveOverlayName =
   | 'quickOpen'
   | 'commandPalette'
   | 'settingsPanel'
-  | 'contextMenu';
+  | 'contextMenu'
+  | 'shortcutHelp';
 
 export type ExclusiveOverlayCloseActions = Readonly<Record<ExclusiveOverlayName, () => void>>;
 
@@ -18,6 +19,7 @@ const exclusiveOverlayNames: readonly ExclusiveOverlayName[] = [
   'commandPalette',
   'settingsPanel',
   'contextMenu',
+  'shortcutHelp',
 ];
 
 class $OverlayCoordinator {

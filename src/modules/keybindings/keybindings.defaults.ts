@@ -26,7 +26,12 @@ export const canonicalBindings: Keybinding[] = [
   // VS Code's own terminal AND is unencodable on legacy (non-kitty) terminals that drop the shift bit
   // on a control key — F1 is a single unshifted function key that always reaches the app, so the
   // palette is never unreachable. invariant: Advertised bindings are deliverable bindings.
-  { chord: { key: 'f1' }, action: 'palette.open' },
+  // shift is EXPLICITLY false: Shift+F1 below opens the shortcut cheat-sheet, and an unspecified
+  // shift here is DON'T-CARE — it would swallow the shifted chord.
+  { chord: { key: 'f1', shift: false }, action: 'palette.open' },
+  // Shift+F1 opens the keyboard cheat-sheet. A single function-key chord: decodable on legacy
+  // terminals (CSI 1;2P) and under kitty alike, and taken by nothing else. The sheet lists itself.
+  { chord: { key: 'f1', shift: true }, action: 'help.shortcuts' },
   { chord: { key: 'g', ctrl: true }, action: 'git.togglePanel' },
   { chord: { key: 'tab' }, action: 'focus.toggle' },
   // Editor buffer tabs (item 10a) — global (work in any focus). Ctrl+Tab needs the kitty keyboard
@@ -74,6 +79,13 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 'down' }, action: 'menu.next', context: 'menu' },
   { chord: { key: 'return' }, action: 'menu.run', context: 'menu' },
   { chord: { key: 'escape' }, action: 'menu.close', context: 'menu' },
+
+  // --- shortcut cheat-sheet (captures input while open; Shift+F1 above toggles it globally) ---
+  { chord: { key: 'escape' }, action: 'help.close', context: 'help' },
+  { chord: { key: 'up' }, action: 'help.up', context: 'help' },
+  { chord: { key: 'down' }, action: 'help.down', context: 'help' },
+  { chord: { key: 'pageup' }, action: 'help.pageUp', context: 'help' },
+  { chord: { key: 'pagedown' }, action: 'help.pageDown', context: 'help' },
 
   // --- settings panel (Ctrl+,) ---
   { chord: { key: 'up' }, action: 'settings.up', context: 'settings' },

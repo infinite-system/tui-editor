@@ -39,6 +39,7 @@ import { GitLogRows, type CommitLogRow } from '../git/GitLogRows';
 import { ScrollbarGeometry } from './ScrollbarGeometry';
 import type { ContextMenu, ContextMenuItem } from './ContextMenu';
 import type { OverlayCoordinator } from './OverlayCoordinator';
+import type { ShortcutHelp } from './ShortcutHelp';
 import type { Tooltip } from './Tooltip';
 import type { SettingsPanel } from '../settings/SettingsPanel';
 import type { ScrollModifier } from '../settings/Settings';
@@ -120,6 +121,8 @@ export interface RootView {
   tickMarkdownPreview(dtSeconds: number): boolean;
   activeMarkdownSplitView(): MarkdownSplitView.Instance | null;
   findTarget(): FindBarTarget | null;
+  /** Rows the shortcut cheat-sheet can show at once (scroll actions clamp against this). */
+  shortcutHelpViewportRows(): number;
   dispose(): void;
 }
 
@@ -188,6 +191,7 @@ function $buildRootView(
   settingsPanel: SettingsPanel.Instance,
   findBar: FindBar.Instance,
   quickOpen: QuickOpen.Instance,
+  shortcutHelp: ShortcutHelp.Instance,
   overlayCoordinator: OverlayCoordinator.Instance,
 ): RootView {
   const root = renderer.root;
@@ -387,6 +391,52 @@ function $buildRootView(
   });
   const statusText = new TextRenderable(renderer, { id: 'status-text', content: '' });
   statusBar.add(statusText);
+  // Clickable shortcut-help affordance: a real hit-tested `?` cell span pinned to the RIGHT end of
+  // the status bar (the spacer's flexGrow pushes it there). Click toggles the cheat-sheet through
+  // the exclusive-overlay coordinator; hover shows a tooltip with the bound open chord.
+  // invariant: The shortcut sheet lists the effective bindings (src/modules/ui/ui.invariants.md)
+  const statusSpacer = new BoxRenderable(renderer, {
+    id: 'status-spacer',
+    flexGrow: 1,
+    height: 1,
+  });
+  const shortcutHelpButton = new TextRenderable(renderer, {
+    id: 'status-help-button',
+    content: ' ? ',
+    width: 3,
+    height: 1,
+    selectable: false, // a click must only toggle the sheet, never start a text selection
+  });
+  statusBar.add(statusSpacer);
+  statusBar.add(shortcutHelpButton);
+  let shortcutHelpButtonHover = false;
+  const toggleShortcutHelp = (): void => {
+    if (shortcutHelp.open.value) shortcutHelp.close();
+    else overlayCoordinator.openExclusiveOverlay('shortcutHelp', () => shortcutHelp.show());
+  };
+  shortcutHelpButton.onMouseDown = () => {
+    toggleShortcutHelp();
+    renderer.requestRender();
+  };
+  shortcutHelpButton.onMouseMove = (event) => {
+    if (!shortcutHelpButtonHover) {
+      shortcutHelpButtonHover = true;
+      renderer.requestRender();
+    }
+    const openChordHint = keybindings.bindingHint('help.shortcuts', 'global');
+    tooltip.point(
+      `Keyboard shortcuts${openChordHint ? ` (${openChordHint})` : ''}`,
+      event.x,
+      event.y,
+    );
+  };
+  shortcutHelpButton.onMouseOut = () => {
+    if (shortcutHelpButtonHover) {
+      shortcutHelpButtonHover = false;
+      renderer.requestRender();
+    }
+    tooltip.clear();
+  };
 
   if (settings.workspaceTabPosition.value === 'left') {
     mainRow.add(workspaceTabBar, 0);
@@ -492,6 +542,49 @@ function $buildRootView(
   const settingsText = new TextRenderable(renderer, { id: 'settings-panel-text', content: '' });
   settingsBox.add(settingsText);
   root.add(settingsBox);
+
+  // Shortcut cheat-sheet overlay (Shift+F1 / the status-bar `?`). A centered modal listing the
+  // registry's effective bindings grouped by category; scrollable; Esc or the same chord closes.
+  // The invisible backdrop makes it modal the same way the context menu is: while open, every
+  // pointer cell resolves to the sheet or the backdrop (whose only behavior is to close the sheet),
+  // so "clicking outside closes it" holds by construction.
+  // invariant: The shortcut sheet lists the effective bindings (src/modules/ui/ui.invariants.md)
+  // invariant: Input overlays share one modal slot (src/modules/ui/ui.invariants.md)
+  const shortcutHelpBackdrop = new BoxRenderable(renderer, {
+    id: 'shortcut-help-backdrop',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: '100%',
+    height: '100%',
+    visible: false,
+    zIndex: 118,
+  });
+  const shortcutHelpBox = new BoxRenderable(renderer, {
+    id: 'shortcut-help',
+    position: 'absolute',
+    left: '15%',
+    top: 1,
+    width: '70%',
+    border: true,
+    borderStyle: 'rounded',
+    title: 'Keyboard Shortcuts',
+    flexDirection: 'column',
+    visible: false,
+    zIndex: 120,
+  });
+  const shortcutHelpText = new TextRenderable(renderer, {
+    id: 'shortcut-help-text',
+    content: '',
+    selectable: false,
+  });
+  shortcutHelpBox.add(shortcutHelpText);
+  root.add(shortcutHelpBackdrop);
+  root.add(shortcutHelpBox);
+  shortcutHelpBackdrop.onMouseDown = () => shortcutHelp.close();
+  // The sheet's interior height: box height minus the borders and the one hint line at the top.
+  const shortcutHelpBoxHeight = (): number => Math.max(6, renderer.height - 3);
+  const shortcutHelpViewportRows = (): number => Math.max(1, shortcutHelpBoxHeight() - 3);
 
   // Context-menu modal layer. The BACKDROP is an invisible (transparent, borderless) full-screen
   // box just beneath the menu: OpenTUI stamps the hit grid in render order (zIndex ascending), so
@@ -2316,6 +2409,9 @@ function $buildRootView(
     applySelection(); // after content is set, so selection maps onto the current buffer
     statusText.content = renderStatus();
     statusText.fg = palette.dim;
+    // The `?` help affordance brightens on hover and while its sheet is open.
+    shortcutHelpButton.fg =
+      shortcutHelpButtonHover || shortcutHelp.open.value ? palette.accent : palette.dim;
 
     // Palette overlay.
     const open = commands.open.value;
@@ -2426,6 +2522,46 @@ function $buildRootView(
         }
       });
       settingsText.content = new StyledText(settingsChunks);
+    }
+
+    // Shortcut cheat-sheet overlay — every row projected from the ShortcutHelp model, whose chords
+    // come from KeybindingRegistry.effectiveBindings (never a hand-written list).
+    // invariant: The shortcut sheet lists the effective bindings (src/modules/ui/ui.invariants.md)
+    shortcutHelpBackdrop.visible = shortcutHelp.open.value;
+    shortcutHelpBox.visible = shortcutHelp.open.value;
+    if (shortcutHelp.open.value) {
+      shortcutHelpBox.height = shortcutHelpBoxHeight();
+      shortcutHelpBox.borderColor = palette.borderActive;
+      shortcutHelpBox.titleColor = palette.accent;
+      shortcutHelpBox.backgroundColor = palette.panel;
+      const sheetRows = shortcutHelp.rows();
+      const sheetViewportRows = shortcutHelpViewportRows();
+      const sheetMaximumScrollTop = Math.max(0, sheetRows.length - sheetViewportRows);
+      // Read-only clamp for this paint; the model clamps its own writes in scrollBy.
+      const sheetScrollTop = Math.min(shortcutHelp.scrollTop.value, sheetMaximumScrollTop);
+      const sheetVisibleRows = sheetRows.slice(sheetScrollTop, sheetScrollTop + sheetViewportRows);
+      const chordColumnWidth = sheetRows.reduce(
+        (widestWidth, sheetRow) => Math.max(widestWidth, sheetRow.chordLabel.length),
+        0,
+      );
+      const sheetScrollHint =
+        sheetRows.length > sheetViewportRows
+          ? `   ${sheetScrollTop + 1}-${Math.min(sheetScrollTop + sheetViewportRows, sheetRows.length)} of ${sheetRows.length}`
+          : '';
+      const sheetChunks: TextChunk[] = [];
+      sheetChunks.push(fg(palette.dim)(`  ↑/↓ scroll · Esc close${sheetScrollHint}\n`));
+      sheetVisibleRows.forEach((sheetRow, sheetRowIndex) => {
+        const lineBreak = sheetRowIndex < sheetVisibleRows.length - 1 ? '\n' : '';
+        if (sheetRow.kind === 'category') {
+          sheetChunks.push(bold(fg(palette.accent)(` ${sheetRow.label}${lineBreak}`)));
+        } else {
+          sheetChunks.push(
+            fg(palette.accent)(`   ${sheetRow.chordLabel.padEnd(chordColumnWidth, ' ')}`),
+          );
+          sheetChunks.push(fg(palette.fg)(`  ${sheetRow.label}${lineBreak}`));
+        }
+      });
+      shortcutHelpText.content = new StyledText(sheetChunks);
     }
 
     // Context menu overlay (+ its modal backdrop) — projected purely from the ContextMenu model.
@@ -2946,6 +3082,7 @@ function $buildRootView(
     activeDiffView: () => activeDiffView,
     activeMarkdownSplitView: () => activeMarkdownSplitView,
     findTarget,
+    shortcutHelpViewportRows,
     dispose() {
       try {
         activeMarkdownSplitView?.dispose();

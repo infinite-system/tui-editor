@@ -10,6 +10,7 @@ const overlayNames: readonly ExclusiveOverlayName[] = [
   'commandPalette',
   'settingsPanel',
   'contextMenu',
+  'shortcutHelp',
 ];
 
 describe('OverlayCoordinator', () => {
@@ -24,6 +25,7 @@ describe('OverlayCoordinator', () => {
       commandPalette: closeOverlay('commandPalette'),
       settingsPanel: closeOverlay('settingsPanel'),
       contextMenu: closeOverlay('contextMenu'),
+      shortcutHelp: closeOverlay('shortcutHelp'),
     };
     const coordinator = new OverlayCoordinator.Class(closeActions);
 
@@ -56,6 +58,7 @@ describe('OverlayCoordinator', () => {
       commandPalette: () => {},
       settingsPanel: () => {},
       contextMenu: () => {},
+      shortcutHelp: () => {},
     });
 
     coordinator.openExclusiveOverlay('findBar', () => {

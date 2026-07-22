@@ -18,6 +18,7 @@ import { RootView } from '../ui/RootView';
 import { TabStrip } from '../ui/TabStrip';
 import { ContextMenu } from '../ui/ContextMenu';
 import { OverlayCoordinator } from '../ui/OverlayCoordinator';
+import { ShortcutHelp } from '../ui/ShortcutHelp';
 import { Tooltip } from '../ui/Tooltip';
 import { Settings } from '../settings/Settings';
 import { SettingsPanel } from '../settings/SettingsPanel';
@@ -111,12 +112,14 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   const settingsPanel = new SettingsPanel.Class(settings);
   const findBar = new FindBar.Class();
   const quickOpen = new QuickOpen.Class();
+  const shortcutHelp = new ShortcutHelp.Class(keybindings, commands);
   const overlayCoordinator = new OverlayCoordinator.Class({
     findBar: () => findBar.close(),
     quickOpen: () => quickOpen.close(),
     commandPalette: () => commands.closePalette(),
     settingsPanel: () => settingsPanel.close(),
     contextMenu: () => contextMenu.close(),
+    shortcutHelp: () => shortcutHelp.close(),
   });
 
   const view = RootView.Class.buildRootView(
@@ -133,6 +136,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     settingsPanel,
     findBar,
     quickOpen,
+    shortcutHelp,
     overlayCoordinator,
   );
 
@@ -203,6 +207,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       ...(commands.open.value ? ['commandPalette'] : []),
       ...(settingsPanel.open.value ? ['settingsPanel'] : []),
       ...(contextMenu.open.value ? ['contextMenu'] : []),
+      ...(shortcutHelp.open.value ? ['shortcutHelp'] : []),
     ];
     StatusChannel.Class.update({
       mouse: lastMouse,
@@ -277,6 +282,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       markdownHoveredReference: markdownSplitView?.hoveredReferencePath.value ?? null,
       settingsOpen: settingsPanel.open.value,
       settingsSelected: settingsPanel.selectedIndex.value,
+      shortcutHelpOpen: shortcutHelp.open.value,
+      shortcutHelpScrollTop: shortcutHelp.scrollTop.value,
+      shortcutHelpRowCount: shortcutHelp.open.value ? shortcutHelp.rows().length : 0,
       sidebarWidth: settings.sidebarWidth.value,
       // Total working-tree changes — proves the GitWatcher live-refreshes on EXTERNAL fs changes.
       gitChangedCount: (() => {
@@ -384,6 +392,8 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     void findBar.open.value;
     void findBar.engine?.query.value;
     void findBar.engine?.matches.value;
+    void shortcutHelp.open.value; // repaint the cheat-sheet on open/close and scroll
+    void shortcutHelp.scrollTop.value;
     void commands.selectedIndex.value;
     void theme.paletteName.value;
     void app.quitChordArmed.value;
@@ -505,6 +515,8 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     hasHoveredMarkdownReference: () =>
       Boolean(view.activeMarkdownSplitView()?.hoveredReferencePath.value),
     openHoveredMarkdownReference: () => view.activeMarkdownSplitView()?.openHoveredReference(),
+    openShortcutHelp: () =>
+      overlayCoordinator.openExclusiveOverlay('shortcutHelp', () => shortcutHelp.show()),
   });
 
   // --- input: handlers MUTATE model state only; the frame effect repaints. -----------------
@@ -618,6 +630,19 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       else overlayCoordinator.openExclusiveOverlay('settingsPanel', () => settingsPanel.toggle());
     },
     'settings.close': () => settingsPanel.close(),
+    // The cheat-sheet: the same chord toggles; Esc closes; arrows/pages scroll the row window.
+    // invariant: The shortcut sheet lists the effective bindings (src/modules/ui/ui.invariants.md)
+    'help.shortcuts': () => {
+      if (shortcutHelp.open.value) shortcutHelp.close();
+      else overlayCoordinator.openExclusiveOverlay('shortcutHelp', () => shortcutHelp.show());
+    },
+    'help.close': () => shortcutHelp.close(),
+    'help.up': () => shortcutHelp.scrollBy(-1, view.shortcutHelpViewportRows()),
+    'help.down': () => shortcutHelp.scrollBy(1, view.shortcutHelpViewportRows()),
+    'help.pageUp': () =>
+      shortcutHelp.scrollBy(-view.shortcutHelpViewportRows(), view.shortcutHelpViewportRows()),
+    'help.pageDown': () =>
+      shortcutHelp.scrollBy(view.shortcutHelpViewportRows(), view.shortcutHelpViewportRows()),
     'settings.up': () => settingsPanel.moveSelection(-1),
     'settings.down': () => settingsPanel.moveSelection(1),
     'settings.increase': () => settingsPanel.adjust(1),
@@ -843,6 +868,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'workspace.openFolder',
     'palette.open',
     'settings.toggle',
+    'help.shortcuts',
   ]);
 
   const keyTick = (key: KeyEvent): void => {
@@ -894,15 +920,20 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       return;
     }
 
-    const context = settingsPanel.open.value
-      ? 'settings'
-      : commands.open.value
-        ? 'palette'
-        : quickOpen.open.value
-          ? 'quickopen'
-          : findBar.open.value
-            ? 'find'
-            : workspaceSet.active.focus.value;
+    // The cheat-sheet is an input-capturing overlay: while open, keys resolve in its 'help'
+    // context (Esc closes, arrows scroll, global chords still work — opening another overlay
+    // closes the sheet through the coordinator) and unbound keys are consumed.
+    const context = shortcutHelp.open.value
+      ? 'help'
+      : settingsPanel.open.value
+        ? 'settings'
+        : commands.open.value
+          ? 'palette'
+          : quickOpen.open.value
+            ? 'quickopen'
+            : findBar.open.value
+              ? 'find'
+              : workspaceSet.active.focus.value;
 
     // Ctrl+H is the ASCII Backspace control byte (0x08); OpenTUI correctly decodes that legacy byte
     // as {name:'backspace', ctrl:false}. A physical Backspace is DEL (0x7f), so the byte sequences are
