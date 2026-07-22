@@ -92,6 +92,22 @@ describe('QuickOpen', () => {
     expect(quickOpen.open.value).toBe(true);
   });
 
+  test('workspace-path mode reuses the input and returns the typed folder', () => {
+    const quickOpen = new QuickOpen.Class();
+    quickOpen.showWorkspacePath();
+    quickOpen.setQuery('  /projects/second  ');
+
+    expect(quickOpen.open.value).toBe(true);
+    expect(quickOpen.mode.value).toBe('workspacePath');
+    expect(quickOpen.matches.value).toEqual([]);
+    expect(quickOpen.activate()).toBe('/projects/second');
+
+    quickOpen.setError('Enter an existing folder path');
+    expect(quickOpen.errorMessage.value).toBe('Enter an existing folder path');
+    quickOpen.setQuery('/projects/first');
+    expect(quickOpen.errorMessage.value).toBe('');
+  });
+
   test('close clears state and prevents an in-flight enumeration from reopening candidates', async () => {
     let finishEnumeration!: (projectFiles: readonly string[]) => void;
     const enumerateProjectFiles: ProjectFileEnumerator = () =>

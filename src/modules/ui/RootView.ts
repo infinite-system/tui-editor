@@ -20,7 +20,7 @@ import {
   type ColorInput,
 } from '@opentui/core';
 import { Static } from 'ivue/extras';
-import type { Workspace } from '../workspace/Workspace';
+import type { WorkspaceSet } from '../workspace/WorkspaceSet';
 import type { App } from '../app/App';
 import type { Theme } from '../theme/Theme';
 import type { CommandRegistry } from '../commands/CommandRegistry';
@@ -44,6 +44,7 @@ import type { FindBar } from '../search/FindBar';
 import type { QuickOpen } from '../search/QuickOpen';
 import { SplitterModel } from '../layout/SplitterModel';
 import { Logging } from '../system/Logging';
+import type { TabStrip } from './TabStrip';
 
 function roleColor(role: Role, palette: Palette): string {
   switch (role) {
@@ -168,7 +169,9 @@ class AxisBalancedHorizontalScrollbarPaint extends HitTransparentText {
 
 function $buildRootView(
   renderer: CliRenderer,
-  workspace: Workspace.Instance,
+  workspaceSet: WorkspaceSet.Instance,
+  bufferTabStrip: TabStrip.Instance,
+  workspaceTabStrip: TabStrip.Instance,
   theme: Theme.Instance,
   commands: CommandRegistry.Instance,
   app: App.Instance,
@@ -228,6 +231,20 @@ function $buildRootView(
     flexGrow: 1,
     width: '100%',
   });
+
+  // The project-layer tab strip is ONE renderable + ONE TabStrip model. The setting moves that same
+  // strip between the horizontal top slot and the vertical left slot; it never duplicates state.
+  const workspaceTabBar = new TextRenderable(renderer, {
+    id: 'workspace-tab-strip',
+    content: '',
+    width: '100%',
+    height: 1,
+    wrapMode: 'none',
+  });
+  if (settings.workspaceTabPosition.value === 'left') {
+    workspaceTabBar.width = 22;
+    workspaceTabBar.height = '100%';
+  }
 
   const sidebar = new BoxRenderable(renderer, {
     id: 'sidebar',
@@ -356,6 +373,11 @@ function $buildRootView(
   const statusText = new TextRenderable(renderer, { id: 'status-text', content: '' });
   statusBar.add(statusText);
 
+  if (settings.workspaceTabPosition.value === 'left') {
+    mainRow.add(workspaceTabBar, 0);
+  } else {
+    column.add(workspaceTabBar);
+  }
   column.add(mainRow);
   column.add(statusBar);
   root.add(column);
@@ -543,8 +565,8 @@ function $buildRootView(
     showArrows: false,
     onChange: (position) => {
       if (applyingBarGeometry) return;
-      workspace.editor.viewport.haltScrollMomentum(); // real thumb drag adopts authority
-      workspace.editor.viewport.scrollTop.value = trueScrollPosition(editorVerticalBar, position);
+      workspaceSet.active.editor.viewport.haltScrollMomentum(); // real thumb drag adopts authority
+      workspaceSet.active.editor.viewport.scrollTop.value = trueScrollPosition(editorVerticalBar, position);
     },
   });
   const editorHorizontalBar = new ScrollBarRenderable(renderer, {
@@ -556,8 +578,8 @@ function $buildRootView(
     trackOptions: { backgroundColor: readPalette().bg, foregroundColor: readPalette().accent },
     onChange: (position) => {
       if (applyingBarGeometry) return;
-      workspace.editor.viewport.haltScrollMomentum(); // real thumb drag adopts authority
-      workspace.editor.viewport.scrollLeft.value = trueScrollPosition(editorHorizontalBar, position);
+      workspaceSet.active.editor.viewport.haltScrollMomentum(); // real thumb drag adopts authority
+      workspaceSet.active.editor.viewport.scrollLeft.value = trueScrollPosition(editorHorizontalBar, position);
     },
   });
   const editorHorizontalBarPaint = createAxisBalancedHorizontalPaint(
@@ -575,8 +597,8 @@ function $buildRootView(
     showArrows: false,
     onChange: (position) => {
       if (applyingBarGeometry) return;
-      workspace.haltGitChangesScroll(); // real thumb drag adopts authority
-      workspace.gitPanel.changesScrollTop.value = trueScrollPosition(changesVerticalBar, position);
+      workspaceSet.active.haltGitChangesScroll(); // real thumb drag adopts authority
+      workspaceSet.active.gitPanel.changesScrollTop.value = trueScrollPosition(changesVerticalBar, position);
     },
   });
   const changesHorizontalBar = new ScrollBarRenderable(renderer, {
@@ -588,8 +610,8 @@ function $buildRootView(
     trackOptions: { backgroundColor: readPalette().panel, foregroundColor: readPalette().accent },
     onChange: (position) => {
       if (applyingBarGeometry) return;
-      workspace.haltGitChangesHorizontalScroll();
-      workspace.gitPanel.changesScrollLeft.value = trueScrollPosition(changesHorizontalBar, position);
+      workspaceSet.active.haltGitChangesHorizontalScroll();
+      workspaceSet.active.gitPanel.changesScrollLeft.value = trueScrollPosition(changesHorizontalBar, position);
     },
   });
   const changesHorizontalBarPaint = createAxisBalancedHorizontalPaint(
@@ -604,9 +626,9 @@ function $buildRootView(
     showArrows: false,
     onChange: (position) => {
       if (applyingBarGeometry) return; // ignore our own per-frame scrollPosition sync (One-Writer)
-      workspace.haltGitLogScroll(); // a real thumb drag adopts authority
-      workspace.gitPanel.logScrollTop.value = trueScrollPosition(logVerticalBar, position);
-      workspace.ensureLogWindow(workspace.gitPanel.logScrollTop.value);
+      workspaceSet.active.haltGitLogScroll(); // a real thumb drag adopts authority
+      workspaceSet.active.gitPanel.logScrollTop.value = trueScrollPosition(logVerticalBar, position);
+      workspaceSet.active.ensureLogWindow(workspaceSet.active.gitPanel.logScrollTop.value);
     },
   });
   const logHorizontalBar = new ScrollBarRenderable(renderer, {
@@ -618,8 +640,8 @@ function $buildRootView(
     trackOptions: { backgroundColor: readPalette().panel, foregroundColor: readPalette().accent },
     onChange: (position) => {
       if (applyingBarGeometry) return;
-      workspace.haltGitLogHorizontalScroll();
-      workspace.gitPanel.logScrollLeft.value = trueScrollPosition(logHorizontalBar, position);
+      workspaceSet.active.haltGitLogHorizontalScroll();
+      workspaceSet.active.gitPanel.logScrollLeft.value = trueScrollPosition(logHorizontalBar, position);
     },
   });
   const logHorizontalBarPaint = createAxisBalancedHorizontalPaint(
@@ -636,8 +658,8 @@ function $buildRootView(
     showArrows: false,
     onChange: (position) => {
       if (applyingBarGeometry) return;
-      workspace.haltTreeScroll();
-      workspace.tree.scrollTop.value = trueScrollPosition(treeVerticalBar, position);
+      workspaceSet.active.haltTreeScroll();
+      workspaceSet.active.tree.scrollTop.value = trueScrollPosition(treeVerticalBar, position);
     },
   });
   const treeHorizontalBar = new ScrollBarRenderable(renderer, {
@@ -649,8 +671,8 @@ function $buildRootView(
     trackOptions: { backgroundColor: readPalette().panel, foregroundColor: readPalette().accent },
     onChange: (position) => {
       if (applyingBarGeometry) return;
-      workspace.haltTreeHorizontalScroll();
-      workspace.tree.scrollLeft.value = trueScrollPosition(treeHorizontalBar, position);
+      workspaceSet.active.haltTreeHorizontalScroll();
+      workspaceSet.active.tree.scrollLeft.value = trueScrollPosition(treeHorizontalBar, position);
     },
   });
   const treeHorizontalBarPaint = createAxisBalancedHorizontalPaint(
@@ -668,7 +690,7 @@ function $buildRootView(
   sidebar.add(logHorizontalBarPaint);
 
   // Draggable git changes↔log divider: a 1-row grab strip over the divider glyph row (git view only).
-  // Dragging sets settings.gitSplitRatio LIVE via workspace.setGitSplit — the SAME persisted value the
+  // Dragging sets settings.gitSplitRatio LIVE via workspaceSet.active.setGitSplit — the SAME persisted value the
   // settings panel writes (single source). Capture-on-mousedown (captureDragTarget) so this thin strip
   // survives the drag exactly like the sidebar divider; the ratio is the pointer's row within the
   // sidebar body, so it tracks the cursor directly.
@@ -689,17 +711,17 @@ function $buildRootView(
   gitSplitDivider.onMouseDown = (event) => {
     captureDragTarget(gitSplitDivider);
     gitSplitDragActive = true;
-    workspace.setGitSplit(gitSplitRatioAtPointer(event.y));
+    workspaceSet.active.setGitSplit(gitSplitRatioAtPointer(event.y));
     renderer.requestRender();
   };
   gitSplitDivider.onMouseDrag = (event) => {
-    workspace.setGitSplit(gitSplitRatioAtPointer(event.y));
+    workspaceSet.active.setGitSplit(gitSplitRatioAtPointer(event.y));
     renderer.requestRender();
   };
   const endGitSplitDrag = (): void => {
     if (!gitSplitDragActive) return; // both drag-end + up fire on release; persist exactly once
     gitSplitDragActive = false;
-    workspace.persistGitSplit(); // persist ONCE on release — setGitSplit only updated memory per tick
+    workspaceSet.active.persistGitSplit(); // persist ONCE on release — setGitSplit only updated memory per tick
     renderer.requestRender();
   };
   gitSplitDivider.onMouseUp = endGitSplitDrag;
@@ -722,7 +744,7 @@ function $buildRootView(
   function treeWindowTop(): number {
     // The frame tick publishes live viewport geometry; the window top is the model offset (NOT
     // derived from the selection index, which used to snap the list on every click/open).
-    return workspace.tree.windowTop();
+    return workspaceSet.active.tree.windowTop();
   }
 
   // Every bar's placement + mapping comes from the ONE geometry source (scrollbar-geometry.ts):
@@ -837,13 +859,13 @@ function $buildRootView(
   /** Longest retained log row: sparse commit cache + bounded expanded-file set, never full history. */
   function gitLogContentWidth(): number {
     let widestWidth = 0;
-    for (const record of workspace.commitLog.value?.cache.value.values() ?? []) {
+    for (const record of workspaceSet.active.commitLog.value?.cache.value.values() ?? []) {
       widestWidth = Math.max(
         widestWidth,
         EditorCoordinates.Class.lineWidth(` ▸ ${record.shortSha} ${record.subject}`),
       );
     }
-    for (const expansion of workspace.commitExpansion.value?.entries.value ?? []) {
+    for (const expansion of workspaceSet.active.commitExpansion.value?.entries.value ?? []) {
       for (const file of expansion.files ?? []) {
         widestWidth = Math.max(
           widestWidth,
@@ -865,17 +887,17 @@ function $buildRootView(
     const sidebarInnerWidth = Math.max(1, sidebarWidth() - 2);
     const treeViewportHeight = Math.max(1, (sidebar.height as number) - 2);
     const treeViewportWidth = Math.max(1, sidebarInnerWidth - scrollbarThicknessCells());
-    if (workspace.tree.viewportHeight.value !== treeViewportHeight) {
-      workspace.tree.viewportHeight.value = treeViewportHeight;
+    if (workspaceSet.active.tree.viewportHeight.value !== treeViewportHeight) {
+      workspaceSet.active.tree.viewportHeight.value = treeViewportHeight;
       changed = true;
     }
-    if (workspace.tree.viewportWidth.value !== treeViewportWidth) {
-      workspace.tree.viewportWidth.value = treeViewportWidth;
+    if (workspaceSet.active.tree.viewportWidth.value !== treeViewportWidth) {
+      workspaceSet.active.tree.viewportWidth.value = treeViewportWidth;
       changed = true;
     }
-    workspace.tree.clampHorizontalScroll();
+    workspaceSet.active.tree.clampHorizontalScroll();
 
-    const gitAvailable = workspace.git.value !== null;
+    const gitAvailable = workspaceSet.active.git.value !== null;
     // Full pane width (minus the scrollbar). The action area is reserved ONLY on the active row (which
     // paints buttons) — non-active rows use the full width, so filenames are not clipped 9 cells short.
     const changesViewportWidth = Math.max(
@@ -884,26 +906,26 @@ function $buildRootView(
     );
     const changesContentWidth = gitAvailable ? gitChangesContentWidth(gitChangeRowsNow()) : 0;
     if (
-      workspace.gitPanel.changesViewportWidth.value !== changesViewportWidth ||
-      workspace.gitPanel.changesContentWidth.value !== changesContentWidth
+      workspaceSet.active.gitPanel.changesViewportWidth.value !== changesViewportWidth ||
+      workspaceSet.active.gitPanel.changesContentWidth.value !== changesContentWidth
     ) {
-      workspace.gitPanel.setChangesHorizontalExtent(changesContentWidth, changesViewportWidth);
+      workspaceSet.active.gitPanel.setChangesHorizontalExtent(changesContentWidth, changesViewportWidth);
       changed = true;
     }
     const logViewportWidth = Math.max(1, sidebarInnerWidth - scrollbarThicknessCells());
     const logContentWidth = gitAvailable ? gitLogContentWidth() : 0;
     if (
-      workspace.gitPanel.logViewportWidth.value !== logViewportWidth ||
-      workspace.gitPanel.logContentWidth.value !== logContentWidth
+      workspaceSet.active.gitPanel.logViewportWidth.value !== logViewportWidth ||
+      workspaceSet.active.gitPanel.logContentWidth.value !== logContentWidth
     ) {
-      workspace.gitPanel.setLogHorizontalExtent(logContentWidth, logViewportWidth);
+      workspaceSet.active.gitPanel.setLogHorizontalExtent(logContentWidth, logViewportWidth);
       changed = true;
     }
     return changed;
   }
 
   function syncScrollbars(): void {
-    const editor = workspace.editor;
+    const editor = workspaceSet.active.editor;
     const editorVisible = editor.hasDocument.value;
     const viewportHeight = editorViewportHeight();
     const viewportWidth = editorViewportWidth();
@@ -942,7 +964,7 @@ function $buildRootView(
 
     // File-tree scrollbar (files view): the whole sidebar body is the tree list. scrollSize 0 in git
     // view routes through the visibility rule so the bar hides when the tree isn't showing.
-    const filesVisible = workspace.sidebarView.value !== 'git';
+    const filesVisible = workspaceSet.active.sidebarView.value !== 'git';
     const sidebarInnerWidthFiles = sidebarWidth() - 2;
     const treeViewportHeight = Math.max(1, (sidebar.height as number) - 2);
     applyBarGeometry(
@@ -950,42 +972,42 @@ function $buildRootView(
       'vertical',
       { top: 0, left: 0, width: sidebarInnerWidthFiles, height: treeViewportHeight },
       {
-        scrollSize: filesVisible ? workspace.tree.rows.length : 0,
+        scrollSize: filesVisible ? workspaceSet.active.tree.rows.length : 0,
         viewportSize: treeViewportHeight,
-        scrollPosition: workspace.tree.scrollTop.value,
+        scrollPosition: workspaceSet.active.tree.scrollTop.value,
       },
     );
-    const treeViewportWidth = workspace.tree.viewportWidth.value;
+    const treeViewportWidth = workspaceSet.active.tree.viewportWidth.value;
     applyBarGeometry(
       treeHorizontalBar,
       'horizontal',
       { top: 0, left: 0, width: sidebarInnerWidthFiles, height: treeViewportHeight },
       {
-        scrollSize: filesVisible ? workspace.tree.contentWidth : 0,
+        scrollSize: filesVisible ? workspaceSet.active.tree.contentWidth : 0,
         viewportSize: treeViewportWidth,
-        scrollPosition: workspace.tree.scrollLeft.value,
+        scrollPosition: workspaceSet.active.tree.scrollLeft.value,
       },
     );
 
     // Git regions, in the sidebar's content box: branch row 0; changes rows 1..; divider;
     // log rows below — offsets RECOMPUTED from the rendered geometry each frame (splitRatio and
     // the changes count move them).
-    const gitVisible = workspace.sidebarView.value === 'git' && workspace.git.value !== null;
+    const gitVisible = workspaceSet.active.sidebarView.value === 'git' && workspaceSet.active.git.value !== null;
     const sidebarInnerWidth = sidebarWidth() - 2;
     const changesRegion = { top: 1, left: 0, width: sidebarInnerWidth, height: Math.max(1, gitPanelGeometry.changesRows) };
     applyBarGeometry(changesVerticalBar, 'vertical', changesRegion, {
       scrollSize: gitVisible ? gitChangeRowsNow().length : 0,
       viewportSize: gitPanelGeometry.changesRows,
-      scrollPosition: workspace.gitPanel.changesScrollTop.value,
+      scrollPosition: workspaceSet.active.gitPanel.changesScrollTop.value,
     });
-    const changesViewportWidth = workspace.gitPanel.changesViewportWidth.value;
+    const changesViewportWidth = workspaceSet.active.gitPanel.changesViewportWidth.value;
     applyBarGeometry(changesHorizontalBar, 'horizontal', changesRegion, {
-      scrollSize: gitVisible ? workspace.gitPanel.changesContentWidth.value : 0,
+      scrollSize: gitVisible ? workspaceSet.active.gitPanel.changesContentWidth.value : 0,
       viewportSize: changesViewportWidth,
-      scrollPosition: workspace.gitPanel.changesScrollLeft.value,
+      scrollPosition: workspaceSet.active.gitPanel.changesScrollLeft.value,
     });
     // Flat-row total: commit count PLUS the rows contributed by expanded commits (inline expansion).
-    const logFlatEnd = workspace.logFlatEnd();
+    const logFlatEnd = workspaceSet.active.logFlatEnd();
     const logRegion = {
       top: gitPanelGeometry.dividerRow, // content-relative first log row (screen divider + 1)
       left: 0,
@@ -998,16 +1020,16 @@ function $buildRootView(
       scrollSize: gitVisible
         ? Number.isFinite(logFlatEnd)
           ? logFlatEnd
-          : workspace.gitPanel.logScrollTop.value + gitPanelGeometry.logRows * 4
+          : workspaceSet.active.gitPanel.logScrollTop.value + gitPanelGeometry.logRows * 4
         : 0,
       viewportSize: gitPanelGeometry.logRows,
-      scrollPosition: workspace.gitPanel.logScrollTop.value,
+      scrollPosition: workspaceSet.active.gitPanel.logScrollTop.value,
     });
-    const logViewportWidth = workspace.gitPanel.logViewportWidth.value;
+    const logViewportWidth = workspaceSet.active.gitPanel.logViewportWidth.value;
     applyBarGeometry(logHorizontalBar, 'horizontal', logRegion, {
-      scrollSize: gitVisible ? workspace.gitPanel.logContentWidth.value : 0,
+      scrollSize: gitVisible ? workspaceSet.active.gitPanel.logContentWidth.value : 0,
       viewportSize: logViewportWidth,
-      scrollPosition: workspace.gitPanel.logScrollLeft.value,
+      scrollPosition: workspaceSet.active.gitPanel.logScrollLeft.value,
     });
 
     // Git changes↔log divider grab strip: over the divider GLYPH row (dividerRow is the first LOG row,
@@ -1026,9 +1048,9 @@ function $buildRootView(
     // invariant: Renderables hold no model state (ui.invariants.md)
     // invariant: Only the visible window is rendered (ui.invariants.md)
     const palette = readPalette();
-    const rows = workspace.tree.rows;
-    const selectedIndex = workspace.tree.selectedIndex.value;
-    const hoveredIndex = workspace.tree.hoveredIndex.value;
+    const rows = workspaceSet.active.tree.rows;
+    const selectedIndex = workspaceSet.active.tree.selectedIndex.value;
+    const hoveredIndex = workspaceSet.active.tree.hoveredIndex.value;
     const height = Math.max(1, (sidebar.height as number) - 2);
     const innerWidth = sidebarWidth() - 2;
     const viewportWidth = Math.max(1, innerWidth - scrollbarThicknessCells());
@@ -1038,13 +1060,13 @@ function $buildRootView(
     const chunks: TextChunk[] = [];
     visible.forEach((row, visibleIndex) => {
       const rowIndex = top + visibleIndex;
-      const selected = rowIndex === selectedIndex && workspace.focus.value === 'files';
+      const selected = rowIndex === selectedIndex && workspaceSet.active.focus.value === 'files';
       const hovered = rowIndex === hoveredIndex;
       const marker = selected ? '›' : ' ';
       const indent = '  '.repeat(row.depth);
       const icon = theme.icon(row.name, row.isDir, row.expanded);
       const completeLabel = `${marker}${indent}${icon} ${row.name}`;
-      let label = displayColumnWindow(completeLabel, workspace.tree.scrollLeft.value, viewportWidth);
+      let label = displayColumnWindow(completeLabel, workspaceSet.active.tree.scrollLeft.value, viewportWidth);
       label = padToDisplayWidth(label, viewportWidth);
       // Pad to the pane's inner width so the row highlight spans the full row (VS Code-style).
       label = padToDisplayWidth(label, innerWidth);
@@ -1068,7 +1090,7 @@ function $buildRootView(
   ].join('\n');
 
   // Gutter width in cells for the current document: "NN " (line number + space) + 1 marker cell.
-  const gutterWidth = () => String(workspace.editor.document.lineCount).length + 1 + 2;
+  const gutterWidth = () => String(workspaceSet.active.editor.document.lineCount).length + 1 + 2;
 
   // Wrap-mode view geometry of the last-rendered frame: the visual rows the window showed, written
   // by renderEditor and read by the caret block, applySelection, and the mouse hit-test — so all
@@ -1085,8 +1107,8 @@ function $buildRootView(
     const firstRow = wrapRowsWindow[0];
     const lastRow = wrapRowsWindow[wrapRowsWindow.length - 1];
     if (!firstRow || !lastRow) return 'before';
-    const lineText = workspace.editor.document.line(line);
-    const segments = EditorWrap.Class.wrapLine(lineText, workspace.editor.wrapWidth());
+    const lineText = workspaceSet.active.editor.document.line(line);
+    const segments = EditorWrap.Class.wrapLine(lineText, workspaceSet.active.editor.wrapWidth());
     const segmentIndex = EditorWrap.Class.segmentIndexForCursor(segments, column);
     if (line < firstRow.lineIndex || (line === firstRow.lineIndex && segmentIndex < firstRow.segmentIndex))
       return 'before';
@@ -1099,6 +1121,272 @@ function $buildRootView(
     const segment = segments[segmentIndex];
     return { rowIndex, column: EditorCoordinates.Class.displayColumn(lineText, column) - (segment?.startDisplayColumn ?? 0) };
   }
+
+  // Workspace/project tabs and editor/buffer tabs are separate layers backed by the SAME TabStrip
+  // capability. The workspace strip changes orientation; the buffer strip remains horizontal.
+  type WorkspaceTabBarSegment = {
+    kind: 'tab' | 'panBackward' | 'panForward' | 'add';
+    workspaceIndex: number;
+    primaryStart: number;
+    primaryEnd: number;
+    closePrimaryCoordinate?: number;
+    closeCrossAxisCoordinate?: number;
+  };
+  let workspaceTabBarSegments: WorkspaceTabBarSegment[] = [];
+  let workspaceTabBarHover: { kind: 'tab' | 'close' | 'panBackward' | 'panForward' | 'add'; workspaceIndex: number } | null = null;
+  let lastRevealedWorkspaceIndex = -1;
+  let workspaceTabBarMountedPosition: 'top' | 'left' = settings.workspaceTabPosition.value;
+
+  function synchronizeWorkspaceTabMount(): void {
+    const position = settings.workspaceTabPosition.value;
+    if (position === workspaceTabBarMountedPosition) return;
+    if (position === 'left') {
+      column.remove(workspaceTabBar);
+      mainRow.add(workspaceTabBar, 0);
+      workspaceTabBar.width = 22;
+      workspaceTabBar.height = '100%';
+    } else {
+      mainRow.remove(workspaceTabBar);
+      column.add(workspaceTabBar, 0);
+      workspaceTabBar.width = '100%';
+      workspaceTabBar.height = 1;
+    }
+    workspaceTabBarMountedPosition = position;
+  }
+
+  function renderWorkspaceTabBar(): StyledText {
+    const palette = readPalette();
+    const orientation = workspaceTabStrip.orientation.value;
+    const workspaceTabs = workspaceTabStrip.items;
+    workspaceTabBarSegments = [];
+    const chunks: TextChunk[] = [];
+    const activeWorkspaceIndex = workspaceTabStrip.activeIndex;
+
+    if (orientation === 'vertical') {
+      const barWidth = 22;
+      const barHeight = Math.max(4, Number(workspaceTabBar.height) || renderer.height - 1);
+      const visibleWorkspaceCount = Math.max(1, barHeight - 3);
+      const maximumScrollOffset = Math.max(0, workspaceTabs.length - visibleWorkspaceCount);
+      workspaceTabStrip.clampScrollOffset(maximumScrollOffset);
+      if (activeWorkspaceIndex >= 0 && activeWorkspaceIndex !== lastRevealedWorkspaceIndex) {
+        if (
+          activeWorkspaceIndex < workspaceTabStrip.scrollOffset.value ||
+          activeWorkspaceIndex >= workspaceTabStrip.scrollOffset.value + visibleWorkspaceCount
+        ) {
+          workspaceTabStrip.scrollOffset.value = Math.min(activeWorkspaceIndex, maximumScrollOffset);
+        }
+        lastRevealedWorkspaceIndex = activeWorkspaceIndex;
+      }
+      const startWorkspaceIndex = workspaceTabStrip.scrollOffset.value;
+      const endWorkspaceIndex = Math.min(
+        workspaceTabs.length,
+        startWorkspaceIndex + visibleWorkspaceCount,
+      );
+      let rowIndex = 0;
+      for (let workspaceIndex = startWorkspaceIndex; workspaceIndex < endWorkspaceIndex; workspaceIndex += 1) {
+        const workspaceTab = workspaceTabs[workspaceIndex]!;
+        const hovered = workspaceTabBarHover?.workspaceIndex === workspaceIndex;
+        const closeHovered = hovered && workspaceTabBarHover?.kind === 'close';
+        const rowBackground = workspaceTab.active ? palette.selection : hovered ? palette.cursorLine : null;
+        const labelWidth = barWidth - 5;
+        const label = workspaceTab.label.slice(0, labelWidth).padEnd(labelWidth, ' ');
+        const closeGlyph = workspaceTabs.length > 1 ? '✕' : ' ';
+        const rowText = ` ${workspaceTab.active ? '●' : ' '} ${label}${closeGlyph} `;
+        const styledRow = fg(closeHovered ? palette.error : workspaceTab.active ? palette.fg : palette.dim)(rowText);
+        chunks.push(rowBackground ? bg(rowBackground)(styledRow) : styledRow);
+        chunks.push(fg(palette.fg)('\n'));
+        workspaceTabBarSegments.push({
+          kind: 'tab',
+          workspaceIndex,
+          primaryStart: rowIndex,
+          primaryEnd: rowIndex + 1,
+          closeCrossAxisCoordinate: barWidth - 2,
+        });
+        rowIndex += 1;
+      }
+      while (rowIndex < visibleWorkspaceCount) {
+        chunks.push(fg(palette.fg)(`${' '.repeat(barWidth)}\n`));
+        rowIndex += 1;
+      }
+      const controlRows: Array<{ kind: 'panBackward' | 'panForward' | 'add'; label: string }> = [
+        { kind: 'panBackward', label: ' ↑ Previous tabs' },
+        { kind: 'panForward', label: ' ↓ More tabs' },
+        { kind: 'add', label: ' + Add project' },
+      ];
+      controlRows.forEach((control, controlIndex) => {
+        const hovered = workspaceTabBarHover?.kind === control.kind;
+        const enabled =
+          control.kind === 'add' ||
+          (control.kind === 'panBackward'
+            ? workspaceTabStrip.scrollOffset.value > 0
+            : workspaceTabStrip.scrollOffset.value < maximumScrollOffset);
+        const text = control.label.padEnd(barWidth, ' ').slice(0, barWidth);
+        const styled = fg(enabled ? palette.accent : palette.border)(text);
+        chunks.push(hovered ? bg(palette.cursorLine)(styled) : styled);
+        if (controlIndex < controlRows.length - 1) chunks.push(fg(palette.fg)('\n'));
+        workspaceTabBarSegments.push({
+          kind: control.kind,
+          workspaceIndex: -1,
+          primaryStart: visibleWorkspaceCount + controlIndex,
+          primaryEnd: visibleWorkspaceCount + controlIndex + 1,
+        });
+      });
+      return new StyledText(chunks);
+    }
+
+    const barWidth = Math.max(1, Number(workspaceTabBar.width) || renderer.width);
+    const controlsText = ' ‹  ›  + ';
+    const controlsWidth = EditorCoordinates.Class.lineWidth(controlsText);
+    const availableTabsWidth = Math.max(1, barWidth - controlsWidth);
+    const measuredWorkspaceTabs = workspaceTabs.map((workspaceTab) => ({
+      workspaceTab,
+      width: Math.min(availableTabsWidth, EditorCoordinates.Class.lineWidth(workspaceTab.label) + 6),
+    }));
+    const maximumScrollOffset = Math.max(0, measuredWorkspaceTabs.length - 1);
+    workspaceTabStrip.clampScrollOffset(maximumScrollOffset);
+    let startWorkspaceIndex = workspaceTabStrip.scrollOffset.value;
+    const visibleEndFrom = (startIndex: number): number => {
+      let usedWidth = 0;
+      let endIndex = startIndex;
+      for (let workspaceIndex = startIndex; workspaceIndex < measuredWorkspaceTabs.length; workspaceIndex += 1) {
+        const measuredWorkspaceTab = measuredWorkspaceTabs[workspaceIndex]!;
+        if (usedWidth + measuredWorkspaceTab.width > availableTabsWidth) break;
+        usedWidth += measuredWorkspaceTab.width;
+        endIndex = workspaceIndex + 1;
+      }
+      return Math.max(endIndex, startIndex + 1);
+    };
+    if (activeWorkspaceIndex >= 0 && activeWorkspaceIndex !== lastRevealedWorkspaceIndex) {
+      if (activeWorkspaceIndex < startWorkspaceIndex || activeWorkspaceIndex >= visibleEndFrom(startWorkspaceIndex)) {
+        workspaceTabStrip.scrollOffset.value = activeWorkspaceIndex;
+        startWorkspaceIndex = activeWorkspaceIndex;
+      }
+      lastRevealedWorkspaceIndex = activeWorkspaceIndex;
+    }
+    let columnIndex = 0;
+    const endWorkspaceIndex = visibleEndFrom(startWorkspaceIndex);
+    for (let workspaceIndex = startWorkspaceIndex; workspaceIndex < endWorkspaceIndex; workspaceIndex += 1) {
+      const measuredWorkspaceTab = measuredWorkspaceTabs[workspaceIndex]!;
+      const workspaceTab = measuredWorkspaceTab.workspaceTab;
+      const hovered = workspaceTabBarHover?.workspaceIndex === workspaceIndex;
+      const closeHovered = hovered && workspaceTabBarHover?.kind === 'close';
+      const rowBackground = workspaceTab.active ? palette.selection : hovered ? palette.cursorLine : null;
+      const maximumLabelWidth = Math.max(1, measuredWorkspaceTab.width - 6);
+      const label = workspaceTab.label.slice(0, maximumLabelWidth).padEnd(maximumLabelWidth, ' ');
+      const tabText = ` ${workspaceTab.active ? '●' : ' '} ${label} `;
+      const styledTab = fg(workspaceTab.active ? palette.fg : palette.dim)(tabText);
+      chunks.push(rowBackground ? bg(rowBackground)(styledTab) : styledTab);
+      const closePrimaryCoordinate = columnIndex + EditorCoordinates.Class.lineWidth(tabText);
+      const closeGlyph = workspaceTabs.length > 1 ? '✕' : ' ';
+      chunks.push(
+        rowBackground
+          ? bg(rowBackground)(fg(closeHovered ? palette.error : palette.dim)(closeGlyph))
+          : fg(closeHovered ? palette.error : palette.dim)(closeGlyph),
+      );
+      chunks.push(rowBackground ? bg(rowBackground)(fg(palette.dim)(' ')) : fg(palette.dim)(' '));
+      workspaceTabBarSegments.push({
+        kind: 'tab',
+        workspaceIndex,
+        primaryStart: columnIndex,
+        primaryEnd: columnIndex + measuredWorkspaceTab.width,
+        closePrimaryCoordinate,
+      });
+      columnIndex += measuredWorkspaceTab.width;
+    }
+    while (columnIndex < availableTabsWidth) {
+      chunks.push(fg(palette.fg)(' '));
+      columnIndex += 1;
+    }
+    const controls: Array<{ kind: 'panBackward' | 'panForward' | 'add'; text: string }> = [
+      { kind: 'panBackward', text: ' ‹ ' },
+      { kind: 'panForward', text: ' › ' },
+      { kind: 'add', text: ' + ' },
+    ];
+    controls.forEach((control) => {
+      const startColumn = columnIndex;
+      const hovered = workspaceTabBarHover?.kind === control.kind;
+      const styled = fg(control.kind === 'add' ? palette.accent : palette.fg)(control.text);
+      chunks.push(hovered ? bg(palette.cursorLine)(styled) : styled);
+      columnIndex += EditorCoordinates.Class.lineWidth(control.text);
+      workspaceTabBarSegments.push({
+        kind: control.kind,
+        workspaceIndex: -1,
+        primaryStart: startColumn,
+        primaryEnd: columnIndex,
+      });
+    });
+    return new StyledText(chunks);
+  }
+
+  function workspaceTabBarSegmentAt(primaryCoordinate: number): WorkspaceTabBarSegment | null {
+    return workspaceTabBarSegments.find(
+      (segment) => primaryCoordinate >= segment.primaryStart && primaryCoordinate < segment.primaryEnd,
+    ) ?? null;
+  }
+
+  workspaceTabBar.onMouseDown = (event) => {
+    tooltip.clear();
+    const vertical = workspaceTabStrip.orientation.value === 'vertical';
+    const primaryCoordinate = vertical ? event.y - Number(workspaceTabBar.y) : event.x - Number(workspaceTabBar.x);
+    const crossAxisCoordinate = vertical ? event.x - Number(workspaceTabBar.x) : event.y - Number(workspaceTabBar.y);
+    const segment = workspaceTabBarSegmentAt(primaryCoordinate);
+    if (!segment) return;
+    if (segment.kind === 'tab') {
+      const closeHit = vertical
+        ? crossAxisCoordinate === segment.closeCrossAxisCoordinate
+        : primaryCoordinate === segment.closePrimaryCoordinate;
+      if (closeHit && workspaceSet.count > 1) workspaceSet.close(segment.workspaceIndex);
+      else workspaceSet.activate(segment.workspaceIndex);
+    } else if (segment.kind === 'panBackward') {
+      workspaceTabStrip.pan(-1);
+    } else if (segment.kind === 'panForward') {
+      workspaceTabStrip.pan(1);
+    } else {
+      quickOpen.showWorkspacePath();
+    }
+    renderer.requestRender();
+  };
+  workspaceTabBar.onMouseMove = (event) => {
+    const vertical = workspaceTabStrip.orientation.value === 'vertical';
+    const primaryCoordinate = vertical ? event.y - Number(workspaceTabBar.y) : event.x - Number(workspaceTabBar.x);
+    const crossAxisCoordinate = vertical ? event.x - Number(workspaceTabBar.x) : event.y - Number(workspaceTabBar.y);
+    const segment = workspaceTabBarSegmentAt(primaryCoordinate);
+    let nextHover: typeof workspaceTabBarHover = null;
+    if (segment?.kind === 'tab') {
+      const closeHit = vertical
+        ? crossAxisCoordinate === segment.closeCrossAxisCoordinate
+        : primaryCoordinate === segment.closePrimaryCoordinate;
+      nextHover = { kind: closeHit ? 'close' : 'tab', workspaceIndex: segment.workspaceIndex };
+      const workspaceTab = workspaceSet.tabs()[segment.workspaceIndex];
+      tooltip.point(
+        closeHit
+          ? 'Close project (Ctrl+Shift+W)'
+          : `Switch project: ${workspaceTab?.name ?? ''} (Ctrl+Shift+PageUp/PageDown)`,
+        event.x,
+        event.y,
+      );
+    } else if (segment) {
+      nextHover = { kind: segment.kind, workspaceIndex: -1 };
+      tooltip.point(
+        segment.kind === 'add'
+          ? 'Open project folder (Ctrl+Shift+O)'
+          : 'Pan project tabs without switching',
+        event.x,
+        event.y,
+      );
+    } else {
+      tooltip.clear();
+    }
+    if (JSON.stringify(nextHover) !== JSON.stringify(workspaceTabBarHover)) {
+      workspaceTabBarHover = nextHover;
+      renderer.requestRender();
+    }
+  };
+  workspaceTabBar.onMouseOut = () => {
+    workspaceTabBarHover = null;
+    tooltip.clear();
+    renderer.requestRender();
+  };
 
   // The editor tab bar. ONE geometry source: a layout pass produces positioned SEGMENTS that BOTH the
   // renderer and the click/hover hit-test consume — so a drawn cell and its hit-rect can never
@@ -1115,12 +1403,11 @@ function $buildRootView(
   // The strip's VIEWPORT PAN offset (first visible tab), INDEPENDENT of the active tab — the overflow
   // arrows drive this and never change which buffer is active (VS Code's ‹ › pan the strip only).
   // Changing the active tab (click / Ctrl+PageUp-Down) auto-reveals it, but panning does not snap back.
-  let tabStripScrollOffset = 0;
   let lastRevealedActiveIndex = -1;
 
   function renderTabBar(): StyledText {
     const palette = readPalette();
-    const tabs = workspace.buffers.tabs();
+    const tabs = bufferTabStrip.items;
     tabBarSegments = [];
     if (tabs.length === 0) return new StyledText([fg(palette.dim)('  no open files')]);
     const barWidth = Math.max(1, tabBar.width as number);
@@ -1128,7 +1415,7 @@ function $buildRootView(
     // Each tab lays out as ` name <dirty> ✕ ` — the ✕ has a space BEFORE and AFTER so it is never
     // flush against the tab edge, and the padding is identical regardless of label length.
     const measured = tabs.map((tab) => {
-      const name = Files.Class.basename(tab.path);
+      const name = tab.label;
       const labelWidth = 1 + EditorCoordinates.Class.lineWidth(name) + 1 + 1 + 1; // ' ' + name + ' ' + dirtyGlyph + ' '
       return { tab, name, labelWidth, width: labelWidth + 2 }; // + '✕' + trailing ' '
     });
@@ -1171,14 +1458,14 @@ function $buildRootView(
     }
     // Clamp the user's pan; then reveal the active tab ONLY when it actually changed (click / cycle) —
     // panning with the arrows leaves the active tab where it is, even if it scrolls out of view.
-    tabStripScrollOffset = Math.max(0, Math.min(tabStripScrollOffset, maxScrollOffset));
+    bufferTabStrip.clampScrollOffset(maxScrollOffset);
     if (activeIndex >= 0 && activeIndex !== lastRevealedActiveIndex) {
-      if (activeIndex < tabStripScrollOffset || activeIndex >= windowEndFrom(tabStripScrollOffset)) {
-        tabStripScrollOffset = Math.min(activeIndex, maxScrollOffset);
+      if (activeIndex < bufferTabStrip.scrollOffset.value || activeIndex >= windowEndFrom(bufferTabStrip.scrollOffset.value)) {
+        bufferTabStrip.scrollOffset.value = Math.min(activeIndex, maxScrollOffset);
       }
       lastRevealedActiveIndex = activeIndex;
     }
-    const startIndex = overflow ? tabStripScrollOffset : 0;
+    const startIndex = overflow ? bufferTabStrip.scrollOffset.value : 0;
 
     const chunks: TextChunk[] = [];
     let column = 0;
@@ -1263,20 +1550,20 @@ function $buildRootView(
   // The arrows PAN the strip viewport only — they never change the active buffer (the render clamps
   // the offset, so panning past an end is a no-op and the arrow reads as disabled there).
   function scrollTabsLeft(): void {
-    if (tabStripScrollOffset > 0) {
-      tabStripScrollOffset -= 1;
+    if (bufferTabStrip.scrollOffset.value > 0) {
+      bufferTabStrip.pan(-1);
       renderer.requestRender();
     }
   }
   function scrollTabsRight(): void {
-    tabStripScrollOffset += 1; // clamped to maxScrollOffset in renderTabBar
+    bufferTabStrip.pan(1); // clamped to maxScrollOffset in renderTabBar
     renderer.requestRender();
   }
 
   // Clicking the count badge opens a dropdown of ALL open buffers (VS Code's overflow menu) — reusing
   // the ContextMenu machinery (modal, keyboard-navigable, Esc to close). Selecting a row jumps to it.
   function openTabDropdown(anchorColumn: number): void {
-    const items = workspace.buffers.tabs().map((tab, index) => ({
+    const items = workspaceSet.active.buffers.tabs().map((tab, index) => ({
       id: String(index),
       label: `${tab.active ? '●' : ' '} ${Files.Class.basename(tab.path)}${tab.dirty ? '  ✕' : ''}`,
       enabled: true,
@@ -1286,7 +1573,7 @@ function $buildRootView(
       (tabBar.x as number) + anchorColumn,
       (tabBar.y as number) + 1,
       { width: renderer.width, height: renderer.height },
-      (itemId) => workspace.activateTab(Number(itemId)),
+      (itemId) => workspaceSet.active.activateTab(Number(itemId)),
     );
   }
 
@@ -1299,8 +1586,8 @@ function $buildRootView(
       if (localColumn === segment.closeColumn) {
         tabBarClosePressed = segment.index; // show the pressed ✕ before the close/confirm
         renderer.requestRender();
-        workspace.requestCloseTab(segment.index);
-      } else workspace.activateTab(segment.index);
+        workspaceSet.active.requestCloseTab(segment.index);
+      } else workspaceSet.active.activateTab(segment.index);
     } else if (segment.kind === 'badge') {
       openTabDropdown(segment.start);
     } else {
@@ -1344,8 +1631,8 @@ function $buildRootView(
   // marker) and the code (syntax colors only, NO gutter). Only the visible lines are tokenized
   // (flyweight). Returns null for the empty state.
   function renderEditor(): { gutter: StyledText; code: StyledText } | null {
-    if (workspace.showingDiff.value) return null;
-    const editor = workspace.editor;
+    if (workspaceSet.active.showingDiff.value) return null;
+    const editor = workspaceSet.active.editor;
     if (!editor.hasDocument.value) return null;
     const palette = readPalette();
     const language = LanguageRegistry.Class.forPath(editor.document.path);
@@ -1354,8 +1641,8 @@ function $buildRootView(
     const visibleLines = editor.document.slice(top, height);
     const lineNumberWidth = String(editor.document.lineCount).length + 1;
     const currentLineIndex = editor.cursor.line.value;
-    const focused = workspace.focus.value === 'editor';
-    const gutterDiffByLine = workspace.gutterDiffByLine.value;
+    const focused = workspaceSet.active.focus.value === 'editor';
+    const gutterDiffByLine = workspaceSet.active.gutterDiffByLine.value;
     const gutterChunks: TextChunk[] = [];
     const codeChunks: TextChunk[] = [];
     // invariant: The editor gutter reflects HEAD changes (src/modules/diff/diff.invariants.md)
@@ -1447,7 +1734,7 @@ function $buildRootView(
   // code-local coords (x = display column, y = visible-line index). Clamps to the visible window.
   // invariant: The selected range renders with a background (ui.invariants.md)
   function applySelection(): void {
-    const editor = workspace.editor;
+    const editor = workspaceSet.active.editor;
     const selection = editor.hasDocument.value ? editor.cursor.selectionRange() : null;
     const top = editor.viewport.scrollTop.value;
     const viewportHeight = editorViewportHeight();
@@ -1536,9 +1823,9 @@ function $buildRootView(
       chunks.push(chunk);
       if (options.newline !== false) chunks.push(fg(palette.fg)('\n'));
     };
-    const git = workspace.git.value;
-    const gitPanel = workspace.gitPanel;
-    const active = workspace.focus.value === 'git';
+    const git = workspaceSet.active.git.value;
+    const gitPanel = workspaceSet.active.gitPanel;
+    const active = workspaceSet.active.focus.value === 'git';
     if (!git) return new StyledText([fg(palette.dim)('  no repository')]);
 
     const bodyHeight = Math.max(1, (sidebar.height as number) - 2);
@@ -1557,7 +1844,7 @@ function $buildRootView(
 
     // Changes region (top): headers + glyphed file rows from the SHARED row model, windowed.
     const changeRows = GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
-    const topHeight = Math.max(2, Math.floor(bodyHeight * workspace.gitSplitRatio));
+    const topHeight = Math.max(2, Math.floor(bodyHeight * workspaceSet.active.gitSplitRatio));
     const changesVisible = topHeight - 1;
     const changesTop = Math.min(
       gitPanel.changesScrollTop.value,
@@ -1632,10 +1919,10 @@ function $buildRootView(
     // commits' records (and the bounded expanded set) are consulted.
     // invariant: Commit expansion is lazy and windowed (src/modules/git/git.invariants.md)
     const logHeight = Math.max(1, bodyHeight - topHeight - 1);
-    const commitLog = workspace.commitLog.value;
+    const commitLog = workspaceSet.active.commitLog.value;
     if (commitLog) {
       const flatTop = gitPanel.logScrollTop.value;
-      const expandedEntries = workspace.commitExpansion.value?.entries.value ?? [];
+      const expandedEntries = workspaceSet.active.commitExpansion.value?.entries.value ?? [];
       // O(window): at most logHeight commit records cover the flat window (expansion only
       // DECREASES how many commits fit on screen).
       const firstCommitIndex = GitLogRows.Class.commitIndexAtFlatRow(expandedEntries, flatTop);
@@ -1690,15 +1977,15 @@ function $buildRootView(
   }
 
   function renderStatus(): string {
-    const editor = workspace.editor;
-    const parts: string[] = [` ${workspace.name.value || '—'}`];
+    const editor = workspaceSet.active.editor;
+    const parts: string[] = [` ${workspaceSet.active.name.value || '—'}`];
     if (editor.hasDocument.value) {
       parts.push(editor.title);
       parts.push(`Ln ${editor.cursor.line.value + 1}, Col ${editor.cursor.col.value + 1}`);
       parts.push(`${editor.document.lineCount} lines`);
     }
-    parts.push(workspace.focus.value === 'files' ? '[Files]' : '[Editor]');
-    if (workspace.focus.value === 'git')
+    parts.push(workspaceSet.active.focus.value === 'files' ? '[Files]' : '[Editor]');
+    if (workspaceSet.active.focus.value === 'git')
       parts.push('checkbox/Space stage · row/o open · d discard');
     if (app.copyNotice.value) parts.push(app.copyNotice.value);
     parts.push(
@@ -1711,14 +1998,14 @@ function $buildRootView(
   // showingDiff overlay, but the DiffView renderable replaces the unified-text diffEditor). DiffView has
   // no re-open, so it is reconstructed whenever the diff request's token changes; disposed when cleared.
   let activeDiffView: DiffView.Instance | null = null;
-  let shownDiffToken: number | null = null;
+  let shownDiffIdentifier = '';
   let diffContainerMounted = false;
   let lastDiffLaidHeight = -1;
   function syncDiffView(): void {
-    const request = workspace.diffRequest.value;
-    const token = request?.token ?? null;
-    if (token !== shownDiffToken) {
-      shownDiffToken = token;
+    const request = workspaceSet.active.diffRequest.value;
+    const diffIdentifier = `${workspaceSet.active.root}:${request?.token ?? 'none'}`;
+    if (diffIdentifier !== shownDiffIdentifier) {
+      shownDiffIdentifier = diffIdentifier;
       lastDiffLaidHeight = -1; // the frame loop re-renders once the new instance has a laid-out height
       if (activeDiffView) {
         activeDiffView.dispose();
@@ -1734,8 +2021,8 @@ function $buildRootView(
           onOpenFull: () => {
             // Git diff requests carry workspace-relative paths. Resolve through the existing
             // confinement seam before promoting the working side to a real editable tab.
-            const currentWorkingPath = Files.Class.confineToRoot(workspace.root, request.currentVersionPath);
-            if (currentWorkingPath) workspace.openFileInTab(currentWorkingPath);
+            const currentWorkingPath = Files.Class.confineToRoot(workspaceSet.active.root, request.currentVersionPath);
+            if (currentWorkingPath) workspaceSet.active.openFileInTab(currentWorkingPath);
           },
           onNextChange: () => renderer.requestRender(),
           onPrevChange: () => renderer.requestRender(),
@@ -1743,7 +2030,7 @@ function $buildRootView(
         activeDiffView.attachSettings(settings); // live scroll physics, same as the editor
       }
     }
-    const diffActive = activeDiffView !== null && workspace.showingDiff.value;
+    const diffActive = activeDiffView !== null && workspaceSet.active.showingDiff.value;
     // SWAP editorArea <-> diffContainer by add/remove (not runtime flex toggling — OpenTUI doesn't
     // re-lay-out on a runtime flexGrow/height change). editorColumn = [tabBar, <one of them>]; the second
     // slot swaps, so whichever is mounted gets flexGrow:1 and the full area below the tab bar.
@@ -1764,22 +2051,25 @@ function $buildRootView(
 
   function update(): void {
     const palette = readPalette();
+    synchronizeWorkspaceTabMount();
     syncDiffView();
     column.backgroundColor = palette.bg;
-    const gitView = workspace.sidebarView.value === 'git';
+    const gitView = workspaceSet.active.sidebarView.value === 'git';
     sidebar.width = sidebarWidth(); // live width from the draggable splitter (persisted to settings)
     sidebar.backgroundColor = palette.panel;
-    sidebar.borderColor = workspace.focus.value === 'files' || gitView ? palette.borderActive : palette.border;
+    sidebar.borderColor = workspaceSet.active.focus.value === 'files' || gitView ? palette.borderActive : palette.border;
     // Divider: brighten while hovered or dragging so it reads as a grab handle.
     sidebarDivider.backgroundColor =
       sidebarSplitter.dragging.value || sidebarDividerHover ? palette.accent : palette.border;
-    sidebar.titleColor = workspace.focus.value === 'files' || gitView ? palette.accent : palette.dim;
+    sidebar.titleColor = workspaceSet.active.focus.value === 'files' || gitView ? palette.accent : palette.dim;
     sidebar.title = gitView ? 'Git' : 'Files';
     editorArea.backgroundColor = palette.bg;
-    editorArea.borderColor = workspace.focus.value === 'editor' ? palette.borderActive : palette.border;
-    editorArea.title = workspace.editor.hasDocument.value ? workspace.editor.title : 'Editor';
-    editorArea.titleColor = workspace.focus.value === 'editor' ? palette.accent : palette.dim;
+    editorArea.borderColor = workspaceSet.active.focus.value === 'editor' ? palette.borderActive : palette.border;
+    editorArea.title = workspaceSet.active.editor.hasDocument.value ? workspaceSet.active.editor.title : 'Editor';
+    editorArea.titleColor = workspaceSet.active.focus.value === 'editor' ? palette.accent : palette.dim;
     tabBar.content = renderTabBar();
+    workspaceTabBar.content = renderWorkspaceTabBar();
+    workspaceTabBar.fg = palette.fg;
     statusBar.backgroundColor = palette.statusBg;
 
     sidebarBody.content = gitView ? renderGitPanel() : renderTree();
@@ -1843,23 +2133,29 @@ function $buildRootView(
     // Quick-open (Ctrl+P) overlay.
     quickOpenBox.visible = quickOpen.open.value;
     if (quickOpen.open.value) {
+      const openingWorkspace = quickOpen.mode.value === 'workspacePath';
+      quickOpenBox.title = openingWorkspace ? 'Open Project Folder' : 'Go to File';
       quickOpenBox.borderColor = palette.borderActive;
       quickOpenBox.titleColor = palette.accent;
       quickOpenBox.backgroundColor = palette.panel;
-      quickOpenInput.content = `${theme.actionIcons.open} ${quickOpen.query.value}▏`;
+      quickOpenInput.content = `${openingWorkspace ? '+' : theme.actionIcons.open} ${quickOpen.query.value}▏`;
       quickOpenInput.fg = palette.fg;
       const matches = quickOpen.matches.value.slice(0, 14);
       const selectedIndex = quickOpen.selectedIndex.value;
-      quickOpenList.content = matches.length
-        ? matches.map((match, index) => `${index === selectedIndex ? '›' : ' '} ${match.path}`).join('\n')
-        : quickOpen.query.value
-          ? '  (no matching files)'
-          : '  (type to filter project files)';
+      quickOpenList.content = openingWorkspace
+        ? quickOpen.errorMessage.value
+          ? `  ${quickOpen.errorMessage.value}\n  Enter opens · Esc cancels`
+          : '  Type an existing folder path\n  Enter opens · Esc cancels'
+        : matches.length
+          ? matches.map((match, index) => `${index === selectedIndex ? '›' : ' '} ${match.path}`).join('\n')
+          : quickOpen.query.value
+            ? '  (no matching files)'
+            : '  (type to filter project files)';
       quickOpenList.fg = palette.dim;
     }
 
-    const pendingDiscard = workspace.gitPanel.confirmDiscard.value;
-    const pendingCloseTabIndex = workspace.pendingCloseTabIndex.value;
+    const pendingDiscard = workspaceSet.active.gitPanel.confirmDiscard.value;
+    const pendingCloseTabIndex = workspaceSet.active.pendingCloseTabIndex.value;
     confirmBox.visible = pendingDiscard !== null || pendingCloseTabIndex >= 0;
     if (pendingDiscard) {
       confirmBox.borderColor = palette.deleted;
@@ -1872,7 +2168,7 @@ function $buildRootView(
       confirmText.fg = palette.fg;
     } else if (pendingCloseTabIndex >= 0) {
       // Same modal, for closing a tab with unsaved edits.
-      const tabPath = workspace.buffers.tabs()[pendingCloseTabIndex]?.path ?? '';
+      const tabPath = workspaceSet.active.buffers.tabs()[pendingCloseTabIndex]?.path ?? '';
       confirmBox.borderColor = palette.warning;
       confirmBox.titleColor = palette.warning;
       confirmBox.backgroundColor = palette.panel;
@@ -1957,7 +2253,7 @@ function $buildRootView(
     // Native terminal caret at the cursor's DISPLAY column (tab/wide aware). Shown only when the
     // editor is focused, has a document, no palette overlay, and the cursor line is on screen.
     // invariant: The caret renders at the cursor display column (ui.invariants.md)
-    const editor = workspace.editor;
+    const editor = workspaceSet.active.editor;
     const scrollTop = editor.viewport.scrollTop.value;
     const viewportHeight = editorViewportHeight();
     const cursorLine = editor.cursor.line.value;
@@ -1968,7 +2264,7 @@ function $buildRootView(
       // tmux's own #{cursor_x},#{cursor_y}.
       // invariant: The caret renders at the cursor display column (ui.invariants.md)
       const caretPosition =
-        editor.hasDocument.value && workspace.focus.value === 'editor' && !open
+        editor.hasDocument.value && workspaceSet.active.focus.value === 'editor' && !open
           ? wrapVisualPosition(cursorLine, editor.cursor.col.value)
           : null;
       if (caretPosition && typeof caretPosition === 'object') {
@@ -1985,7 +2281,7 @@ function $buildRootView(
         editor.viewport.scrollLeft.value &&
       EditorCoordinates.Class.displayColumn(editor.document.line(Math.min(cursorLine, editor.document.lineCount - 1)), editor.cursor.col.value) <
         editor.viewport.scrollLeft.value + editorViewportWidth();
-    if (editor.hasDocument.value && workspace.focus.value === 'editor' && !open && cursorLine >= scrollTop && cursorLine < scrollTop + viewportHeight && caretVisibleHorizontally) {
+    if (editor.hasDocument.value && workspaceSet.active.focus.value === 'editor' && !open && cursorLine >= scrollTop && cursorLine < scrollTop + viewportHeight && caretVisibleHorizontally) {
       const cursorDisplayColumn = EditorCoordinates.Class.displayColumn(editor.document.line(cursorLine), editor.cursor.col.value);
       // Anchor the caret to the code renderable's ACTUAL laid-out screen cell (codeBody.x/y from
       // yoga), not hand-derived layout constants — the constants drifted from the real layout (the
@@ -2013,19 +2309,19 @@ function $buildRootView(
       direction === 'right' ||
       scrollModifierHeld(event, settings.horizontalScrollModifier.value);
     const backward = direction === 'left' || direction === 'up';
-    if (workspace.sidebarView.value === 'git') {
+    if (workspaceSet.active.sidebarView.value === 'git') {
       // Route by pointer position: wheel over the changes region scrolls it; over the log, the
       // momentum glide (same gesture, per-region window).
       const row = event.y - sidebar.y;
       if (row < gitPanelGeometry.dividerRow) {
-        if (horizontal) workspace.impulseGitChangesHorizontalScroll((backward ? -1 : 1) * step);
-        else workspace.impulseGitChangesScroll((direction === 'up' ? -1 : 1) * step);
+        if (horizontal) workspaceSet.active.impulseGitChangesHorizontalScroll((backward ? -1 : 1) * step);
+        else workspaceSet.active.impulseGitChangesScroll((direction === 'up' ? -1 : 1) * step);
       } else {
-        if (horizontal) workspace.impulseGitLogHorizontalScroll((backward ? -1 : 1) * step);
-        else workspace.impulseGitLog((direction === 'up' ? -1 : 1) * step);
+        if (horizontal) workspaceSet.active.impulseGitLogHorizontalScroll((backward ? -1 : 1) * step);
+        else workspaceSet.active.impulseGitLog((direction === 'up' ? -1 : 1) * step);
       }
-    } else if (horizontal) workspace.impulseTreeHorizontalScroll((backward ? -1 : 1) * step);
-    else workspace.impulseTreeScroll((direction === 'up' ? -1 : 1) * step);
+    } else if (horizontal) workspaceSet.active.impulseTreeHorizontalScroll((backward ? -1 : 1) * step);
+    else workspaceSet.active.impulseTreeScroll((direction === 'up' ? -1 : 1) * step);
   };
   // Vertical scroll of the editor window. Wrap mode: scrollTop stays a LOGICAL line index, but
   // tall (wrapped) lines mean the logical clamp `lineCount - height` could strand tail rows below
@@ -2059,7 +2355,7 @@ function $buildRootView(
     return notch * fast;
   };
   const scrollEditorVertically = (delta: number): void => {
-    const editor = workspace.editor;
+    const editor = workspaceSet.active.editor;
     const editorViewport = editor.viewport;
     if (editor.wordWrap.value) {
       // scrollTop is a VISUAL-row offset; clamp to the wrapped extent so the last visual row is reachable.
@@ -2070,7 +2366,7 @@ function $buildRootView(
     }
   };
   editorArea.onMouseScroll = (event) => {
-    if (!workspace.editor.hasDocument.value) return;
+    if (!workspaceSet.active.editor.hasDocument.value) return;
     // Horizontal scroll arrives by SEVERAL terminal-dependent encodings; route them ALL to columns:
     //   - native horizontal wheel / tilt: SGR 66/67 -> direction left/right (trackpad two-finger swipe;
     //     Option+wheel on the user's terminal arrives as 74/75 = 66/67 + Meta, also direction left/right);
@@ -2079,12 +2375,12 @@ function $buildRootView(
     // Delivery of any given modifier is terminal-dependent — supporting all of them is the robust fix.
     const direction = event.scroll?.direction;
     const step = wheelStep(event);
-    if (workspace.editor.wordWrap.value) {
+    if (workspaceSet.active.editor.wordWrap.value) {
       // Wrap mode: ONE scroll axis (horizontal gestures route to the vertical window, scrollLeft inert),
       // fed through the SAME momentum engine as non-wrap so a wheel notch GLIDES then decays — scrollTop
       // is in visual rows, so the glide is smooth over wrapped rows (not jumpy by logical line).
       const backward = direction === 'left' || direction === 'up';
-      workspace.impulseEditorVerticalScroll((backward ? -1 : 1) * step);
+      workspaceSet.active.impulseEditorVerticalScroll((backward ? -1 : 1) * step);
     } else {
       // The horizontal modifier is configurable (settings.horizontalScrollModifier, default 'alt' = the
       // Option-wheel path that survives real terminals); native left/right direction is always horizontal.
@@ -2092,9 +2388,9 @@ function $buildRootView(
       const horizontal = direction === 'left' || direction === 'right' || modifierHorizontal;
       if (horizontal) {
         const backward = direction === 'left' || direction === 'up';
-        workspace.impulseEditorHorizontalScroll((backward ? -1 : 1) * step);
+        workspaceSet.active.impulseEditorHorizontalScroll((backward ? -1 : 1) * step);
       } else {
-        workspace.impulseEditorVerticalScroll((direction === 'up' ? -1 : 1) * step);
+        workspaceSet.active.impulseEditorVerticalScroll((direction === 'up' ? -1 : 1) * step);
       }
     }
   };
@@ -2104,8 +2400,8 @@ function $buildRootView(
   // and Ctrl+C copies exactly what is highlighted.
   // invariant: The selected range renders with a background (ui.invariants.md)
   const documentPositionAtCell = (cellX: number, cellY: number): { line: number; column: number } | null => {
-    if (!workspace.editor.hasDocument.value) return null;
-    if (workspace.editor.wordWrap.value) {
+    if (!workspaceSet.active.editor.hasDocument.value) return null;
+    if (workspaceSet.active.editor.wordWrap.value) {
       // Wrap mode: a viewport row is a VISUAL row — resolve it through the rendered window, then
       // hit-test the display column WITHIN that row's segment (clamped into the segment so a
       // click past a wrapped row's end lands on its last grapheme, not the next row's first).
@@ -2113,8 +2409,8 @@ function $buildRootView(
       const rowIndex = Math.max(0, Math.min(cellY - codeBody.y, wrapRowsWindow.length - 1));
       const row = wrapRowsWindow[rowIndex];
       if (!row) return null;
-      const lineText = workspace.editor.document.line(row.lineIndex);
-      const segments = EditorWrap.Class.wrapLine(lineText, workspace.editor.wrapWidth());
+      const lineText = workspaceSet.active.editor.document.line(row.lineIndex);
+      const segments = EditorWrap.Class.wrapLine(lineText, workspaceSet.active.editor.wrapWidth());
       const lastSegmentOfLine = row.segmentIndex === segments.length - 1;
       const hitColumn = EditorCoordinates.Class.graphemeAtDisplayColumn(
         lineText,
@@ -2131,13 +2427,13 @@ function $buildRootView(
     const line = Math.max(
       0,
       Math.min(
-        workspace.editor.viewport.scrollTop.value + (cellY - codeBody.y),
-        workspace.editor.document.lineCount - 1,
+        workspaceSet.active.editor.viewport.scrollTop.value + (cellY - codeBody.y),
+        workspaceSet.active.editor.document.lineCount - 1,
       ),
     );
     const column = EditorCoordinates.Class.graphemeAtDisplayColumn(
-      workspace.editor.document.line(line),
-      workspace.editor.viewport.scrollLeft.value + (cellX - codeBody.x),
+      workspaceSet.active.editor.document.line(line),
+      workspaceSet.active.editor.viewport.scrollLeft.value + (cellX - codeBody.x),
     );
     return { line, column };
   };
@@ -2152,31 +2448,31 @@ function $buildRootView(
       bottomRow: codeBody.y + Math.max(1, editorViewportHeight()) - 1,
     }),
     positionAtCell: documentPositionAtCell,
-    horizontalScrollPosition: () => workspace.editor.viewport.scrollLeft.value,
-    horizontalScrollingEnabled: () => !workspace.editor.wordWrap.value,
+    horizontalScrollPosition: () => workspaceSet.active.editor.viewport.scrollLeft.value,
+    horizontalScrollingEnabled: () => !workspaceSet.active.editor.wordWrap.value,
     beginSelection: (position) => {
-      workspace.focusEditor();
-      workspace.editor.placeCursor(position.line, position.column);
-      workspace.editor.cursor.setAnchorHere();
+      workspaceSet.active.focusEditor();
+      workspaceSet.active.editor.placeCursor(position.line, position.column);
+      workspaceSet.active.editor.cursor.setAnchorHere();
     },
     extendSelection: (position, pointerDisplayColumn) => {
       // Direct Cursor.set preserves the pointer's display-column goal while short lines clamp the
       // landing column; placeCursor would reveal/yank the viewport during a diagonal drag.
-      workspace.editor.cursor.set(position.line, position.column, pointerDisplayColumn);
+      workspaceSet.active.editor.cursor.set(position.line, position.column, pointerDisplayColumn);
     },
     finishSelection: () => {
-      if (!workspace.editor.cursor.hasSelection) workspace.editor.cursor.clearSelection();
+      if (!workspaceSet.active.editor.cursor.hasSelection) workspaceSet.active.editor.cursor.clearSelection();
     },
     scrollColumns: (columnDelta) => {
-      const topLineIndex = workspace.editor.viewport.scrollTop.value;
+      const topLineIndex = workspaceSet.active.editor.viewport.scrollTop.value;
       let widestVisibleLineWidth = 0;
-      for (const line of workspace.editor.document.slice(topLineIndex, editorViewportHeight())) {
+      for (const line of workspaceSet.active.editor.document.slice(topLineIndex, editorViewportHeight())) {
         widestVisibleLineWidth = Math.max(widestVisibleLineWidth, EditorCoordinates.Class.lineWidth(line));
       }
-      workspace.editor.viewport.scrollByColumns(columnDelta, widestVisibleLineWidth);
+      workspaceSet.active.editor.viewport.scrollByColumns(columnDelta, widestVisibleLineWidth);
     },
     scrollRows: scrollEditorVertically,
-    haltCompetingScroll: () => workspace.editor.viewport.haltScrollMomentum(),
+    haltCompetingScroll: () => workspaceSet.active.editor.viewport.haltScrollMomentum(),
   });
 
   codeBody.onMouseDown = (event) => {
@@ -2219,7 +2515,7 @@ function $buildRootView(
     return null;
   };
   const gitChangeRowsNow = () => {
-    const git = workspace.git.value;
+    const git = workspaceSet.active.git.value;
     return git ? GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value) : [];
   };
   // The git action-button hit zones (right-aligned ` o  d  ±` on a hovered/selected file row).
@@ -2239,12 +2535,12 @@ function $buildRootView(
   };
 
   sidebar.onMouseMove = (event) => {
-    if (workspace.sidebarView.value === 'git') {
+    if (workspaceSet.active.sidebarView.value === 'git') {
       const hit = gitRowAt(event.y);
       const rows = gitChangeRowsNow();
-      workspace.gitPanel.changesHovered.value =
+      workspaceSet.active.gitPanel.changesHovered.value =
         hit?.region === 'changes' && rows[hit.index]?.kind === 'file' ? hit.index : -1;
-      workspace.gitPanel.logHovered.value = hit?.region === 'log' ? hit.index : -1;
+      workspaceSet.active.gitPanel.logHovered.value = hit?.region === 'log' ? hit.index : -1;
       // Tooltip: arm the dwell while the pointer rests on an action button of a file row
       // (hovering the row is what makes the buttons visible); anything else disarms.
       const hoveredRow = hit?.region === 'changes' ? rows[hit.index] : undefined;
@@ -2267,13 +2563,13 @@ function $buildRootView(
     }
     tooltip.clear();
     const rowIndex = treeWindowTop() + (event.y - (sidebar.y + 1));
-    workspace.tree.hoveredIndex.value =
-      rowIndex >= 0 && rowIndex < workspace.tree.rows.length ? rowIndex : -1;
+    workspaceSet.active.tree.hoveredIndex.value =
+      rowIndex >= 0 && rowIndex < workspaceSet.active.tree.rows.length ? rowIndex : -1;
   };
   sidebar.onMouseOut = () => {
-    workspace.tree.hoveredIndex.value = -1;
-    workspace.gitPanel.changesHovered.value = -1;
-    workspace.gitPanel.logHovered.value = -1;
+    workspaceSet.active.tree.hoveredIndex.value = -1;
+    workspaceSet.active.gitPanel.changesHovered.value = -1;
+    workspaceSet.active.gitPanel.logHovered.value = -1;
     tooltip.clear();
   };
 
@@ -2281,7 +2577,7 @@ function $buildRootView(
   // selection; a selected row keeps the whole multi-selection) and open the context menu at the
   // pointer with the COLLECTIVE actions the selection's buckets support.
   const openChangesContextMenu = (rowIndex: number, row: FileRow, rows: ChangeRow[], pointerX: number, pointerY: number): void => {
-    const gitPanel = workspace.gitPanel;
+    const gitPanel = workspaceSet.active.gitPanel;
     if (!gitPanel.selectedPaths.value.has(row.path)) gitPanel.replaceSelected([row.path]);
     gitPanel.changesIndex.value = rowIndex;
     const selectedFileRows = rows.filter(
@@ -2300,10 +2596,10 @@ function $buildRootView(
       (candidate) => candidate.kind === 'file' && gitPanel.selectedPaths.value.has(candidate.path),
     );
     contextMenu.openAt(items, pointerX, pointerY, { width: renderer.width, height: renderer.height }, (itemId) => {
-      if (itemId === 'git.stageSelected') void workspace.stageSelected();
-      else if (itemId === 'git.unstageSelected') void workspace.unstageSelected();
-      else if (itemId === 'git.discardSelected') workspace.requestDiscardSelected(); // y/N confirm
-      else if (itemId === 'git.openDiff' && firstSelectedIndex >= 0) void workspace.openChangeAtRow(firstSelectedIndex);
+      if (itemId === 'git.stageSelected') void workspaceSet.active.stageSelected();
+      else if (itemId === 'git.unstageSelected') void workspaceSet.active.unstageSelected();
+      else if (itemId === 'git.discardSelected') workspaceSet.active.requestDiscardSelected(); // y/N confirm
+      else if (itemId === 'git.openDiff' && firstSelectedIndex >= 0) void workspaceSet.active.openChangeAtRow(firstSelectedIndex);
     });
   };
 
@@ -2317,66 +2613,66 @@ function $buildRootView(
       const row = rows[rowIndex];
       if (row?.kind === 'file') paths.push(row.path);
     }
-    workspace.gitPanel.replaceSelected(paths);
+    workspaceSet.active.gitPanel.replaceSelected(paths);
   };
 
   sidebar.onMouseDown = (event) => {
-    if (workspace.sidebarView.value === 'git') {
-      workspace.focusGit();
+    if (workspaceSet.active.sidebarView.value === 'git') {
+      workspaceSet.active.focusGit();
       const hit = gitRowAt(event.y);
       if (!hit) return;
       if (hit.region === 'changes') {
-        workspace.haltGitChangesScroll();
+        workspaceSet.active.haltGitChangesScroll();
         const rows = gitChangeRowsNow();
         const row = rows[hit.index];
         if (row?.kind !== 'file') return;
-        workspace.gitPanel.region.value = 'changes';
+        workspaceSet.active.gitPanel.region.value = 'changes';
         // Multi-select gestures come FIRST; plain left-click behavior below is unchanged.
         if (event.button === 2) {
           openChangesContextMenu(hit.index, row, rows, event.x, event.y); // right-click menu
           return;
         }
         if (event.modifiers.ctrl) {
-          workspace.gitPanel.toggleSelected(row.path); // toggle in/out of the selection; no menu
+          workspaceSet.active.gitPanel.toggleSelected(row.path); // toggle in/out of the selection; no menu
           return;
         }
         if (event.modifiers.shift) {
-          selectChangesRange(workspace.gitPanel.changesIndex.value, hit.index, rows); // range
+          selectChangesRange(workspaceSet.active.gitPanel.changesIndex.value, hit.index, rows); // range
           return;
         }
-        const wasCurrent = workspace.gitPanel.changesIndex.value === hit.index;
-        workspace.gitPanel.changesIndex.value = hit.index;
+        const wasCurrent = workspaceSet.active.gitPanel.changesIndex.value === hit.index;
+        workspaceSet.active.gitPanel.changesIndex.value = hit.index;
         const relativeX = event.x - (sidebar.x + 1);
         const actionButton = gitActionButtonAt(relativeX);
-        const buttonsShowing = wasCurrent || workspace.gitPanel.changesHovered.value === hit.index;
+        const buttonsShowing = wasCurrent || workspaceSet.active.gitPanel.changesHovered.value === hit.index;
         if (relativeX === 1) {
-          void workspace.toggleStageAtRow(hit.index); // the single-glyph CHECKBOX cell is the staging control
+          void workspaceSet.active.toggleStageAtRow(hit.index); // the single-glyph CHECKBOX cell is the staging control
         } else if (buttonsShowing && actionButton === 'open') {
-          void workspace.openChangeAtRow(hit.index); // [o]pen
+          void workspaceSet.active.openChangeAtRow(hit.index); // [o]pen
         } else if (buttonsShowing && actionButton === 'discard') {
-          workspace.requestDiscardAtRow(hit.index); // [d]iscard — arms the y/N confirm
+          workspaceSet.active.requestDiscardAtRow(hit.index); // [d]iscard — arms the y/N confirm
         } else if (buttonsShowing && actionButton === 'stageToggle') {
-          void workspace.toggleStageAtRow(hit.index); // [+/-] stage/unstage
+          void workspaceSet.active.toggleStageAtRow(hit.index); // [+/-] stage/unstage
         } else {
-          void workspace.openChangeAtRow(hit.index); // row body = select + OPEN (consistent with tree)
+          void workspaceSet.active.openChangeAtRow(hit.index); // row body = select + OPEN (consistent with tree)
         }
       } else {
-        workspace.gitPanel.region.value = 'log';
-        workspace.gitPanel.logIndex.value = hit.index;
+        workspaceSet.active.gitPanel.region.value = 'log';
+        workspaceSet.active.gitPanel.logIndex.value = hit.index;
         // Row body = select + ACTIVATE (consistent with tree/changes): a commit header toggles its
         // inline expansion (lazy fetch); a file row opens that file's diff for that commit.
-        workspace.activateLogRow(hit.index);
+        workspaceSet.active.activateLogRow(hit.index);
       }
       return;
     }
-    workspace.focusFiles(); // click-to-focus
-    workspace.haltTreeScroll();
+    workspaceSet.active.focusFiles(); // click-to-focus
+    workspaceSet.active.haltTreeScroll();
     const rowIndex = treeWindowTop() + (event.y - (sidebar.y + 1)); // +1: sidebar top border
-    if (rowIndex < 0 || rowIndex >= workspace.tree.rows.length) return;
+    if (rowIndex < 0 || rowIndex >= workspaceSet.active.tree.rows.length) return;
     // Single-click activation: one click selects AND opens the file / toggles the folder. setSelection
     // does NOT reveal/scroll, so clicking a visible row leaves the scroll position exactly where it is.
-    workspace.tree.setSelection(rowIndex);
-    workspace.activate();
+    workspaceSet.active.tree.setSelection(rowIndex);
+    workspaceSet.active.activate();
   };
 
   update();

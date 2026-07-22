@@ -71,9 +71,9 @@ open_only_file() {
     local active_buffer
     active_buffer="$("$HARNESS" field "$session" activeBuffer 2>/dev/null)"
     if [ -n "$active_buffer" ] && [ "$active_buffer" != "null" ]; then return 0; fi
-    # The fixture has exactly two visible root rows: .git at y=1 and tracked.txt at y=2. Click the
+    # The workspace strip occupies y=0; the fixture root rows are .git at y=2 and tracked.txt at y=3. Click the
     # visible file affordance directly, avoiding traversal into .git if it begins selected.
-    "$HARNESS" click "$session" 5 2 >/dev/null
+    "$HARNESS" click "$session" 5 3 >/dev/null
   done
   return 1
 }

@@ -1,8 +1,7 @@
 # Workspace — Invariants
 
-Load-bearing rules for `src/modules/workspace/` (`Workspace`, `FileTree`). Stands on
-`project.invariants.md`. Multi-workspace records are `provisional` — the M2 code is
-single-workspace only; they are the M2 completion backlog.
+Load-bearing rules for `src/modules/workspace/` (`WorkspaceSet`, `Workspace`, `FileTree`) and the
+shared project/editor tab boundary. Stands on `project.invariants.md`.
 
 ## Reality-based invariants
 
@@ -20,25 +19,74 @@ switching the outer layer restores the inner layer's own state.
 **Scope:** Workspace/worktree tabs vs file/editor tabs; the focus toggle between files pane and
 editor.
 
-**Mechanism:** A `WorkspaceManager` owns the outer tab set; each `Workspace` owns its inner
-file-tab/editor state; distinct key/command families drive each. Realizes the project product
-model at the workspace boundary.
+**Mechanism:** `WorkspaceSet` owns the outer tab set; each `Workspace` owns its inner
+`OpenBufferSet` and editor state. `Bootstrap.ts` resolves every live command and status read through
+`WorkspaceSet.active`; `RootView.ts` mounts separate workspace and buffer `TabStrip` instances.
 
 **Generates:** the two-tab-layer UI; separate `workspace.*` vs `editorTab.*` commands;
 per-workspace state restoration on switch.
 
-**Evidence:** partially built — `Workspace.ts` has a files/editor focus toggle (`focus`,
-`toggleFocus`), but there is no `WorkspaceManager`, no outer tab set, and only a single workspace
-is constructed (`Bootstrap.ts:45`). The outer layer is the M2 gap.
+**Evidence:** `WorkspaceSet.ts`; `Bootstrap.ts` active-workspace reads; `RootView.ts`
+`workspace-tab-strip` and `editor-tab-bar`; `WorkspaceSet.test.ts` state-restoration test;
+`scripts/smoke-workspace-tabs.sh` switches roots and checks tree/git/editor projection.
 
 **Impossible if true:** one shortcut that switches both layers depending on focus; switching a
 workspace that loses that workspace's open file and cursor state.
 
-**Open question:** land `WorkspaceManager` + outer tabs + per-workspace snapshot restoration
-(M2 completion).
+**Verification:** `bun test src/modules/workspace/WorkspaceSet.test.ts && bash scripts/smoke-workspace-tabs.sh`
 
-**Verification:** a test opening two workspaces, switching between them, and asserting each
-restores its own file tab, cursor, viewport, and sidebar mode.
+**Status:** provisional
+
+**Last refined:** 2026-07-21
+
+### N open workspaces do not cost N live GitWatchers
+
+**Invariant:** If N project workspaces are open, then only the active workspace owns a live
+`GitWatcher`; inactive workspaces keep resumable model state without filesystem watch handles.
+
+**Scope:** `WorkspaceSet` activation, switching, closing, and disposal; each owned `Workspace` and
+its `GitWatcher`. Dirty editor buffers are governed separately by the document flyweight record.
+
+**Mechanism:** `WorkspaceSet.activate` calls `Workspace.suspendOwnedResources` before changing the
+active index and `Workspace.resumeOwnedResources` afterward. Suspension disposes and clears the
+watcher; resumption constructs one watcher for the newly active root.
+
+**Generates:** one live project watcher; cold inactive workspace roots; watcher disposal on project
+switch and close.
+
+**Evidence:** `WorkspaceSet.ts`; `Workspace.ts` `suspendOwnedResources` and
+`resumeOwnedResources`; `WorkspaceSet.test.ts` "N open workspaces keep exactly one live GitWatcher";
+`scripts/smoke-workspace-tabs.sh` `liveGitWatcherCount` assertions.
+
+**Impossible if true:** two open workspaces both reporting a live `GitWatcher`; an inactive root
+retaining filesystem watch handles after a workspace-tab switch.
+
+**Verification:** `bun test src/modules/workspace/WorkspaceSet.test.ts -t "N open workspaces keep exactly one live GitWatcher" && bash scripts/smoke-workspace-tabs.sh`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-21
+
+### Tab strip panning never activates tabs
+
+**Invariant:** If a tab strip viewport pans through overflow, then its active tab stays unchanged
+until a separate activation action targets a tab.
+
+**Scope:** Both `TabStrip` instances: project workspace tabs and editor buffer tabs; horizontal and
+vertical orientations.
+
+**Mechanism:** `TabStrip.pan` mutates only `scrollOffset`; activation remains in
+`WorkspaceSet.activate` or `Workspace.activateTab`. `RootView.ts` routes arrow controls only to pan.
+
+**Generates:** overflow arrows that reveal hidden tabs without changing project or file context.
+
+**Evidence:** `TabStrip.ts`; `TabStrip.test.ts` "panning changes only the viewport offset";
+`scripts/smoke-tabs.sh`; `scripts/smoke-workspace-tabs.sh`.
+
+**Impossible if true:** clicking an overflow arrow changes `activeWorkspaceIndex` or
+`activeBufferIndex`; panning to a hidden tab opens it.
+
+**Verification:** `bun test src/modules/ui/TabStrip.test.ts && bash scripts/smoke-tabs.sh && bash scripts/smoke-workspace-tabs.sh`
 
 **Status:** provisional
 

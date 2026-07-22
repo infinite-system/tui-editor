@@ -28,6 +28,12 @@ export const canonicalBindings: Keybinding[] = [
   // Editor buffer tabs (item 10a) — global (work in any focus). Ctrl+Tab needs the kitty keyboard
   // protocol; Ctrl+PageUp/PageDown are the widely-supported equivalents.
   { chord: { key: ',', ctrl: true }, action: 'settings.toggle' },
+  // Project/workspace tabs are the outer navigation layer. Shift distinguishes them from the
+  // buffer-tab layer below; every action is also visible on the workspace strip and in the palette.
+  { chord: { key: 'o', ctrl: true, shift: true }, action: 'workspace.openFolder' },
+  { chord: { key: 'w', ctrl: true, shift: true }, action: 'workspace.close' },
+  { chord: { key: 'pagedown', ctrl: true, shift: true }, action: 'workspace.next' },
+  { chord: { key: 'pageup', ctrl: true, shift: true }, action: 'workspace.previous' },
   { chord: { key: 'w', ctrl: true }, action: 'buffer.close' },
   { chord: { key: 'tab', ctrl: true, shift: false }, action: 'buffer.next' },
   { chord: { key: 'tab', ctrl: true, shift: true }, action: 'buffer.previous' },

@@ -130,10 +130,10 @@ else
 fi
 
 echo '== toolbar: base/current labels, right-side Open current, clickable Next =='
-base_title_column="$(frame_text_column 2 'Base (HEAD)')"
-current_title_column="$(frame_text_column 2 'Current (working)')"
-open_current_column="$(frame_text_column 1 'Open current')"
-next_change_column="$(frame_text_column 1 'Next')"
+base_title_column="$(frame_text_column 3 'Base (HEAD)')"
+current_title_column="$(frame_text_column 3 'Current (working)')"
+open_current_column="$(frame_text_column 2 'Open current')"
+next_change_column="$(frame_text_column 2 'Next')"
 if [ "$base_title_column" -ge 0 ] && [ "$current_title_column" -gt "$base_title_column" ] && \
    [ "$open_current_column" -ge "$current_title_column" ]; then
   echo "  PASS  Base (HEAD) is left, Current (working) is right, Open current is over current ($open_current_column >= $current_title_column)"
@@ -143,7 +143,7 @@ else
 fi
 
 scroll_before_next="$(field diffScrollTop)"
-"$HARNESS" click "$SESSION_NAME" "$((next_change_column + 1))" 1 >/dev/null
+"$HARNESS" click "$SESSION_NAME" "$((next_change_column + 1))" 2 >/dev/null
 sleep 0.4
 settle
 scroll_after_next="$(field diffScrollTop)"
@@ -155,12 +155,12 @@ else
 fi
 
 echo '== draggable split: live width change and persistence to a second diff open =='
-current_column_before_drag="$(frame_text_column 2 'Current (working)')"
+current_column_before_drag="$(frame_text_column 3 'Current (working)')"
 divider_column=$((current_column_before_drag - 2))
 "$HARNESS" drag "$SESSION_NAME" "$divider_column" 10 "$((divider_column + 14))" 10 >/dev/null
 sleep 0.4
 settle
-current_column_after_drag="$(frame_text_column 2 'Current (working)')"
+current_column_after_drag="$(frame_text_column 3 'Current (working)')"
 persisted_ratio="$(field diffSplitRatio)"
 if [ "$current_column_after_drag" -gt "$current_column_before_drag" ] && \
    awk "BEGIN { exit !($persisted_ratio > 0.5) }"; then
@@ -176,7 +176,7 @@ if ! open_diff; then
   echo '  FAIL  second diff did not reopen'
   FAILURE_COUNT=$((FAILURE_COUNT + 1))
 else
-  current_column_after_reopen="$(frame_text_column 2 'Current (working)')"
+  current_column_after_reopen="$(frame_text_column 3 'Current (working)')"
   if [ "$current_column_after_reopen" = "$current_column_after_drag" ]; then
     echo "  PASS  second diff reused the persisted split column $current_column_after_reopen"
   else
@@ -186,7 +186,7 @@ else
 fi
 
 echo '== diff selection: held bottom-edge drag autoscrolls, paints, and copies exact text =='
-current_title_column="$(frame_text_column 2 'Current (working)')"
+current_title_column="$(frame_text_column 3 'Current (working)')"
 selection_column=$((current_title_column + 7))
 # SGR coordinates are 1-based. Press near the top of current text, establish capture inside the
 # pane, then hold at the last code row so SelectionDragBehavior keeps advancing before release.
@@ -270,9 +270,9 @@ else
 fi
 
 echo '== Open current: right-side affordance opens the working editable file =='
-open_current_column="$(frame_text_column 1 'Open current')"
+open_current_column="$(frame_text_column 2 'Open current')"
 for _attempt in 1 2 3; do
-  "$HARNESS" click "$SESSION_NAME" "$((open_current_column + 2))" 1 >/dev/null
+  "$HARNESS" click "$SESSION_NAME" "$((open_current_column + 2))" 2 >/dev/null
   sleep 0.5
   if [ "$(field showingDiff)" = "false" ]; then break; fi
 done

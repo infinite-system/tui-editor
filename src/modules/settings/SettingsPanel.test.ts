@@ -71,6 +71,12 @@ describe('SettingsPanel', () => {
     expect(settings.glyphMode.value).not.toBe(modeBefore);
     panel.adjust(-1);
     expect(settings.glyphMode.value).toBe(modeBefore); // cycles back
+
+    panel.selectedIndex.value = indexOfKey(panel, 'workspaceTabPosition');
+    panel.adjust(1);
+    expect(settings.workspaceTabPosition.value).toBe('left');
+    panel.adjust(-1);
+    expect(settings.workspaceTabPosition.value).toBe('top');
   });
 
   test('rows() reflects the current values and the selection', () => {

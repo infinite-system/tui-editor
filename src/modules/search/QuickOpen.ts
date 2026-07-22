@@ -15,6 +15,8 @@ export interface QuickOpenOptions {
   enumerateProjectFiles?: ProjectFileEnumerator;
 }
 
+export type QuickOpenMode = 'files' | 'workspacePath';
+
 class $QuickOpen {
   constructor(readonly options: QuickOpenOptions = {}) {}
 
@@ -23,6 +25,14 @@ class $QuickOpen {
   }
 
   get query() {
+    return ref('');
+  }
+
+  get mode() {
+    return ref<QuickOpenMode>('files');
+  }
+
+  get errorMessage() {
     return ref('');
   }
 
@@ -41,7 +51,9 @@ class $QuickOpen {
   async show(projectRoot: string): Promise<void> {
     const enumerationRequestIdentifier = ++this.latestEnumerationRequestIdentifier;
     this.open.value = true;
+    this.mode.value = 'files';
     this.query.value = '';
+    this.errorMessage.value = '';
     this.projectFiles = [];
     this.matches.value = [];
     this.selectedIndex.value = -1;
@@ -68,7 +80,24 @@ class $QuickOpen {
   /** Replace the query and synchronously rebuild the ranked candidate list. */
   setQuery(text: string): void {
     this.query.value = text;
-    this.refilter();
+    this.errorMessage.value = '';
+    if (this.mode.value === 'files') this.refilter();
+  }
+
+  /** Reuse the quick-open input as a minimal project-folder path prompt. */
+  showWorkspacePath(): void {
+    ++this.latestEnumerationRequestIdentifier;
+    this.open.value = true;
+    this.mode.value = 'workspacePath';
+    this.query.value = '';
+    this.errorMessage.value = '';
+    this.projectFiles = [];
+    this.matches.value = [];
+    this.selectedIndex.value = -1;
+  }
+
+  setError(message: string): void {
+    this.errorMessage.value = message;
   }
 
   // invariant: Word deletion uses the navigation boundary (src/modules/editor/editor.invariants.md)
@@ -91,13 +120,19 @@ class $QuickOpen {
 
   /** Return the selected path. The caller owns opening the file and closing quick-open. */
   activate(): string | null {
+    if (this.mode.value === 'workspacePath') {
+      const workspacePath = this.query.value.trim();
+      return workspacePath.length > 0 ? workspacePath : null;
+    }
     return this.matches.value[this.selectedIndex.value]?.path ?? null;
   }
 
   close(): void {
     ++this.latestEnumerationRequestIdentifier;
     this.open.value = false;
+    this.mode.value = 'files';
     this.query.value = '';
+    this.errorMessage.value = '';
     this.projectFiles = [];
     this.matches.value = [];
     this.selectedIndex.value = -1;

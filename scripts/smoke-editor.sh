@@ -87,9 +87,9 @@ chkne "selection range published" "$(f selection)"
 chk "selection cleared after Escape" "$(f hasSelection)" "false"
 
 echo "== mouse drag-select persists + Ctrl+C copies (human-QA regression) =="
-# Drag along row y=2 (doc line 1, "A tiny project..." — a CONTENT line; an empty line cannot hold
+# Drag along row y=3 (doc line 1, "A tiny project..." — a CONTENT line; an empty line cannot hold
 # a horizontal selection).
-"$H" drag "$S" 40 2 50 2 >/dev/null
+"$H" drag "$S" 40 3 50 3 >/dev/null
 "$H" settle "$S" >/dev/null 2>&1
 chk "drag created a selection" "$(f hasSelection)" "true"
 sleep 0.8
@@ -102,13 +102,13 @@ if [ -n "$copied" ] && [ "$copied" != "null" ] && [ "$copied" -gt 0 ] 2>/dev/nul
 "$H" send "$S" Escape >/dev/null
 
 echo "== mouse input path (real SGR click arrives) =="
-"$H" click "$S" 40 5 >/dev/null
+"$H" click "$S" 40 6 >/dev/null
 "$H" settle "$S" >/dev/null 2>&1
 mouse="$(f mouse)"
 if [ -n "$mouse" ] && [ "$mouse" != "null" ]; then echo "  PASS  mouse click registered ($mouse)"; else echo "  FAIL  mouse click did not register"; fail=1; fi
 
 echo "== h-scroll range: End reveals the long line's end (scrollbar geometry regression) =="
-"$H" click "$S" 40 2 >/dev/null   # put the cursor ON the long line (row y=2 = doc line 0; the tab bar occupies y=0)
+"$H" click "$S" 40 3 >/dev/null   # workspace tabs + buffer tabs occupy rows 0/1; code starts at y=3
 tmux send-keys -t "$S" End; sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
 end_visible="$(FRAME_FILE="$FRAME" "$BUN" -e '
 const f=JSON.parse(require("fs").readFileSync(process.env.FRAME_FILE));
@@ -125,40 +125,40 @@ echo "== horizontal wheel ROUTING test (Option+wheel SGR 75/74) =="
 # is swallowed by xterm-family terminals; native tilt 66/67 is terminal-dependent). Acceptance = 74/75.
 "$H" settle "$S" >/dev/null 2>&1
 h_wheel_before="$(f editorScrollLeft)"
-for _ in 1 2 3 4 5 6; do tmux send-keys -t "$S" -l "$(printf '\033[<75;40;2M')"; sleep 0.12; done  # Option+wheel-right
+for _ in 1 2 3 4 5 6; do tmux send-keys -t "$S" -l "$(printf '\033[<75;40;3M')"; sleep 0.12; done  # Option+wheel-right
 sleep 0.5; "$H" settle "$S" >/dev/null 2>&1
 h_wheel_after="$(f editorScrollLeft)"
 if [ "${h_wheel_after:-0}" -gt "${h_wheel_before:-0}" ] 2>/dev/null; then echo "  PASS  Option+wheel routes to horizontal ($h_wheel_before->$h_wheel_after)"; else echo "  FAIL  Option+wheel did not route horizontal ($h_wheel_before->$h_wheel_after)"; fail=1; fi
-for _ in 1 2 3 4 5 6 7 8; do tmux send-keys -t "$S" -l "$(printf '\033[<74;40;2M')"; sleep 0.1; done  # Option+wheel-left reverses
+for _ in 1 2 3 4 5 6 7 8; do tmux send-keys -t "$S" -l "$(printf '\033[<74;40;3M')"; sleep 0.1; done  # Option+wheel-left reverses
 sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
 tmux send-keys -t "$S" Home; sleep 0.3
 
 echo "== drag-edge auto-scroll: hold at right edge scrolls + extends selection =="
-tmux send-keys -t "$S" -l "$(printf '\033[<0;50;3M')"; sleep 0.1     # press on line 0 (long line; y=3 with the tab bar at y=0)
-tmux send-keys -t "$S" -l "$(printf '\033[<32;118;3M')"; sleep 0.1   # drag to right edge, HOLD
+tmux send-keys -t "$S" -l "$(printf '\033[<0;50;4M')"; sleep 0.1     # press on line 0 (SGR is 1-based; screen y=3)
+tmux send-keys -t "$S" -l "$(printf '\033[<32;118;4M')"; sleep 0.1   # drag to right edge, HOLD
 sleep 0.9; "$H" settle "$S" >/dev/null 2>&1
 edge_scroll="$(f editorScrollLeft)"
-tmux send-keys -t "$S" -l "$(printf '\033[<0;118;3m')"; sleep 0.3    # release
+tmux send-keys -t "$S" -l "$(printf '\033[<0;118;4m')"; sleep 0.3    # release
 if [ -n "$edge_scroll" ] && [ "$edge_scroll" -gt 5 ] 2>/dev/null; then echo "  PASS  edge hold auto-scrolled (scrollLeft=$edge_scroll)"; else echo "  FAIL  no edge auto-scroll (scrollLeft=$edge_scroll)"; fail=1; fi
 "$H" send "$S" Escape >/dev/null
 tmux send-keys -t "$S" Home; sleep 0.2   # reset horizontal scroll for later checks
 
 echo "== tree click: select, click-again activates; click-to-focus (human-QA regression) =="
 "$H" send "$S" Escape >/dev/null   # ensure editor focus first (escape w/o selection -> files)... then re-focus editor by clicking
-"$H" click "$S" 5 1 >/dev/null     # click tree row 0 -> select + focus files
+"$H" click "$S" 5 2 >/dev/null     # workspace strip adds row 0; click tree row 0 -> select + focus files
 chk "tree click focuses files" "$(f focus)" "files"
 chk "tree click selected row 0" "$(f treeSelected)" "0"
-"$H" click "$S" 60 5 >/dev/null    # click editor pane -> focus editor
+"$H" click "$S" 60 6 >/dev/null    # click editor pane -> focus editor
 chk "editor click focuses editor" "$(f focus)" "editor"
 
 echo "== single-dispatch: a tree click opens WITHOUT moving the editor cursor =="
-"$H" click "$S" 60 6 >/dev/null   # place the cursor somewhere via an editor click
+"$H" click "$S" 60 7 >/dev/null   # place the cursor somewhere via an editor click
 "$H" settle "$S" >/dev/null 2>&1
-"$H" click "$S" 5 2 >/dev/null    # click a tree FILE row (data.json)
+"$H" click "$S" 5 3 >/dev/null    # click a tree FILE row (greeter.ts)
 sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
 opened_buffer="$(f activeBuffer)"
 cursor_line="$(STATUS_FILE="$STATUSF" "$BUN" -e 'console.log(JSON.parse(require("fs").readFileSync(process.env.STATUS_FILE)).cursor?.line ?? -1)')"
-case "$opened_buffer" in *greeter.ts) buffer_ok=1;; *) buffer_ok=0;; esac  # y=2 = greeter.ts (src expanded by the earlier click test)
+case "$opened_buffer" in *greeter.ts) buffer_ok=1;; *) buffer_ok=0;; esac  # y=3 = greeter.ts (src expanded by the earlier click test)
 if [ "$buffer_ok" = 1 ] && [ "$cursor_line" = "0" ]; then echo "  PASS  tree click opened a file, cursor stayed at line 0 (no double-dispatch)"; else echo "  FAIL  double-dispatch? buffer=$opened_buffer cursorLine=$cursor_line"; fail=1; fi
 
 echo "== command palette (F1) =="
