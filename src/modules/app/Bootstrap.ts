@@ -829,11 +829,14 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       // actually copied (the human-QA "cannot copy" bug's verification channel).
       const diffView = workspaceSet.active.showingDiff.value ? view.activeDiffView() : null;
       const markdownSplitView = view.activeMarkdownSplitView();
-      const copyPromise = diffView
-        ? diffView.copySelection()
-        : markdownSplitView?.previewFocused
-          ? markdownSplitView.copySelection()
-          : workspaceSet.active.editor.copySelection();
+      // An engaged hover card with a selection owns Ctrl+C — copy ITS text, not the editor's beneath.
+      const copyPromise = view.hoverHasSelection()
+        ? view.hoverCopySelection()
+        : diffView
+          ? diffView.copySelection()
+          : markdownSplitView?.previewFocused
+            ? markdownSplitView.copySelection()
+            : workspaceSet.active.editor.copySelection();
       void copyPromise.then((copiedCharacters) => {
         if (copiedCharacters > 0) {
           app.copyNotice.value = `Copied ${copiedCharacters} chars (${Clipboard.Class.lastBackend ?? 'no backend'})`;
@@ -877,7 +880,10 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
 
   const keyTick = (key: KeyEvent): void => {
     tooltip.clear(); // any keypress hides the tooltip (display-only affordance)
-    view.dismissHover(); // any keypress hides the LSP hover card (VS Code behaviour)
+    // Escape always closes the hover card; any other key closes it too UNLESS the pointer is engaged
+    // with it (over the card / dragging a selection) — so a sticky card lets Ctrl+C copy its selection.
+    if (key.name === 'escape') view.dismissHover();
+    else view.dismissHoverSoft();
     // RESERVED GLOBAL CHORDS (quit) are escape hatches that must fire from ANY mode — checked BEFORE
     // every modal/search branch below, or a focused find/quick-open/settings input would swallow the
     // quit key and TRAP the user with no way out (a hard no-dead-ends / learnability failure). The
@@ -1113,7 +1119,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     HandlerGuard.Class.run('mouse', () => {
       lastMouse = { type: event.type, x: event.x, y: event.y, button: event.button };
       if (event.type === 'down') tooltip.clear(); // any click hides the tooltip, wherever it lands
-      if (event.type === 'down') view.dismissHover(); // any click hides the hover card (mouse-MOVE over it does not)
+      // A click hides the hover card UNLESS it lands ON the card (engaged): a down on the card begins a
+      // drag-select and must not dismiss it; a down anywhere else closes it.
+      if (event.type === 'down') view.dismissHoverSoft();
       paint();
     }, () => renderer.requestRender());
   };

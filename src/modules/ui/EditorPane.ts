@@ -188,6 +188,20 @@ class $EditorPane {
     return { line, column };
   }
 
+  // True when the pointer cell sits on an actual text glyph (not the clamped-past-end position
+  // documentPositionAtCell returns for empty space, and not inter-token whitespace). Gates hover
+  // arming so moving off a symbol into blank space idles the shown card out instead of re-dwelling.
+  private pointerIsOverText(cellX: number, cellY: number, position: { line: number; column: number }): boolean {
+    const editor = this.deps.workspaceSet.active.editor;
+    const lineText = editor.document.line(position.line);
+    if (!editor.wordWrap.value) {
+      const displayColumn = editor.viewport.scrollLeft.value + (cellX - this.deps.codeBody.x);
+      if (displayColumn < 0 || displayColumn >= EditorCoordinates.Class.lineWidth(lineText)) return false;
+    }
+    const grapheme = Array.from(lineText)[position.column];
+    return grapheme != null && grapheme.trim().length > 0;
+  }
+
   private scrollEditorVertically(delta: number): void {
     const editor = this.deps.workspaceSet.active.editor;
     const editorViewport = editor.viewport;
@@ -306,8 +320,14 @@ class $EditorPane {
         return;
       }
       const position = this.documentPositionAtCell(event.x, event.y);
-      if (position) hover.pointAt(position, event.x, event.y);
-      else hover.pointerOffSymbol(); // off the symbol (empty cell): a shown card enters its idle grace
+      // documentPositionAtCell CLAMPS past the line end, so it returns a position even over empty
+      // space — arm the dwell only when the pointer is truly over a text glyph, or moving from a
+      // symbol into the whitespace beside it would read as a NEW symbol and hide the shown card.
+      if (position && this.pointerIsOverText(event.x, event.y, position)) {
+        hover.pointAt(position, event.x, event.y);
+      } else {
+        hover.pointerOffSymbol(); // off the symbol (empty/whitespace cell): a shown card idles out
+      }
     };
     // Pointer leaves the code pane entirely (to the sidebar, a tab, etc.): also a "left the symbol"
     // signal — a shown card idles out rather than hanging around, but is not hard-killed mid-move.

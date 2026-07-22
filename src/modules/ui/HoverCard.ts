@@ -11,7 +11,6 @@ import {
   BoxRenderable,
   ScrollBarRenderable,
   StyledText,
-  TextRenderable,
   fg,
   type MouseEvent,
   type TextChunk,
@@ -21,6 +20,9 @@ import { Reactive } from 'ivue';
 import { Logging } from '../system/Logging';
 import { ref } from 'vue';
 import { HitTransparentText } from './HitTransparentText';
+import { SelectableText } from './SelectableText';
+import { SelectionDragBehavior } from './SelectionDragBehavior';
+import { Clipboard } from '../system/Clipboard';
 import { ScrollbarGeometry } from './ScrollbarGeometry';
 import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { Highlighter, type LangId, type Role } from '../syntax/Highlighter';
@@ -30,8 +32,12 @@ import type { LanguageHover, TextPosition } from '../lsp/LanguageClient';
 
 /** The pointer must rest on ONE document position this long before the card shows (VS Code uses ~0.5s). */
 export const HOVER_DWELL_SECONDS = 0.5;
-/** Once shown, if the pointer leaves BOTH the symbol and the card, the card auto-dismisses after this
- *  grace — long enough to move the pointer INTO the card to scroll/read it without it vanishing. */
+/** Grace after the pointer leaves the TRIGGER symbol but has NOT yet entered the card — short, so a
+ *  card you're moving away from dismisses promptly (VS Code feel), yet long enough to cross the one
+ *  row onto the adjacent card when you ARE heading for it. */
+export const HOVER_SYMBOL_OFF_DISMISS_SECONDS = 0.8;
+/** Grace after the pointer leaves the CARD, once it has been entered — longer, because you were
+ *  actively reading/scrolling it and a brief drift off its edge should not yank it away. */
 export const HOVER_IDLE_DISMISS_SECONDS = 2.5;
 /** Longest content line (display cells) the card renders; longer lines are truncated. */
 const MAX_CONTENT_WIDTH = 64;
@@ -76,6 +82,8 @@ class $HoverCard {
   private visible = false;
   /** Rendered content lines (each a list of styled chunks), the window of which is painted each frame. */
   private contentLines: TextChunk[][] = [];
+  /** The plain text of each content line (chunk texts joined) — the source for a copied selection. */
+  private contentPlain: string[] = [];
   private rawContents: string | null = null;
   private contentMaxWidth = 0;
   /** The screen CELL of the pointed symbol the card anchors to (placed below, flipping above). */
@@ -96,6 +104,14 @@ class $HoverCard {
   private onSymbol = false;
   /** Grace elapsed since the pointer left BOTH the symbol and the card (drives the idle auto-dismiss). */
   private idleSeconds = 0;
+  /** True once the pointer has entered the card at least once — selects the LONGER leave-grace (you
+   *  were reading it) versus the SHORTER grace for a card you never touched (you're moving away). */
+  private cardWasEntered = false;
+  /** The card's text selection in ABSOLUTE content coordinates (row = index into contentLines, column
+   *  = display cell). Null ends when the pointer drags off with no span. Anchor is where the drag began,
+   *  focus tracks the pointer — normalized only when the selection is read/painted. */
+  private selectionAnchor: { row: number; column: number } | null = null;
+  private selectionFocus: { row: number; column: number } | null = null;
 
   /**
    * The ONE reactive signal on this otherwise-plain controller: the frame paint effect observes it so
@@ -110,8 +126,11 @@ class $HoverCard {
   // Owned renderables (constructed + mounted here).
   private readonly backdrop: HitTransparentText;
   private readonly box: BoxRenderable;
-  private readonly content: TextRenderable;
+  private readonly content: SelectableText;
   private readonly scrollbar: ScrollBarRenderable;
+  /** The SAME drag+edge-autoscroll behaviour the editor and diff use — dragging a selection past the
+   *  card's top/bottom edge auto-scrolls the content (its scrollRows callback is this.scrollBy). */
+  private readonly drag: SelectionDragBehavior;
   /** True while update() writes the bar's reported position, so the bar's onChange ignores our own sync. */
   private applyingBarGeometry = false;
   /** Maps a bar-reported position back to a true content row (ScrollbarGeometry's inflate scale). */
@@ -136,11 +155,15 @@ class $HoverCard {
       id: 'hover-card', position: 'absolute', border: true, borderStyle: 'rounded',
       flexDirection: 'column', visible: false, zIndex: 135,
     });
-    this.content = new TextRenderable(renderer, { id: 'hover-card-content', content: '', selectable: false });
+    this.content = new SelectableText(renderer, { id: 'hover-card-content', content: '', selectable: true });
     this.box.add(this.content);
+    // Colour the bar's TRACK the card's own background so the sub-cell half-block glyphs (▀/▄) drawn
+    // at the thumb's fractional ends blend into the card instead of showing the default near-black
+    // track as dark lines cutting across the thumb. update() re-applies these from the live palette.
     this.scrollbar = new ScrollBarRenderable(renderer, {
       id: 'hover-card-scrollbar', orientation: 'vertical', position: 'absolute', width: 1,
       showArrows: false, visible: false,
+      trackOptions: { backgroundColor: deps.theme.palette.panel, foregroundColor: deps.theme.palette.dim },
       onChange: (position) => {
         if (this.applyingBarGeometry) return; // ignore our own per-frame scrollPosition sync
         this.scrollTop = Math.max(0, Math.round(position * this.barScale));
@@ -150,12 +173,64 @@ class $HoverCard {
     this.box.add(this.scrollbar);
     root.add(this.box);
 
-    // The card receives its OWN pointer: moving into it (to scroll) must NOT dismiss it, and a wheel
-    // over it scrolls the content. It never touches the editor's cursor/selection.
-    this.box.onMouseMove = () => { this.pointerOverCard = true; this.idleSeconds = 0; };
-    this.box.onMouseOut = () => { this.pointerOverCard = false; this.requestPaint(); };
+    // The card receives its OWN pointer: moving into it (to scroll/select) must NOT dismiss it, and a
+    // wheel over it scrolls the content. It never touches the editor's cursor/selection.
+    this.box.onMouseMove = () => { this.pointerOverCard = true; this.cardWasEntered = true; this.idleSeconds = 0; };
+    this.box.onMouseOut = () => { this.pointerOverCard = false; this.idleSeconds = 0; this.requestPaint(); };
     this.box.onMouseScroll = (event: MouseEvent) =>
       this.scrollBy(event.scroll?.direction === 'up' ? -1 : 1);
+
+    // The content text is drag-selectable with edge auto-scroll, the SAME contract every scrollable
+    // text surface upholds (editor, diff). The drag maps screen cells to absolute content rows/columns,
+    // writes this card's own selection model, and scrolls the card by rows when the pointer drags past
+    // an edge. invariant: A scrollable text surface is drag-selectable with edge auto-scroll (src/modules/ui/ui.invariants.md)
+    this.drag = new SelectionDragBehavior({
+      viewportRectangle: () => ({
+        leftColumn: this.content.x,
+        rightColumn: this.content.x + Math.max(1, this.contentMaxWidth) - 1,
+        topRow: this.content.y,
+        bottomRow: this.content.y + Math.max(1, this.viewportRows()) - 1,
+      }),
+      positionAtCell: (screenColumn, screenRow) => this.contentPositionAtCell(screenColumn, screenRow),
+      horizontalScrollPosition: () => 0,
+      horizontalScrollingEnabled: () => false, // the card never scrolls horizontally (content is truncated)
+      beginSelection: (position) => {
+        this.selectionAnchor = { row: position.line, column: position.column };
+        this.selectionFocus = { row: position.line, column: position.column };
+        this.requestPaint();
+      },
+      extendSelection: (position) => {
+        this.selectionFocus = { row: position.line, column: position.column };
+        this.requestPaint();
+      },
+      finishSelection: () => {
+        // A bare click (anchor === focus) leaves no span: drop it so update() paints no highlight.
+        if (this.selectionAnchor && this.selectionFocus
+          && this.selectionAnchor.row === this.selectionFocus.row
+          && this.selectionAnchor.column === this.selectionFocus.column) {
+          this.selectionAnchor = null;
+          this.selectionFocus = null;
+        }
+        this.requestPaint();
+      },
+      scrollColumns: () => {}, // no horizontal scroll on the card
+      scrollRows: (rowDelta) => this.scrollBy(rowDelta),
+      haltCompetingScroll: () => {},
+    });
+    this.content.onMouseDown = (event: MouseEvent) => { this.pointerOverCard = true; this.cardWasEntered = true; this.drag.begin(event.x, event.y); };
+    this.content.onMouseDrag = (event: MouseEvent) => this.drag.drag(event.x, event.y);
+    this.content.onMouseUp = () => this.drag.end();
+    this.content.onMouseDragEnd = () => this.drag.end();
+  }
+
+  /** Map a screen cell to an ABSOLUTE content position (row into contentLines, display column). Rows
+   *  outside the painted window clamp to the content extent so an edge drag still resolves a position. */
+  private contentPositionAtCell(screenColumn: number, screenRow: number): { line: number; column: number } | null {
+    if (!this.visible || this.contentLines.length === 0) return null;
+    const start = Math.max(0, Math.min(this.scrollTop, this.maximumScrollTop()));
+    const row = Math.max(0, Math.min(start + (screenRow - this.content.y), this.contentLines.length - 1));
+    const column = Math.max(0, screenColumn - this.content.x);
+    return { line: row, column };
   }
 
   /** Bump the reactive paint signal AND request a render — a display change that no keypress/mouse
@@ -195,6 +270,9 @@ class $HoverCard {
     this.dwellSeconds = 0;
     this.requestedGeneration = -1;
     this.visible = false;
+    this.cardWasEntered = false;
+    this.selectionAnchor = null;
+    this.selectionFocus = null;
     this.pending = { position, key };
     this.anchorX = screenX;
     this.anchorY = screenY;
@@ -207,6 +285,10 @@ class $HoverCard {
   pointerOffSymbol(): void {
     this.onSymbol = false;
     if (this.visible) {
+      // Start the grace FRESH from the moment the pointer leaves the symbol — the frame loop was
+      // quiescing while the pointer rested on the symbol (tick returned false), so idleSeconds must
+      // reset here rather than inherit stale accumulation.
+      this.idleSeconds = 0;
       this.requestPaint(); // kick the frame loop so tick() can run the idle countdown
     } else {
       this.pending = null;
@@ -221,6 +303,10 @@ class $HoverCard {
     this.pointerOverCard = false;
     this.onSymbol = false;
     this.idleSeconds = 0;
+    this.cardWasEntered = false;
+    this.drag.end();
+    this.selectionAnchor = null;
+    this.selectionFocus = null;
     if (this.visible) {
       this.visible = false;
       // invariant: An overlay's dismissal clears its cells in the same frame (src/modules/ui/ui.invariants.md)
@@ -247,12 +333,20 @@ class $HoverCard {
     // is engaged and idle time resets; when it leaves both, count the grace and dismiss at the limit.
     // (Returning true keeps the frame loop alive through the countdown; false lets it quiesce.)
     if (this.visible) {
-      if (this.pointerOverCard || this.onSymbol) {
+      // An in-flight selection drag advances the shared edge-autoscroll and keeps the card engaged
+      // (the pointer may have dragged past the card's edge, so pointerOverCard can be false mid-drag).
+      const dragging = this.drag.active;
+      const dragKeepAlive = dragging ? this.drag.tick(deltaSeconds) : false;
+      if (this.pointerOverCard || this.onSymbol || dragging) {
         this.idleSeconds = 0;
-        return false;
+        return dragKeepAlive;
       }
-      this.idleSeconds += deltaSeconds;
-      if (this.idleSeconds >= HOVER_IDLE_DISMISS_SECONDS) {
+      // The demand-driven loop quiesces while the pointer rests engaged; the first tick after that has
+      // a huge wall-clock delta, so clamp it or the grace would elapse in one frame.
+      this.idleSeconds += Math.min(deltaSeconds, 0.1);
+      // A card the pointer once entered gets the longer read-grace; one it never touched dismisses fast.
+      const dismissLimit = this.cardWasEntered ? HOVER_IDLE_DISMISS_SECONDS : HOVER_SYMBOL_OFF_DISMISS_SECONDS;
+      if (this.idleSeconds >= dismissLimit) {
         this.clear();
         return false;
       }
@@ -287,6 +381,74 @@ class $HoverCard {
     if (!this.visible) return;
     this.scrollTop = Math.max(0, Math.min(this.scrollTop + deltaRows, this.maximumScrollTop()));
     this.requestPaint();
+  }
+
+  /** True while the pointer is over the card or a drag is in flight — the card is STICKY: a stray
+   *  keypress or a click on it must not dismiss it (so Ctrl+C copies the selection, drag selects). */
+  engaged(): boolean {
+    return this.visible && (this.pointerOverCard || this.drag.active);
+  }
+
+  /** True when the card holds a non-empty selection span. */
+  hasSelection(): boolean {
+    const [start, end] = this.normalizedSelection() ?? [null, null];
+    return start !== null && end !== null && !(start.row === end.row && start.column === end.column);
+  }
+
+  /** Copy the card's selected text to the OS clipboard; resolves to the character count copied (0 when
+   *  nothing is selected). Mirrors Editor.copySelection so the same Ctrl+C proof channel applies. */
+  async copySelection(): Promise<number> {
+    const text = this.selectedText();
+    if (!text) return 0;
+    await Clipboard.Class.copy(text);
+    return text.length;
+  }
+
+  /** The selection ordered (start ≤ end) by row then column, or null when there is no active span. */
+  private normalizedSelection(): [{ row: number; column: number }, { row: number; column: number }] | null {
+    const anchor = this.selectionAnchor;
+    const focus = this.selectionFocus;
+    if (!anchor || !focus) return null;
+    const anchorFirst = anchor.row < focus.row || (anchor.row === focus.row && anchor.column <= focus.column);
+    return anchorFirst ? [anchor, focus] : [focus, anchor];
+  }
+
+  /** Reconstruct the selected plain text from the content rows between the normalized ends. */
+  private selectedText(): string {
+    const span = this.normalizedSelection();
+    if (!span) return '';
+    const [start, end] = span;
+    const startRow = Math.max(0, Math.min(start.row, this.contentPlain.length - 1));
+    const endRow = Math.max(0, Math.min(end.row, this.contentPlain.length - 1));
+    if (startRow === endRow) {
+      return (this.contentPlain[startRow] ?? '').slice(start.column, end.column);
+    }
+    const parts: string[] = [(this.contentPlain[startRow] ?? '').slice(start.column)];
+    for (let row = startRow + 1; row < endRow; row += 1) parts.push(this.contentPlain[row] ?? '');
+    parts.push((this.contentPlain[endRow] ?? '').slice(0, end.column));
+    return parts.join('\n');
+  }
+
+  /** Drive the native text selection on the content renderable, mapped from ABSOLUTE content rows to
+   *  the painted window's local cells (y = row − windowStart), clamping ends off the window to its
+   *  edges — the same window-local projection the editor uses. */
+  private paintSelection(windowStart: number, viewportRows: number): void {
+    const span = this.normalizedSelection();
+    if (!span || (span[0].row === span[1].row && span[0].column === span[1].column)) {
+      this.content.clearSelectionRange();
+      return;
+    }
+    const [start, end] = span;
+    const windowEnd = windowStart + viewportRows - 1;
+    if (end.row < windowStart || start.row > windowEnd) {
+      this.content.clearSelectionRange();
+      return;
+    }
+    const anchorY = Math.max(0, Math.min(start.row - windowStart, viewportRows - 1));
+    const anchorX = start.row >= windowStart ? start.column : 0;
+    const focusY = Math.max(0, Math.min(end.row - windowStart, viewportRows - 1));
+    const focusX = end.row <= windowEnd ? end.column : this.contentMaxWidth;
+    this.content.setSelectionRange(Math.max(0, anchorX), anchorY, Math.max(0, focusX), focusY);
   }
 
   /**
@@ -339,7 +501,12 @@ class $HoverCard {
       lines.pop();
     }
     this.contentLines = lines.length ? lines : [[fg(palette.fg)(' ')]];
+    // The plain text of each row (chunk texts joined) is the source a copied selection slices from.
+    this.contentPlain = this.contentLines.map((chunks) => chunks.map((chunk) => chunk.text).join(''));
     this.contentMaxWidth = Math.max(1, Math.min(widest, MAX_CONTENT_WIDTH));
+    // A freshly-rendered card starts with no selection.
+    this.selectionAnchor = null;
+    this.selectionFocus = null;
   }
 
   private isBlankLine(chunks: TextChunk[]): boolean {
@@ -393,6 +560,7 @@ class $HoverCard {
       if (index < visibleLines.length - 1) chunks.push(fg(palette.fg)('\n'));
     });
     this.content.content = new StyledText(chunks);
+    this.paintSelection(start, viewportRows);
 
     // Drive the vertical scrollbar off the SAME per-frame geometry every pane bar uses; its interior
     // region is the card's content box (top/left relative to the bordered box's first inner cell).
@@ -404,6 +572,9 @@ class $HoverCard {
       );
       if (geometry) {
         this.scrollbar.visible = true;
+        // Track blends with the card bg (kills the black half-block lines); thumb is a subtle dim grey.
+        this.scrollbar.slider.backgroundColor = palette.panel;
+        this.scrollbar.slider.foregroundColor = palette.dim;
         this.scrollbar.top = geometry.trackTop;
         this.scrollbar.left = geometry.trackLeft;
         this.scrollbar.height = geometry.trackLength;
