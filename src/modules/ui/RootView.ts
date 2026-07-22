@@ -703,6 +703,7 @@ function $buildRootView(
     hover: {
       pointAt: (position, screenX, screenY) => hoverCard.pointAt(position, screenX, screenY),
       clear: () => hoverCard.clear(),
+      pointerOffSymbol: () => hoverCard.pointerOffSymbol(),
     },
   });
 
