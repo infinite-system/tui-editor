@@ -76,8 +76,15 @@ export interface RootView {
   shortcutHelpViewportRows(): number;
   /** Frame-tick hook: advance the LSP hover-card dwell; true while counting or a request is in flight. */
   tickHover(dtSeconds: number): boolean;
-  /** Dismiss the LSP hover card (any keypress or click — VS Code behaviour). */
+  /** Dismiss the LSP hover card unconditionally (Escape — always closes, even while engaged). */
   dismissHover(): void;
+  /** Dismiss the LSP hover card UNLESS it is engaged (pointer over it / dragging a selection): a stray
+   *  keypress or a click ON the card must not close it, so Ctrl+C copies and drag-select works. */
+  dismissHoverSoft(): void;
+  /** True when the engaged hover card holds a non-empty text selection (routes Ctrl+C to it). */
+  hoverHasSelection(): boolean;
+  /** Copy the hover card's selected text to the clipboard; resolves to the character count copied. */
+  hoverCopySelection(): Promise<number>;
   /** Read the hover card's reactive paint signal inside the frame effect so an ASYNC hover landing
    *  (which no keypress/mouse-move accompanies) still triggers a repaint that projects the card. */
   observeHoverRepaint(): void;
@@ -776,6 +783,9 @@ function $buildRootView(
     shortcutHelpViewportRows: () => overlayLayer.shortcutHelpViewportRows(),
     tickHover: (dtSeconds: number) => hoverCard.tick(dtSeconds),
     dismissHover: () => hoverCard.clear(),
+    dismissHoverSoft: () => { if (!hoverCard.engaged()) hoverCard.clear(); },
+    hoverHasSelection: () => hoverCard.hasSelection(),
+    hoverCopySelection: () => hoverCard.copySelection(),
     observeHoverRepaint: () => { void hoverCard.paintRevision.value; },
     dispose() {
       try {

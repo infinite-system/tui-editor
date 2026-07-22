@@ -79,6 +79,24 @@ print('yes' if any(is_card(row.get('text', '')) for row in rows) else 'no')
 PY
 }
 
+# The card's content span as "startColumn,row,endColumn" (0-based): the row carrying the type text,
+# from the first cell of "answer" to the last cell of "number". Used to drag-select the card content.
+card_text_span() {
+  FRAME_PATH="$PROJECT_ROOT/artifacts/frame-$SESSION_NAME.json" python3 - <<'PY'
+import json, os
+rows = json.load(open(os.environ['FRAME_PATH'], encoding='utf-8'))['rows']
+for row_index, row in enumerate(rows):
+    text = row.get('text', '')
+    if ('answer' in text and 'number' in text and 'export' not in text
+            and '42' not in text and '│' in text):
+        start = text.find('answer')
+        end = text.find('number') + len('number') - 1
+        if start >= 0 and end > start:
+            print(f'{start},{row_index},{end}')
+        break
+PY
+}
+
 # A move-through motion event: SGR mouse MOTION with no button (32 motion bit + 3 = 35). 1-based.
 move_mouse_to() {
   local column="$1" row="$2"
@@ -136,6 +154,35 @@ if [ "$card_seen" = 'yes' ]; then
   pass 'the hover card renders the server type text ("answer"/"number") inside a bordered box'
 else
   fail "no hover card appeared after dwelling (lsp=$(field lspStatus) $(field lspProvider))"
+fi
+
+echo '== the card text is drag-selectable and Ctrl+C copies IT (not the editor beneath) =='
+# invariant: A scrollable text surface is drag-selectable with edge auto-scroll (src/modules/ui/ui.invariants.md)
+if [ "$card_seen" = 'yes' ]; then
+  span="$(card_text_span)"
+  if [ -z "$span" ]; then
+    fail 'could not locate the card content span to drag-select'
+  else
+    span_start="${span%%,*}"; span_rest="${span#*,}"; span_row="${span_rest%%,*}"; span_end="${span_rest##*,}"
+    # Drag across the card's type text ("answer: number"). The down lands ON the card, so it stays
+    # sticky (engaged) and the drag writes the card's OWN selection — not the editor's.
+    "$HARNESS" drag "$SESSION_NAME" "$span_start" "$span_row" "$span_end" "$span_row" >/dev/null
+    sleep 0.2
+    "$HARNESS" send "$SESSION_NAME" C-c >/dev/null
+    sleep 0.3
+    copied="$(field lastCopyChars)"
+    if [ -n "$copied" ] && [ "$copied" != 'null' ] && [ "$copied" -gt 0 ] 2>/dev/null; then
+      pass "Ctrl+C copied the card selection ($copied chars)"
+    else
+      fail "Ctrl+C over the card copied nothing (lastCopyChars=$copied)"
+    fi
+    # The card must SURVIVE the drag + copy (sticky while engaged) — a click/keypress on it never dismisses.
+    if [ "$(card_type_visible)" = 'yes' ]; then
+      pass 'the card stayed open through drag-select + Ctrl+C (sticky when engaged)'
+    else
+      fail 'the card was dismissed by its own drag-select / Ctrl+C'
+    fi
+  fi
 fi
 
 echo '== a keypress dismisses the card (VS Code behaviour) =='
