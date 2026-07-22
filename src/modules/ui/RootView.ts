@@ -30,13 +30,13 @@ import { Files } from '../system/Files';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { TreePaneRenderer } from './TreePaneRenderer';
+import { GitPaneRenderer } from './GitPaneRenderer';
 import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
 import { DiffView } from '../diff/DiffView';
 import { MarkdownSplitView } from '../markdown/MarkdownSplitView';
 import { SelectableText } from './SelectableText';
 import { SelectionDragBehavior } from './SelectionDragBehavior';
 import { GitRows, type ChangeRow, type FileRow } from '../git/GitRows';
-import { GitLogRows, type CommitLogRow } from '../git/GitLogRows';
 import { ScrollbarGeometry } from './ScrollbarGeometry';
 import type { ContextMenu, ContextMenuItem } from './ContextMenu';
 import type { OverlayCoordinator } from './OverlayCoordinator';
@@ -923,49 +923,9 @@ function $buildRootView(
   const displayColumnWindow = EditorCoordinates.Class.displayColumnWindow;
   const padToDisplayWidth = EditorCoordinates.Class.padToDisplayWidth;
 
-  function changeRowText(row: ChangeRow): string {
-    if (row.kind === 'header') return ` ${row.label} (${row.count})`;
-    if (row.kind === 'placeholder') return `  ${row.label}`;
-    const checkbox = row.bucket === 'staged' ? theme.checkboxIcons.checked : theme.checkboxIcons.unchecked;
-    return ` ${checkbox} ${row.glyph} ${row.path}`;
-  }
-
-  function commitLogRowText(row: CommitLogRow): string {
-    if (row.kind === 'commit') {
-      const chevron = row.expanded ? '▾' : '▸';
-      return row.record ? ` ${chevron} ${row.record.shortSha} ${row.record.subject}` : ' …';
-    }
-    if (row.kind === 'loading') return '      …loading';
-    return `    ${row.glyph} ${row.path}`;
-  }
-
-  function gitChangesContentWidth(rows: readonly ChangeRow[]): number {
-    return rows.reduce(
-      (widestWidth, row) => Math.max(widestWidth, EditorCoordinates.Class.lineWidth(changeRowText(row))),
-      0,
-    );
-  }
-
-  /** Longest retained log row: sparse commit cache + bounded expanded-file set, never full history. */
-  function gitLogContentWidth(): number {
-    let widestWidth = 0;
-    for (const record of workspaceSet.active.commitLog.value?.cache.value.values() ?? []) {
-      widestWidth = Math.max(
-        widestWidth,
-        EditorCoordinates.Class.lineWidth(` ▸ ${record.shortSha} ${record.subject}`),
-      );
-    }
-    for (const expansion of workspaceSet.active.commitExpansion.value?.entries.value ?? []) {
-      for (const file of expansion.files ?? []) {
-        widestWidth = Math.max(
-          widestWidth,
-          EditorCoordinates.Class.lineWidth(`    ${file.status} ${file.path}`),
-        );
-      }
-    }
-    return widestWidth;
-  }
-
+  // The git row formatters (changeRowText/commitLogRowText) and content-width helpers now live on
+  // GitPaneRenderer with the git-pane render itself; RootView calls the width helpers for scrollbar
+  // geometry (below) and delegates the render (renderGitPanel).
   const gitActionAreaWidth = 9;
 
   /**
@@ -994,7 +954,9 @@ function $buildRootView(
       1,
       sidebarInnerWidth - scrollbarThicknessCells(),
     );
-    const changesContentWidth = gitAvailable ? gitChangesContentWidth(gitChangeRowsNow()) : 0;
+    const changesContentWidth = gitAvailable
+      ? GitPaneRenderer.Class.changesContentWidth(gitChangeRowsNow(), theme.checkboxIcons)
+      : 0;
     const changesViewportHeight = Math.max(1, gitPanelGeometry.changesRows);
     const logViewportHeight = Math.max(1, gitPanelGeometry.logRows);
     if (
@@ -1015,7 +977,7 @@ function $buildRootView(
       changed = true;
     }
     const logViewportWidth = Math.max(1, sidebarInnerWidth - scrollbarThicknessCells());
-    const logContentWidth = gitAvailable ? gitLogContentWidth() : 0;
+    const logContentWidth = gitAvailable ? GitPaneRenderer.Class.logContentWidth(workspaceSet.active) : 0;
     if (
       workspaceSet.active.gitPanel.logViewportWidth.value !== logViewportWidth ||
       workspaceSet.active.gitPanel.logContentWidth.value !== logContentWidth
@@ -1966,195 +1928,22 @@ function $buildRootView(
   };
 
   function renderGitPanel(): StyledText {
-    const palette = readPalette();
+    // The git-pane render lives in GitPaneRenderer; RootView supplies palette + geometry + the theme
+    // icon sets and the active workspace, then applies the geometry the renderer returns (it is the
+    // hit-testers' source of truth). Behaviour identical.
     const innerWidth = sidebarWidth() - 2;
-    const chunks: TextChunk[] = [];
-    const pushRow = (
-      text: string,
-      color: string,
-      options: {
-        background?: string | null;
-        bold?: boolean;
-        newline?: boolean;
-        scrollLeft?: number;
-        viewportWidth?: number;
-      } = {},
-    ) => {
-      const viewportWidth = Math.max(1, Math.min(innerWidth, options.viewportWidth ?? innerWidth));
-      let label = displayColumnWindow(text, options.scrollLeft ?? 0, viewportWidth);
-      label = padToDisplayWidth(label, viewportWidth);
-      label = padToDisplayWidth(label, innerWidth);
-      let chunk = fg(color)(label);
-      if (options.bold) chunk = bold(chunk);
-      if (options.background) chunk = bg(options.background)(chunk);
-      chunks.push(chunk);
-      if (options.newline !== false) chunks.push(fg(palette.fg)('\n'));
-    };
-    const git = workspaceSet.active.git.value;
-    const gitPanel = workspaceSet.active.gitPanel;
-    const active = workspaceSet.active.focus.value === 'git';
-    if (!git) return new StyledText([fg(palette.dim)('  no repository')]);
-
-    const bodyHeight = Math.max(1, (sidebar.height as number) - 2);
-    const changesViewportWidth = Math.max(
-      1,
-      innerWidth - scrollbarThicknessCells(),
-    );
-    // The active (hovered/selected) row paints action buttons on its right, so its NAME clips further.
-    const changesActiveNameWidth = Math.max(1, changesViewportWidth - gitActionAreaWidth);
-    const logViewportWidth = Math.max(1, innerWidth - scrollbarThicknessCells());
-    pushRow(` ${git.branch.value || '(no branch)'}  ${git.head.value.slice(0, 7)}`, palette.accent);
-    if (git.error.value) {
-      pushRow(`  ${git.error.value}`, palette.deleted);
-      return new StyledText(chunks);
-    }
-
-    // Changes region (top): headers + glyphed file rows from the SHARED row model, windowed.
-    const changeRows = GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
-    const topHeight = Math.max(2, Math.floor(bodyHeight * workspaceSet.active.gitSplitRatio));
-    const changesVisible = topHeight - 1;
-    const changesTop = Math.min(
-      gitPanel.changesScrollTop.value,
-      Math.max(0, changeRows.length - changesVisible),
-    );
-    const glyphColor = (glyph: string): string =>
-      glyph === 'A' ? palette.added : glyph === 'D' ? palette.deleted : glyph === '?' ? palette.dim : palette.modified;
-    changeRows.slice(changesTop, changesTop + changesVisible).forEach((row, visibleIndex) => {
-      const rowIndex = changesTop + visibleIndex;
-      if (row.kind === 'header') {
-        pushRow(changeRowText(row), palette.dim, {
-          bold: true,
-          scrollLeft: gitPanel.changesScrollLeft.value,
-          viewportWidth: changesViewportWidth,
-        });
-      } else if (row.kind === 'placeholder') {
-        pushRow(changeRowText(row), palette.dim, {
-          scrollLeft: gitPanel.changesScrollLeft.value,
-          viewportWidth: changesViewportWidth,
-        });
-      } else {
-        const selected = rowIndex === gitPanel.changesIndex.value;
-        const selectionFocused = active && gitPanel.region.value === 'changes';
-        const hovered = rowIndex === gitPanel.changesHovered.value;
-        // Multi-selected rows (Ctrl/Shift-click, right-click) share the hover token — a lower
-        // intensity than the focused row's `selection` bg — until the palette grows a third token.
-        const multiSelected = gitPanel.selectedPaths.value.has(row.path);
-        const background = selected
-          ? selectionFocused
-            ? palette.selection
-            : palette.cursorLine
-          : multiSelected || hovered
-            ? palette.cursorLine
-            : null;
-        // ` ☑ M path…            o d ±` — ONE-glyph staging checkbox (theme ladder; click toggles);
-        // the git-status letter (M/D/?) stays separate; action buttons appear on hover/selection.
-        const label = changeRowText(row);
-        if ((selected && selectionFocused) || hovered) {
-          // Action buttons: real glyphs from the theme icon ladder (nerd → unicode → ascii letter),
-          // each theme-COLOURED and each ONE cell so the hit-zone columns (gitActionButtonAt) align:
-          // ` <open>  <discard>  <stage|unstage>` = 8 cells. Rendered as separate chunks so each
-          // button carries its own colour (open = accent, discard = deleted/red, stage = added/green,
-          // unstage = dim), then a trailing cell pads the row to innerWidth.
-          const actionIcons = theme.actionIcons;
-          const staged = row.bucket === 'staged';
-          const stageGlyph = staged ? actionIcons.unstage : actionIcons.stage;
-          const stageColor = staged ? palette.dim : palette.added;
-          const pathText = padToDisplayWidth(
-            displayColumnWindow(label, gitPanel.changesScrollLeft.value, changesActiveNameWidth),
-            changesActiveNameWidth,
-          );
-          const paint = (text: string, color: string) =>
-            background ? bg(background)(fg(color)(text)) : fg(color)(text);
-          chunks.push(paint(pathText, glyphColor(row.glyph)));
-          chunks.push(paint(` ${actionIcons.open}`, palette.accent));
-          chunks.push(paint(`  ${actionIcons.discard}`, palette.deleted));
-          chunks.push(paint(`  ${stageGlyph}`, stageColor));
-          chunks.push(paint(' ', palette.fg));
-          chunks.push(paint(' '.repeat(scrollbarThicknessCells()), palette.fg));
-          chunks.push(fg(palette.fg)('\n'));
-        } else {
-          pushRow(label, glyphColor(row.glyph), {
-            background,
-            scrollLeft: gitPanel.changesScrollLeft.value,
-            viewportWidth: changesViewportWidth,
-          });
-        }
-      }
+    const result = GitPaneRenderer.Class.render({
+      workspace: workspaceSet.active,
+      palette: readPalette(),
+      innerWidth,
+      bodyHeight: Math.max(1, (sidebar.height as number) - 2),
+      scrollbarThickness: scrollbarThicknessCells(),
+      gitActionAreaWidth,
+      actionIcons: theme.actionIcons,
+      checkboxIcons: theme.checkboxIcons,
     });
-    const changesRendered = Math.min(changeRows.length - changesTop, changesVisible);
-    for (let filler = changesRendered; filler < changesVisible; filler++) pushRow('', palette.fg);
-
-    pushRow('─'.repeat(innerWidth), palette.border);
-
-    // Commit log region (bottom) — virtualized over FLAT rows (inline commit expansion): an
-    // expanded commit is its header plus indented file rows (or a loading row while its lazy fetch
-    // is in flight). The SAME pure row model (git.log-rows.ts) serves the renderer here and the
-    // hit-tester/keyboard (Workspace.logRowAt), windowed by logScrollTop; only the visible
-    // commits' records (and the bounded expanded set) are consulted.
-    // invariant: Commit expansion is lazy and windowed (src/modules/git/git.invariants.md)
-    const logHeight = Math.max(1, bodyHeight - topHeight - 1);
-    const commitLog = workspaceSet.active.commitLog.value;
-    if (commitLog) {
-      const flatTop = gitPanel.logScrollTop.value;
-      const expandedEntries = workspaceSet.active.commitExpansion.value?.entries.value ?? [];
-      // O(window): at most logHeight commit records cover the flat window (expansion only
-      // DECREASES how many commits fit on screen).
-      const firstCommitIndex = GitLogRows.Class.commitIndexAtFlatRow(expandedEntries, flatTop);
-      const windowRecords = commitLog.rows(firstCommitIndex, logHeight);
-      const flatRows = GitLogRows.Class.commitLogRows(
-        flatTop,
-        logHeight,
-        expandedEntries,
-        (commitIndex) => windowRecords[commitIndex - firstCommitIndex],
-        commitLog.knownEnd.value,
-      );
-      flatRows.forEach((row, index) => {
-        const flatIndex = flatTop + index;
-        const selected = flatIndex === gitPanel.logIndex.value;
-        const selectionFocused = active && gitPanel.region.value === 'log';
-        const hovered = flatIndex === gitPanel.logHovered.value;
-        const background = selected
-          ? selectionFocused
-            ? palette.selection
-            : palette.cursorLine
-          : hovered
-            ? palette.cursorLine
-            : null;
-        const newline = index < flatRows.length - 1;
-        if (row.kind === 'commit') {
-          pushRow(commitLogRowText(row), row.record ? palette.fg : palette.dim, {
-            background,
-            newline,
-            scrollLeft: gitPanel.logScrollLeft.value,
-            viewportWidth: logViewportWidth,
-          });
-        } else if (row.kind === 'loading') {
-          pushRow(commitLogRowText(row), palette.dim, {
-            background,
-            newline,
-            scrollLeft: gitPanel.logScrollLeft.value,
-            viewportWidth: logViewportWidth,
-          });
-        } else {
-          pushRow(commitLogRowText(row), glyphColor(row.glyph), {
-            background,
-            newline,
-            scrollLeft: gitPanel.logScrollLeft.value,
-            viewportWidth: logViewportWidth,
-          });
-        }
-      });
-    }
-
-    // Geometry for the hit-testers (sidebar-relative rows; +1 = sidebar top border, +1 branch row).
-    gitPanelGeometry = {
-      changesTop,
-      changesRows: changesVisible,
-      dividerRow: 1 + 1 + changesVisible,
-      logTop: gitPanel.logScrollTop.value,
-      logRows: logHeight,
-    };
-    return new StyledText(chunks);
+    gitPanelGeometry = result.geometry;
+    return result.text;
   }
 
   function renderStatus(): string {
