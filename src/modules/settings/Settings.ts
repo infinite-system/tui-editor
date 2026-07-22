@@ -43,6 +43,7 @@ export interface SettingsValues {
   sidebarWidth: number;
   gitSplitRatio: number;
   diffSplitRatio: number;
+  markdownSplitRatio: number;
 }
 
 /** Narrow filesystem seam the store depends on — the whole surface a fake must satisfy. */
@@ -137,6 +138,9 @@ class $Settings {
   get diffSplitRatio(): Ref<number> {
     return ref(0.5);
   }
+  get markdownSplitRatio(): Ref<number> {
+    return ref(0.5);
+  }
 
   /** Every field keyed by name — the one place each name maps to its reactive cell. */
   private get fields(): { [Key in keyof SettingsValues]: Ref<SettingsValues[Key]> } {
@@ -156,6 +160,7 @@ class $Settings {
       sidebarWidth: this.sidebarWidth,
       gitSplitRatio: this.gitSplitRatio,
       diffSplitRatio: this.diffSplitRatio,
+      markdownSplitRatio: this.markdownSplitRatio,
     };
   }
 
@@ -297,6 +302,7 @@ class $Settings {
       sidebarWidth: 32,
       gitSplitRatio: 0.5,
       diffSplitRatio: 0.5,
+      markdownSplitRatio: 0.5,
     };
   }
 
@@ -337,6 +343,7 @@ class $Settings {
     readNumber('sidebarWidth');
     readNumber('gitSplitRatio');
     readNumber('diffSplitRatio');
+    readNumber('markdownSplitRatio');
     return result;
   }
 }

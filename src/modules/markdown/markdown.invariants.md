@@ -218,3 +218,115 @@ screen.
 **Status:** provisional
 
 **Last refined:** 2026-07-21
+
+### A Markdown file offers a live source preview split
+
+**Invariant:** If the active editor tab is a Markdown file and preview mode is enabled, then the
+editable source and the rendered current document appear together in two resizable panes.
+
+**Scope:** `Workspace.showingMarkdownPreview`, `RootView.syncDiffView`, `MarkdownSplitView`,
+`MarkdownPreview`, and the `previewToggle` tab-bar segment.
+
+**Mechanism:** The tab button and `markdown.togglePreview` action change one per-path Workspace mode.
+`RootView` mounts `MarkdownSplitView` in the live editor slot, moves the existing source renderable
+into its left pane, and opens the existing `MarkdownPreview` on the active `TextDocument` revision.
+One `SplitterModel` writes `Settings.markdownSplitRatio` live and persists it once on release.
+
+**Generates:** source-only default mode; source and preview together; live edit reparsing; one
+clickable and keyboard-bound toggle; persistent pane geometry.
+
+**Evidence:** `src/modules/markdown/MarkdownSplitView.ts`; live mount in
+`src/modules/ui/RootView.ts`; `scripts/smoke-markdown.sh` toggle and splitter drives.
+
+**Impossible if true:** enabling preview on an active Markdown tab while only raw source remains;
+editing source while the visible preview remains on an older revision; dragging the divider while
+both pane widths stay fixed; reopening the split at the default ratio after a completed drag.
+
+**Verification:** `bash scripts/smoke-markdown.sh`.
+
+**Status:** established
+
+**Last refined:** 2026-07-22
+
+### A file reference opens from rendered Markdown
+
+**Invariant:** If a rendered Markdown link or inline-code path resolves to a real file inside the
+workspace root, then Ctrl or Cmd click and the hovered Ctrl Enter chord open or focus that file tab.
+
+**Scope:** reference spans from `MarkdownParser`, `MarkdownRenderable.referenceAtCell`,
+`MarkdownSplitView` hover and activation, and `Workspace.resolveFileReference`.
+
+**Mechanism:** Rendering and hit-testing share the same visible `PreviewRow` and packed inline-span
+coordinates. Workspace resolution strips fragments, rejects external schemes and escapes, and
+confirms the target exists before routing through `Workspace.openFileInTab`.
+
+**Generates:** clickable standard Markdown links; clickable backtick file paths; hover emphasis and
+an explanatory tooltip; a keyboard activation chord; no-op external or missing targets.
+
+**Evidence:** `src/modules/markdown/MarkdownRenderable.ts` (`referenceAtCell`);
+`src/modules/markdown/MarkdownSplitView.ts` (`resolvedReferenceAt`, `openHoveredReference`);
+`src/modules/workspace/Workspace.ts` (`resolveFileReference`); `scripts/smoke-markdown.sh`.
+
+**Impossible if true:** a valid in-root backtick path being hovered but unable to open by either
+activation; an HTTP URL or path escaping the workspace being opened as an editor file; the drawn
+reference text and its clickable cells disagreeing.
+
+**Verification:** `bash scripts/smoke-markdown.sh`.
+
+**Status:** established
+
+**Last refined:** 2026-07-22
+
+### Markdown preview selection reuses editor drag behavior
+
+**Invariant:** If a user drags a selection in the rendered preview, then the shared editor drag-edge
+behavior extends one preview text range, autoscrolls that pane, and Ctrl C copies exactly that range.
+
+**Scope:** `MarkdownSplitView.createSelectionDragBehavior`, its read-only preview `Editor`,
+`MarkdownRenderable` cell mapping, and Bootstrap copy routing.
+
+**Mechanism:** `SelectionDragBehavior` receives preview-specific cell mapping and scroll callbacks,
+while the range itself lives in the existing `Editor.cursor` model and paints through
+`SelectableText`. The source editor keeps its own selection and remains the only paste target.
+
+**Generates:** preview drag selection; edge autoscroll; exact rendered-text copy; editable-source
+paste without a third selection model.
+
+**Evidence:** `src/modules/markdown/MarkdownSplitView.ts`; shared behavior tests in
+`src/modules/ui/SelectionDragBehavior.test.ts`; `scripts/smoke-markdown.sh`.
+
+**Impossible if true:** a preview drag highlight disappearing on repaint; a held edge drag leaving
+preview scroll and selection unchanged; Ctrl C copying raw Markdown punctuation absent from the
+rendered selection; Ctrl V mutating the read-only preview.
+
+**Verification:** `bun test src/modules/ui/SelectionDragBehavior.test.ts && bash scripts/smoke-markdown.sh`.
+
+**Status:** established
+
+**Last refined:** 2026-07-22
+
+### Markdown panes keep independent find state
+
+**Invariant:** If source and preview are searched in turn, then each pane retains its own query,
+match list, current match, and visible highlights when focus moves to the other pane.
+
+**Scope:** `FindBar.openForTarget`, source and preview target identifiers, RootView source
+highlighting, and `MarkdownRenderable` preview highlighting.
+
+**Mechanism:** `FindBar` stores one `FindInBuffer` engine per stable pane identifier instead of one
+global engine. Each renderer reads only its own retained engine, and each target owns match reveal.
+
+**Generates:** Ctrl F bound to the focused pane; simultaneous source and preview highlights; separate
+queries and match counters; find-only behavior in the read-only preview.
+
+**Evidence:** `src/modules/search/FindBar.ts`; `src/modules/ui/RootView.ts` (`findTarget`);
+`src/modules/markdown/MarkdownSplitView.ts` (`findTarget`); `scripts/smoke-markdown.sh`.
+
+**Impossible if true:** searching the preview replacing the source query or match list; a preview
+match moving the source cursor; a source match being painted in the preview pane.
+
+**Verification:** `bash scripts/smoke-markdown.sh`.
+
+**Status:** established
+
+**Last refined:** 2026-07-22

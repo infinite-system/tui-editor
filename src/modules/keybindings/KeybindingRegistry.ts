@@ -188,6 +188,26 @@ class $KeybindingRegistry {
     return effective;
   }
 
+  /** User-facing hint for the binding that is actually effective after all overlays and rebinds. */
+  bindingHint(action: string, context: string): string {
+    const binding = this.effectiveBindings(context).get(action);
+    const chordPatterns = binding?.steps ?? (binding?.chord ? [binding.chord] : []);
+    return chordPatterns.map((chordPattern) => {
+      const parts: string[] = [];
+      if (chordPattern.ctrl) parts.push('Ctrl');
+      if (chordPattern.alt) parts.push('Alt');
+      if (chordPattern.shift) parts.push('Shift');
+      if (chordPattern.super) parts.push('Cmd');
+      const keyLabel = chordPattern.key === 'return'
+        ? 'Enter'
+        : chordPattern.key.length === 1
+          ? chordPattern.key.toUpperCase()
+          : chordPattern.key[0]!.toUpperCase() + chordPattern.key.slice(1);
+      parts.push(keyLabel);
+      return parts.join('+');
+    }).join(' then ');
+  }
+
   /** Every action bound with `super` must also be reachable without it (the canonical floor).
    *  invariant: The canonical layer is the floor (keybindings.invariants.md) */
   actionsMissingCanonicalFloor(): string[] {

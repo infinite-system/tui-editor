@@ -81,6 +81,10 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   settings.load({ workspaceRoot: options.root ?? Environment.Class.cwd });
   const workspaceSet = new WorkspaceSet.Class(settings);
   workspaceSet.open(options.root ?? Environment.Class.cwd);
+  const keybindings = new KeybindingRegistry.Class();
+  keybindings.registerGuard('editorHasSelection', () => workspaceSet.active.editor.cursor.hasSelection);
+  keybindings.registerLayer('canonical', canonicalBindings);
+  keybindings.registerLayer('mac', macOverlayBindings);
   const bufferTabStrip = new TabStrip.Class('horizontal', () =>
     workspaceSet.active.buffers.tabs().map((bufferTab) => ({
       identifier: bufferTab.path,
@@ -121,6 +125,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     bufferTabStrip,
     workspaceTabStrip,
     theme,
+    keybindings,
     commands,
     app,
     contextMenu,
@@ -131,15 +136,12 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     overlayCoordinator,
   );
 
-  // Reveal the find bar's current match in the editor (the ONE writer of the editor selection): select
-  // the match range (anchor=start, cursor=end) and scroll it into view. Called after every find action.
+  // Reveal through the bound pane target: source, Markdown preview, and each diff side keep their own
+  // scroll/selection writer while FindBar retains independent engines for all of them.
   const revealFindMatch = (): void => {
     const match = findBar.engine?.currentMatch;
-    if (!match) return;
-    const editor = workspaceSet.active.editor;
-    editor.placeCursor(match.line, match.endColumn);
-    editor.cursor.anchor.value = { line: match.line, col: match.startColumn }; // after placeCursor -> selection
-    editor.revealCursor();
+    if (!match || !findBar.target) return;
+    findBar.target.revealMatch(match);
   };
 
   // Theme + glyph mode are settings-driven (single source): the panel edits settings.theme /
@@ -183,6 +185,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   const publish = (): void => {
     const editor = workspaceSet.active.editor;
     const diffView = view.activeDiffView();
+    const markdownSplitView = view.activeMarkdownSplitView();
     const openInputOverlays = [
       ...(findBar.open.value ? ['findBar'] : []),
       ...(quickOpen.open.value ? ['quickOpen'] : []),
@@ -217,6 +220,15 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       openInputOverlays,
       findOpen: findBar.open.value,
       findMode: findBar.mode.value,
+      findTarget: findBar.target?.identifier ?? null,
+      findQuery: findBar.engine?.query.value ?? '',
+      findMatchCount: findBar.engine?.matchCount ?? 0,
+      sourceFindQuery: editor.hasDocument.value
+        ? findBar.engineFor(`source:${editor.document.path}`)?.query.value ?? ''
+        : '',
+      markdownPreviewFindQuery: markdownSplitView
+        ? findBar.engineFor(markdownSplitView.previewFindTargetIdentifier())?.query.value ?? ''
+        : '',
       quickOpenOpen: quickOpen.open.value,
       paletteOpen: commands.open.value,
       paletteQuery: commands.open.value ? commands.query.value : '',
@@ -245,6 +257,12 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       diffSelectionChars: diffView?.selectionCharacterCount() ?? 0,
       diffSelection: diffView?.selectionRange() ?? null,
       diffSplitRatio: settings.diffSplitRatio.value,
+      markdownPreviewOpen: workspaceSet.active.showingMarkdownPreview,
+      markdownPaneFocus: markdownSplitView?.focusedPane.value ?? 'source',
+      markdownSplitRatio: settings.markdownSplitRatio.value,
+      markdownPreviewScrollTop: markdownSplitView?.preview.scrollTop.value ?? 0,
+      markdownPreviewSelectionChars: markdownSplitView?.selectionCharacterCount() ?? 0,
+      markdownHoveredReference: markdownSplitView?.hoveredReferencePath.value ?? null,
       settingsOpen: settingsPanel.open.value,
       settingsSelected: settingsPanel.selectedIndex.value,
       sidebarWidth: settings.sidebarWidth.value,
@@ -301,6 +319,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     void editor.viewport.scrollLeft.value;
     void editor.wordWrap.value;
     void settings.diffSplitRatio.value;
+    void settings.markdownSplitRatio.value;
     void settings.workspaceTabPosition.value;
     void workspaceSet.entries.value;
     void workspaceSet.activeWorkspaceIndex.value;
@@ -308,6 +327,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     void bufferTabStrip.scrollOffset.value;
     void workspaceSet.active.focus.value;
     void workspaceSet.active.sidebarView.value;
+    void workspaceSet.active.markdownPreviewPaths.value;
     void workspaceSet.active.tree.selectedIndex.value;
     void workspaceSet.active.tree.hoveredIndex.value;
     // Git state is produced asynchronously (refresh/log outlive boot); observe it so the sidebar
@@ -350,6 +370,8 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     void quickOpen.query.value;
     void quickOpen.selectedIndex.value;
     void findBar.open.value;
+    void findBar.engine?.query.value;
+    void findBar.engine?.matches.value;
     void commands.selectedIndex.value;
     void theme.paletteName.value;
     void app.quitChordArmed.value;
@@ -400,6 +422,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     // extending the selection.
     animating = view.tickDragAutoScroll(deltaTimeSeconds) || animating;
     animating = view.tickDiffMomentum(deltaTimeSeconds) || animating; // the open diff's fling glide
+    animating = view.tickMarkdownPreview(deltaTimeSeconds) || animating;
     // Tooltip dwell: the frame tick advances the timer; it's just another animation source, so it
     // folds into the SAME single-live-request model (holds a frame while counting, false at rest).
     animating = tooltip.tick(deltaTimeSeconds) || animating;
@@ -466,6 +489,10 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     hasOpenDiff: () => workspaceSet.active.showingDiff.value && view.activeDiffView() !== null,
     nextDiffChange: () => view.activeDiffView()?.jumpToNextChange(),
     previousDiffChange: () => view.activeDiffView()?.jumpToPreviousChange(),
+    toggleMarkdownPreview: () => workspaceSet.active.toggleMarkdownPreview(),
+    hasHoveredMarkdownReference: () =>
+      Boolean(view.activeMarkdownSplitView()?.hoveredReferencePath.value),
+    openHoveredMarkdownReference: () => view.activeMarkdownSplitView()?.openHoveredReference(),
   });
 
   // --- input: handlers MUTATE model state only; the frame effect repaints. -----------------
@@ -503,11 +530,6 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   // Keyboard: ONE decode layer (OpenTUI) -> registry resolution (pure data lookup) -> action
   // dispatch. No chord conditionals live here — bindings are data in keybindings.defaults/mac.
   // invariant: Bindings are intent addressed (src/modules/keybindings/keybindings.invariants.md)
-  const keybindings = new KeybindingRegistry.Class();
-  keybindings.registerGuard('editorHasSelection', () => workspaceSet.active.editor.cursor.hasSelection);
-  keybindings.registerLayer('canonical', canonicalBindings);
-  keybindings.registerLayer('mac', macOverlayBindings);
-
   // Git-panel helpers shared by the git action handlers (region-aware continuous flow).
   const currentChangeRows = () => {
     const git = workspaceSet.active.git.value;
@@ -550,16 +572,18 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   const actionHandlers: Record<string, (key: KeyEvent) => void> = {
     'app.quit': () => void shutdown(),
     'find.open': () => {
-      if (!workspaceSet.active.editor.hasDocument.value) return;
+      const target = view.findTarget();
+      if (!target) return;
       overlayCoordinator.openExclusiveOverlay('findBar', () =>
-        findBar.openFor(workspaceSet.active.editor.document, 'find'),
+        findBar.openForTarget(target, 'find'),
       );
       revealFindMatch();
     },
     'find.replace': () => {
-      if (!workspaceSet.active.editor.hasDocument.value) return;
+      const target = view.findTarget();
+      if (!target) return;
       overlayCoordinator.openExclusiveOverlay('findBar', () =>
-        findBar.openFor(workspaceSet.active.editor.document, 'replace'),
+        findBar.openForTarget(target, 'replace'),
       );
       revealFindMatch();
     },
@@ -598,6 +622,8 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'buffer.previous': () => workspaceSet.active.cycleTab(-1),
     'diff.nextChange': () => view.activeDiffView()?.jumpToNextChange(),
     'diff.previousChange': () => view.activeDiffView()?.jumpToPreviousChange(),
+    'markdown.togglePreview': () => workspaceSet.active.toggleMarkdownPreview(),
+    'markdown.openHoveredReference': () => view.activeMarkdownSplitView()?.openHoveredReference(),
     'git.togglePanel': () => {
       workspaceSet.active.toggleGit();
       if (workspaceSet.active.focus.value === 'git') {
@@ -683,37 +709,96 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'tree.leftCollapse': () => {
       if (workspaceSet.active.tree.selected?.isDir && workspaceSet.active.tree.selected.expanded) workspaceSet.active.activate();
     },
-    'editor.moveUp': (key) => workspaceSet.active.editor.moveVertical(-movementAcceleration(key), key.shift),
-    'editor.moveDown': (key) => workspaceSet.active.editor.moveVertical(movementAcceleration(key), key.shift),
-    'editor.moveLeft': (key) => workspaceSet.active.editor.moveHorizontal(-movementAcceleration(key), key.shift),
-    'editor.moveRight': (key) => workspaceSet.active.editor.moveHorizontal(movementAcceleration(key), key.shift),
-    'editor.pageUp': (key) => workspaceSet.active.editor.pageUp(key.shift),
-    'editor.pageDown': (key) => workspaceSet.active.editor.pageDown(key.shift),
-    'editor.lineStart': (key) => workspaceSet.active.editor.moveToLineStart(key.shift),
-    'editor.lineEnd': (key) => workspaceSet.active.editor.moveToLineEnd(key.shift),
+    'editor.moveUp': (key) => {
+      const markdownSplitView = view.activeMarkdownSplitView();
+      if (markdownSplitView?.previewFocused) markdownSplitView.moveByKeyboardRows(-movementAcceleration(key));
+      else workspaceSet.active.editor.moveVertical(-movementAcceleration(key), key.shift);
+    },
+    'editor.moveDown': (key) => {
+      const markdownSplitView = view.activeMarkdownSplitView();
+      if (markdownSplitView?.previewFocused) markdownSplitView.moveByKeyboardRows(movementAcceleration(key));
+      else workspaceSet.active.editor.moveVertical(movementAcceleration(key), key.shift);
+    },
+    'editor.moveLeft': (key) => {
+      if (!view.activeMarkdownSplitView()?.previewFocused) {
+        workspaceSet.active.editor.moveHorizontal(-movementAcceleration(key), key.shift);
+      }
+    },
+    'editor.moveRight': (key) => {
+      if (!view.activeMarkdownSplitView()?.previewFocused) {
+        workspaceSet.active.editor.moveHorizontal(movementAcceleration(key), key.shift);
+      }
+    },
+    'editor.pageUp': (key) => {
+      const markdownSplitView = view.activeMarkdownSplitView();
+      if (markdownSplitView?.previewFocused) markdownSplitView.pageByKeyboard(-1);
+      else workspaceSet.active.editor.pageUp(key.shift);
+    },
+    'editor.pageDown': (key) => {
+      const markdownSplitView = view.activeMarkdownSplitView();
+      if (markdownSplitView?.previewFocused) markdownSplitView.pageByKeyboard(1);
+      else workspaceSet.active.editor.pageDown(key.shift);
+    },
+    'editor.lineStart': (key) => {
+      if (!view.activeMarkdownSplitView()?.previewFocused) workspaceSet.active.editor.moveToLineStart(key.shift);
+    },
+    'editor.lineEnd': (key) => {
+      if (!view.activeMarkdownSplitView()?.previewFocused) workspaceSet.active.editor.moveToLineEnd(key.shift);
+    },
     'editor.jumpUp': (key) =>
-      workspaceSet.active.editor.moveVertical(-ScrollPhysics.Class.jumpRows(movementRun(key)), key.shift),
+      view.activeMarkdownSplitView()?.previewFocused
+        ? view.activeMarkdownSplitView()?.moveByKeyboardRows(-ScrollPhysics.Class.jumpRows(movementRun(key)))
+        : workspaceSet.active.editor.moveVertical(-ScrollPhysics.Class.jumpRows(movementRun(key)), key.shift),
     'editor.jumpDown': (key) =>
-      workspaceSet.active.editor.moveVertical(ScrollPhysics.Class.jumpRows(movementRun(key)), key.shift),
-    'editor.wordLeft': (key) => workspaceSet.active.editor.moveWordHorizontal(-1, key.shift),
-    'editor.wordRight': (key) => workspaceSet.active.editor.moveWordHorizontal(1, key.shift),
-    'editor.documentStart': (key) => workspaceSet.active.editor.moveDocumentStart(key.shift),
-    'editor.documentEnd': (key) => workspaceSet.active.editor.moveDocumentEnd(key.shift),
-    'editor.newline': () => workspaceSet.active.editor.insertNewline(),
-    'editor.backspace': () => workspaceSet.active.editor.backspace(),
-    'editor.delete': () => workspaceSet.active.editor.deleteChar(),
-    'edit.deletePreviousWord': () => commands.run('edit.deletePreviousWord'),
+      view.activeMarkdownSplitView()?.previewFocused
+        ? view.activeMarkdownSplitView()?.moveByKeyboardRows(ScrollPhysics.Class.jumpRows(movementRun(key)))
+        : workspaceSet.active.editor.moveVertical(ScrollPhysics.Class.jumpRows(movementRun(key)), key.shift),
+    'editor.wordLeft': (key) => {
+      if (!view.activeMarkdownSplitView()?.previewFocused) workspaceSet.active.editor.moveWordHorizontal(-1, key.shift);
+    },
+    'editor.wordRight': (key) => {
+      if (!view.activeMarkdownSplitView()?.previewFocused) workspaceSet.active.editor.moveWordHorizontal(1, key.shift);
+    },
+    'editor.documentStart': (key) => {
+      if (!view.activeMarkdownSplitView()?.previewFocused) workspaceSet.active.editor.moveDocumentStart(key.shift);
+    },
+    'editor.documentEnd': (key) => {
+      if (!view.activeMarkdownSplitView()?.previewFocused) workspaceSet.active.editor.moveDocumentEnd(key.shift);
+    },
+    'editor.newline': () => {
+      if (!view.activeMarkdownSplitView()?.previewFocused) workspaceSet.active.editor.insertNewline();
+    },
+    'editor.backspace': () => {
+      if (!view.activeMarkdownSplitView()?.previewFocused) workspaceSet.active.editor.backspace();
+    },
+    'editor.delete': () => {
+      if (!view.activeMarkdownSplitView()?.previewFocused) workspaceSet.active.editor.deleteChar();
+    },
+    'edit.deletePreviousWord': () => {
+      if (!view.activeMarkdownSplitView()?.previewFocused) commands.run('edit.deletePreviousWord');
+    },
     'editor.escape': () => {
-      if (workspaceSet.active.editor.hasSelection) workspaceSet.active.editor.cursor.clearSelection();
+      const markdownSplitView = view.activeMarkdownSplitView();
+      if (markdownSplitView?.previewFocused) markdownSplitView.focusSource();
+      else if (workspaceSet.active.editor.hasSelection) workspaceSet.active.editor.cursor.clearSelection();
       else workspaceSet.active.focusFiles();
     },
     'editor.save': () => workspaceSet.active.saveActiveFile(),
-    'editor.selectAll': () => workspaceSet.active.editor.selectAll(),
+    'editor.selectAll': () => {
+      const markdownSplitView = view.activeMarkdownSplitView();
+      if (markdownSplitView?.previewFocused) markdownSplitView.selectAll();
+      else workspaceSet.active.editor.selectAll();
+    },
     'editor.copy': () => {
       // Publish how many characters landed on the clipboard — the observable proof that copy
       // actually copied (the human-QA "cannot copy" bug's verification channel).
       const diffView = workspaceSet.active.showingDiff.value ? view.activeDiffView() : null;
-      const copyPromise = diffView ? diffView.copySelection() : workspaceSet.active.editor.copySelection();
+      const markdownSplitView = view.activeMarkdownSplitView();
+      const copyPromise = diffView
+        ? diffView.copySelection()
+        : markdownSplitView?.previewFocused
+          ? markdownSplitView.copySelection()
+          : workspaceSet.active.editor.copySelection();
       void copyPromise.then((copiedCharacters) => {
         if (copiedCharacters > 0) {
           app.copyNotice.value = `Copied ${copiedCharacters} chars (${Clipboard.Class.lastBackend ?? 'no backend'})`;
@@ -726,10 +811,18 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
         StatusChannel.Class.flush();
       });
     },
-    'editor.cut': () => void workspaceSet.active.editor.cutSelection(),
-    'editor.paste': () => void workspaceSet.active.editor.pasteClipboard(),
-    'editor.undo': () => workspaceSet.active.editor.performUndo(),
-    'editor.redo': () => workspaceSet.active.editor.performRedo(),
+    'editor.cut': () => {
+      if (!view.activeMarkdownSplitView()?.previewFocused) void workspaceSet.active.editor.cutSelection();
+    },
+    'editor.paste': () => {
+      if (!view.activeMarkdownSplitView()?.previewFocused) void workspaceSet.active.editor.pasteClipboard();
+    },
+    'editor.undo': () => {
+      if (!view.activeMarkdownSplitView()?.previewFocused) workspaceSet.active.editor.performUndo();
+    },
+    'editor.redo': () => {
+      if (!view.activeMarkdownSplitView()?.previewFocused) workspaceSet.active.editor.performRedo();
+    },
     'editor.toggleWordWrap': () => workspaceSet.active.editor.toggleWordWrap(),
     'menu.previous': () => contextMenu.moveSelection(-1),
     'menu.next': () => contextMenu.moveSelection(1),
@@ -910,7 +1003,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     // both are {name:'a', ctrl:true}), and ONLY when Kitty is active — on a legacy terminal a raw ^A
     // really is Ctrl+A and must stay Select All. (Cmd+Right = raw ^E is handled by the Ctrl+E binding,
     // which is harmless because Ctrl+E was unbound.) Driven-verified against the real byte streams.
-    if (context === 'editor' && renderer.useKittyKeyboard && key.ctrl && key.name === 'a' && key.sequence === '\u0001') {
+    if (context === 'editor' && !view.activeMarkdownSplitView()?.previewFocused && renderer.useKittyKeyboard && key.ctrl && key.name === 'a' && key.sequence === '\u0001') {
       workspaceSet.active.editor.moveToLineStart(key.shift);
       return;
     }
@@ -929,7 +1022,12 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
           case 'right': diff.moveByKeyboardColumns(1); return;
           case 'n': diff.jumpToNextChange(); return;
           case 'p': diff.jumpToPreviousChange(); return;
-          case 'return': diff.openFull(); return;
+          case 'return':
+            if (!key.ctrl) {
+              diff.openFull();
+              return;
+            }
+            break;
           case 'escape': workspaceSet.active.showingDiff.value = false; workspaceSet.active.diffRequest.value = null; return;
           default: break;
         }
@@ -951,7 +1049,11 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     if (resolution.chordPending) return;
     // Residual defaults: unbound printable keys TYPE in type-accepting contexts.
     if (context === 'palette' && isTypedCharacter(key)) commands.appendQuery(key.sequence);
-    else if (context === 'editor' && isTypedCharacter(key)) workspaceSet.active.editor.insertText(key.sequence);
+    else if (
+      context === 'editor' &&
+      isTypedCharacter(key) &&
+      !view.activeMarkdownSplitView()?.previewFocused
+    ) workspaceSet.active.editor.insertText(key.sequence);
     // No explicit render here — any model mutation above triggers the frame effect.
   };
   // A throw while handling a keystroke must not wedge the loop: isolate + repaint so the app stays

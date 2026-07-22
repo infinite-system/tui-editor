@@ -42,6 +42,19 @@ test('renders only the visible window of rows', async () => {
   expect(scrolled.some((row) => row.block?.text.includes('Paragraph number 0.'))).toBe(false);
 });
 
+// invariant: Markdown panes keep independent find state (src/modules/markdown/markdown.invariants.md)
+test('exposes the complete rendered row domain for preview find and selection mapping', async () => {
+  const preview = new MarkdownPreview.Class();
+  preview.open(makeSource('# Rendered heading\n\nFirst paragraph.\n\nSecond paragraph.'), null, { debounceMs: 0 });
+  await tick();
+  await tick();
+
+  const allRows = preview.allRows(80);
+  expect(allRows.length).toBe(preview.totalRows(80));
+  expect(allRows.map((row) => preview.textForRow(row)).join('\n')).toContain('Rendered heading');
+  expect(allRows.map((row) => preview.textForRow(row)).join('\n')).not.toContain('# Rendered heading');
+});
+
 // invariant: Closing releases all preview work (src/modules/markdown/markdown.invariants.md)
 test('close releases the document and leaves no active render effect', async () => {
   const source = makeSource('# Live\n\nbody');

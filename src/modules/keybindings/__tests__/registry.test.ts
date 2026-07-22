@@ -185,4 +185,17 @@ describe('effective bindings (deliverability honesty)', () => {
     const after = registry.effectiveBindings('editor').get('editor.save');
     expect(after?.chord?.key).toBe('w');
   });
+
+  test('the hint formats the post-shadowing chord rather than a hard-coded default', () => {
+    const registry = new KeybindingRegistry.Class();
+    registry.registerLayer('canonical', [
+      { chord: { key: 'v', ctrl: true, shift: true }, action: 'markdown.togglePreview' },
+    ]);
+    expect(registry.bindingHint('markdown.togglePreview', 'editor')).toBe('Ctrl+Shift+V');
+
+    registry.registerLayer('user', [
+      { chord: { key: 'm', alt: true }, action: 'markdown.togglePreview', context: 'editor' },
+    ]);
+    expect(registry.bindingHint('markdown.togglePreview', 'editor')).toBe('Alt+M');
+  });
 });

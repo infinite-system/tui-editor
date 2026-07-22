@@ -17,6 +17,7 @@ export interface ActionIconSet {
   discard: string;
   stage: string;
   unstage: string;
+  preview: string;
 }
 
 /** Single-cell staging checkbox glyphs (unchecked ↔ checked) for the git changes rows. */
@@ -67,9 +68,9 @@ const SETS: Record<GlyphLevel, IconSet> = {
 // Action-button glyph ladder. nerd = nerd-font glyphs; unicode = single-cell symbols; ascii = the
 // letter fallback (o/d/+/-) so a no-nerd-font terminal still reads. Each glyph is exactly one cell.
 const ACTION_ICONS: Record<GlyphLevel, ActionIconSet> = {
-  nerd: { open: '\u{f08e}', discard: '\u{f0e2}', stage: '\u{f067}', unstage: '\u{f068}' }, // fa external-link / undo / plus / minus
-  unicode: { open: '↗', discard: '↩', stage: '✚', unstage: '−' },
-  ascii: { open: 'o', discard: 'd', stage: '+', unstage: '-' },
+  nerd: { open: '\u{f08e}', discard: '\u{f0e2}', stage: '\u{f067}', unstage: '\u{f068}', preview: '\u{f06e}' }, // fa external-link / undo / plus / minus / eye
+  unicode: { open: '↗', discard: '↩', stage: '✚', unstage: '−', preview: '◫' },
+  ascii: { open: 'o', discard: 'd', stage: '+', unstage: '-', preview: 'p' },
 };
 
 // Staging-checkbox glyph ladder. nerd = fa square / check-square; unicode = ballot box ☐/☑;

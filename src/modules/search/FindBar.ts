@@ -6,11 +6,26 @@ import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
 import type { TextDocument } from '../editor/TextDocument';
 import { TextEditing } from '../editor/TextEditing';
-import { FindInBuffer } from './FindInBuffer';
+import { FindInBuffer, type FindInBufferMatch } from './FindInBuffer';
 
 export type FindBarMode = 'find' | 'replace';
 
+/** One independently searchable text pane. The identifier preserves its query/matches while focus
+ * moves to another pane; revealMatch is the pane's sole scroll/selection writer. */
+export interface FindBarTarget {
+  identifier: string;
+  document: TextDocument.Instance;
+  replaceAllowed: boolean;
+  revealMatch(match: FindInBufferMatch): void;
+}
+
 class $FindBar {
+  // invariant: Markdown panes keep independent find state (src/modules/markdown/markdown.invariants.md)
+  // invariant: Diff panes keep independent find state (src/modules/diff/diff.invariants.md)
+  private readonly enginesByTargetIdentifier = new Map<string, FindInBuffer.Instance>();
+  private readonly documentIdentifiers = new WeakMap<object, string>();
+  private nextDocumentIdentifier = 0;
+
   get open() {
     return ref(false);
   }
@@ -24,8 +39,14 @@ class $FindBar {
   get engineRef() {
     return shallowRef<FindInBuffer.Instance | null>(null);
   }
+  get targetRef() {
+    return shallowRef<FindBarTarget | null>(null);
+  }
   get engine(): FindInBuffer.Instance | null {
     return this.engineRef.value;
+  }
+  get target(): FindBarTarget | null {
+    return this.targetRef.value;
   }
 
   protected createEngine(document: TextDocument.Instance) {
@@ -35,13 +56,37 @@ class $FindBar {
   /** Open (or re-open) the bar over the ACTIVE document; a document swap makes a fresh engine so the
    *  matches are always the current buffer's. Seeds matches immediately so a count shows at once. */
   openFor(document: TextDocument.Instance, mode: FindBarMode): void {
-    if (!this.engineRef.value || this.engineRef.value.document !== document) {
-      this.engineRef.value = this.createEngine(document);
+    let identifier = this.documentIdentifiers.get(document as object);
+    if (!identifier) {
+      identifier = `document-${++this.nextDocumentIdentifier}`;
+      this.documentIdentifiers.set(document as object, identifier);
     }
+    this.openForTarget({
+      identifier,
+      document,
+      replaceAllowed: true,
+      revealMatch: () => {},
+    }, mode);
+  }
+
+  /** Bind the bar to one pane without discarding any other pane's query or matches. */
+  openForTarget(target: FindBarTarget, mode: FindBarMode): void {
+    let engine = this.enginesByTargetIdentifier.get(target.identifier);
+    if (!engine || engine.document !== target.document) {
+      engine = this.createEngine(target.document);
+      this.enginesByTargetIdentifier.set(target.identifier, engine);
+    }
+    this.engineRef.value = engine;
+    this.targetRef.value = target;
     this.open.value = true;
-    this.mode.value = mode;
+    this.mode.value = target.replaceAllowed ? mode : 'find';
     this.replaceFocused.value = false;
     this.engine?.findAll();
+  }
+
+  /** Read a pane's retained engine so its highlights remain visible while another pane is searched. */
+  engineFor(targetIdentifier: string): FindInBuffer.Instance | null {
+    return this.enginesByTargetIdentifier.get(targetIdentifier) ?? null;
   }
 
   close(): void {

@@ -22,9 +22,9 @@ mkdir -p "$(dirname "$SET")"
 export PATH="$HOME/.bun/bin:$PATH"
 
 # EVERY schema field must be listed here with a real drive below. Keep in sync with Settings' schema; the
-# meta-gate enforces it. diffSplitRatio's real applied-effect drive lives in smoke-diff-overview.sh:
-# drag the divider, assert pane movement, reopen a second diff, assert the persisted split column.
-COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap workspaceTabPosition sidebarWidth gitSplitRatio diffSplitRatio"
+# meta-gate enforces it. diffSplitRatio and markdownSplitRatio are driven by their real split-pane
+# smokes: drag the divider, assert pane movement, then assert the persisted ratio is reused.
+COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap workspaceTabPosition sidebarWidth gitSplitRatio diffSplitRatio markdownSplitRatio"
 
 # ---- schema-enumeration META-GATE (cheap; the enforcing check) -------------------------------------
 meta_gate() {
@@ -92,18 +92,22 @@ SESSIONS=""
 
 # scrollTop after ONE wheel-down over the editor of the long fixture, with the given settings patch fn.
 scrolltop_after_notch() { # <session> <sgr-button>
-  local S="$1" btn="$2"
-  "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" bun run src/main.ts "$LONG" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null
-  open_file "$S"
-  tmux send-keys -t "$S" -l "$(printf '\033[<%d;60;12M' "$btn")"; sleep 0.5; "$H" settle "$S" >/dev/null 2>&1
-  "$H" field "$S" editorScrollTop
+  local session_name="$1" sgr_button="$2" measured_scroll_top
+  "$H" launch "$session_name" 120x40 env HOME="$SETTINGS_HOME" bun run src/main.ts "$LONG" >/dev/null; "$H" ready "$session_name" 20 >/dev/null
+  open_file "$session_name"
+  tmux send-keys -t "$session_name" -l "$(printf '\033[<%d;60;12M' "$sgr_button")"; sleep 0.5; "$H" settle "$session_name" >/dev/null 2>&1
+  measured_scroll_top="$("$H" field "$session_name" editorScrollTop)"
+  "$H" kill "$session_name" >/dev/null 2>&1
+  printf '%s\n' "$measured_scroll_top"
 }
 scrolltop_after_fling() { # <session> — many fast wheel-downs (a hard fling)
-  local S="$1"
-  "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" bun run src/main.ts "$LONG" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null
-  open_file "$S"
-  for _ in $(seq 1 10); do tmux send-keys -t "$S" -l "$(printf '\033[<65;60;12M')"; sleep 0.03; done; sleep 1.2; "$H" settle "$S" >/dev/null 2>&1
-  "$H" field "$S" editorScrollTop
+  local session_name="$1" measured_scroll_top
+  "$H" launch "$session_name" 120x40 env HOME="$SETTINGS_HOME" bun run src/main.ts "$LONG" >/dev/null; "$H" ready "$session_name" 20 >/dev/null
+  open_file "$session_name"
+  for _ in $(seq 1 10); do tmux send-keys -t "$session_name" -l "$(printf '\033[<65;60;12M')"; sleep 0.03; done; sleep 1.2; "$H" settle "$session_name" >/dev/null 2>&1
+  measured_scroll_top="$("$H" field "$session_name" editorScrollTop)"
+  "$H" kill "$session_name" >/dev/null 2>&1
+  printf '%s\n' "$measured_scroll_top"
 }
 
 echo "== linesPerNotch: bigger notch scrolls further =="
