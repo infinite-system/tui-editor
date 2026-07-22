@@ -134,6 +134,39 @@ that returns text split mid-grapheme; a paste that inserts without removing the 
 
 **Last refined:** 2026-07-21
 
+### Word deletion uses the navigation boundary
+
+**Invariant:** If delete-previous-word runs in the editor or a text input at position P, then it
+deletes exactly the half-open range `[wordLeft(P), P]` computed by the same `TextEditing.wordLeft`
+boundary that editor word navigation uses; an active editor selection is deleted instead.
+
+**Scope:** `TextEditing`, `Editor.moveWordHorizontal`, `Editor.deletePreviousWord`, and every present
+text input: command-palette query, `QuickOpen.query`, and both `FindBar` fields. A settings or
+find-in-files text field inherits this rule when one exists; the current settings panel has no text
+field and the current search view is not mounted.
+
+**Mechanism:** `TextEditing.deletePreviousWord` calls `TextEditing.wordLeft` and returns the deletion
+range plus edited text. Editor navigation consumes `wordLeft`; editor deletion consumes the shared
+deletion range through `TextDocument.deleteRange`; input models consume its edited text. Newlines are
+hard boundaries, so deleting at line start removes only the newline and joins the preceding line.
+
+**Generates:** One grapheme-safe boundary for navigation and deletion; identical word, whitespace,
+punctuation, and line-boundary behavior across editor and text inputs; one undo step per editor word
+deletion.
+
+**Evidence:** `src/modules/editor/TextEditing.ts`; `src/modules/editor/Editor.ts`;
+`src/modules/editor/__tests__/TextEditing.test.ts`; `scripts/smoke-word-delete.sh`.
+
+**Impossible if true:** word navigation jumping to one position while word deletion starts at another;
+Alt+Delete closing a buffer; a find, replace, quick-open, or palette query deleting a different span
+than the editor for the same text and cursor position.
+
+**Verification:** `bun test src/modules/editor/__tests__/TextEditing.test.ts && bash scripts/smoke-word-delete.sh`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-21
+
 ### Word wrap is a pure view mapping
 
 **Invariant:** If word wrap is on, then rendering, the caret, selection, mouse hit-testing, and

@@ -32,6 +32,13 @@ test('registry filters by query and runs the selected command', () => {
   expect(registry.open.value).toBe(false);
 });
 
+test('palette word deletion uses the shared text boundary', () => {
+  const registry = new CommandRegistry.Class();
+  registry.setQuery('open file');
+  registry.deletePreviousQueryWord();
+  expect(registry.query.value).toBe('open ');
+});
+
 test('when() gates command availability', () => {
   const registry = new CommandRegistry.Class();
   let enabled = false;

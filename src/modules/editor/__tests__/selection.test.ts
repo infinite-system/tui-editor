@@ -63,6 +63,17 @@ test('backspace deletes the selection', () => {
   expect(editor.document.line(0)).toBe('abf');
 });
 
+test('deletePreviousWord deletes an active selection instead of a word', () => {
+  const editor = editorWith('one two three');
+  editor.cursor.set(0, 4);
+  editor.cursor.setAnchorHere();
+  editor.cursor.set(0, 7);
+  editor.deletePreviousWord();
+  expect(editor.document.line(0)).toBe('one  three');
+  expect(editor.cursor.col.value).toBe(4);
+  expect(editor.hasSelection).toBe(false);
+});
+
 test('selectAll + selectionText spans the document', () => {
   const editor = editorWith('one\ntwo');
   editor.selectAll();

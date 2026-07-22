@@ -1,6 +1,7 @@
 import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
 import { CommandScoring } from '../commands/CommandScoring';
+import { TextEditing } from '../editor/TextEditing';
 import { Processes } from '../system/Processes';
 
 export interface QuickOpenMatch {
@@ -68,6 +69,11 @@ class $QuickOpen {
   setQuery(text: string): void {
     this.query.value = text;
     this.refilter();
+  }
+
+  // invariant: Word deletion uses the navigation boundary (src/modules/editor/editor.invariants.md)
+  deletePreviousWord(): void {
+    this.setQuery(TextEditing.Class.deletePreviousWord(this.query.value).text);
   }
 
   /** Move the active match without wrapping beyond either end of the list. */

@@ -49,6 +49,28 @@ test('deleteForward at end of line joins the next line', () => {
   expect(editor.document.lineCount).toBe(1);
 });
 
+test('deletePreviousWord uses the navigation boundary and is one undo step', () => {
+  const editor = openWith('hello world');
+  editor.cursor.set(0, 11);
+  editor.moveWordHorizontal(-1);
+  expect(editor.cursor.col.value).toBe(6);
+  editor.cursor.set(0, 11);
+  editor.deletePreviousWord();
+  expect(editor.document.line(0)).toBe('hello ');
+  expect(editor.cursor.col.value).toBe(6);
+  editor.performUndo();
+  expect(editor.document.line(0)).toBe('hello world');
+});
+
+test('deletePreviousWord at line start deletes only the newline', () => {
+  const editor = openWith('ab\ncd');
+  editor.cursor.set(1, 0);
+  editor.deletePreviousWord();
+  expect(editor.document.lines).toEqual(['abcd']);
+  expect(editor.cursor.line.value).toBe(0);
+  expect(editor.cursor.col.value).toBe(2);
+});
+
 test('save writes the buffer and clears dirty', () => {
   const editor = openWith('x');
   editor.insertText('y');

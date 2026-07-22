@@ -92,6 +92,7 @@ if [ "${FAST:-0}" != "1" ]; then
   step "smoke: wrap"        bash scripts/smoke-wrap.sh
   step "smoke: git-watch"   bash scripts/smoke-git-watch.sh
   step "smoke: find"        bash scripts/smoke-find.sh
+  step "smoke: word-delete" bash scripts/smoke-word-delete.sh
   step "smoke: quick-open"  bash scripts/smoke-quickopen.sh
   step "smoke: gutter-diff" bash scripts/smoke-gutter-diff.sh
   # 5) The REAL settings applied-effect drives (all 13 fields, not just the --meta enumeration).

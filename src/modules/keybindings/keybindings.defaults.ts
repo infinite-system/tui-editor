@@ -40,6 +40,14 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 'up' }, action: 'palette.previous', context: 'palette' },
   { chord: { key: 'down' }, action: 'palette.next', context: 'palette' },
   { chord: { key: 'backspace' }, action: 'palette.erase', context: 'palette' },
+  { chord: { key: 'backspace', alt: true }, action: 'palette.eraseWord', context: 'palette' },
+  { chord: { key: 'delete', alt: true }, action: 'palette.eraseWord', context: 'palette' },
+
+  // --- text inputs (query editing stays intent-addressed even though typed characters are residuals) ---
+  { chord: { key: 'backspace', alt: true }, action: 'quickopen.eraseWord', context: 'quickopen' },
+  { chord: { key: 'delete', alt: true }, action: 'quickopen.eraseWord', context: 'quickopen' },
+  { chord: { key: 'backspace', alt: true }, action: 'find.eraseWord', context: 'find' },
+  { chord: { key: 'delete', alt: true }, action: 'find.eraseWord', context: 'find' },
 
   // --- context menu (modal while open: Bootstrap resolves ONLY in this context and consumes
   //     everything unbound by closing the menu — see the modal block in Bootstrap.onKey) ---
@@ -104,6 +112,10 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 'return' }, action: 'editor.newline', context: 'editor' },
   { chord: { key: 'backspace' }, action: 'editor.backspace', context: 'editor' },
   { chord: { key: 'delete' }, action: 'editor.delete', context: 'editor' },
+  // OpenTUI decodes macOS Option+Backspace ESC DEL as backspace+meta and modified Delete as
+  // delete+option; Bootstrap normalizes either modifier to this `alt` slot. Both delete a word.
+  { chord: { key: 'backspace', alt: true }, action: 'edit.deletePreviousWord', context: 'editor' },
+  { chord: { key: 'delete', alt: true }, action: 'edit.deletePreviousWord', context: 'editor' },
   { chord: { key: 'escape' }, action: 'editor.escape', context: 'editor' },
   // --- editor: chords ---
   { chord: { key: 's', ctrl: true }, action: 'editor.save', context: 'editor' },

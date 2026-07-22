@@ -8,6 +8,7 @@
 import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
 import { CommandScoring } from './CommandScoring';
+import { TextEditing } from '../editor/TextEditing';
 
 export interface Command {
   id: string;
@@ -105,6 +106,11 @@ class $CommandRegistry {
 
   backspaceQuery(): void {
     this.setQuery(this.query.value.slice(0, -1));
+  }
+
+  // invariant: Word deletion uses the navigation boundary (src/modules/editor/editor.invariants.md)
+  deletePreviousQueryWord(): void {
+    this.setQuery(TextEditing.Class.deletePreviousWord(this.query.value).text);
   }
 
   moveSelection(delta: number): void {
