@@ -139,6 +139,13 @@ function $registerDefaultCommands(
       run: context.openHoveredMarkdownReference,
     },
     {
+      id: 'go.definition',
+      title: 'Go: Definition',
+      category: 'Go',
+      when: hasDocument,
+      run: () => void context.workspaceSet.active.goToDefinition(),
+    },
+    {
       id: 'go.top',
       title: 'Go: Top of File',
       category: 'Go',

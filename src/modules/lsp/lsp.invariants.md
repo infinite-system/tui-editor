@@ -190,6 +190,58 @@ LSP is missing, slow, or has died.
 
 **Last refined:** 2026-07-21
 
+### A definition gesture jumps to the declaration
+
+**Invariant:** If the user Ctrl/Cmd+clicks a symbol in a supported document (or presses F12 at
+the cursor), then the editor resolves the symbol through the language client's
+`textDocument/definition`, opens the declaring file as a tab, and lands the cursor on the
+declaration — and when no definition is available (no document, unsupported file, absent server,
+empty result) the gesture degrades to a silent no-op, never a crash.
+
+**Scope:** The `Workspace.goToDefinition` jump path, the Ctrl/Cmd+click branch of
+`codeBody.onMouseDown` in `RootView`, and the `go.definition` command/F12 binding. Not hover or
+references, which reuse the same client but are wired separately.
+
+**Mechanism:** Stands on *LSP positions cross through UTF-16* and *Server failures remain
+contained*. `documentPositionAtCell` already yields grapheme columns — exactly what
+`LanguageClient.definition` takes — so the pointer gesture and the cursor position feed one
+`Workspace.goToDefinition` method. The result flows through the existing
+`openFileInTab` → `placeCursor` → `revealCursor` path (no parallel navigation). The real server
+returns the IMPORT SPECIFIER while the declaring file is not open in the server; one re-request
+from the import specifier (`rehopThroughImportSpecifier`) reaches the original declaration,
+matching VS Code. Per-workspace lifecycle: every live buffer registers through the
+`OpenBufferSet` create/dispose seams (`openDocument`/`closeDocument`), and a targeted
+document-revision watch in Bootstrap pushes edits as revision-idempotent `didChange`.
+
+**Generates:** `Workspace.goToDefinition`/`rehopThroughImportSpecifier`/`jumpToLocation`; the
+lazy one-client-per-workspace ownership (`ensureLanguageClient`, disposed with the workspace);
+the consumed (never selection-starting) modifier-click branch; the `go.definition` command and
+its F12 floor binding.
+
+**Rejected alternatives:** A separate navigation path for LSP jumps (parallel to
+`openFileInTab`) — two openers would drift on tab/diff/focus semantics. Treating the import
+specifier result as final — lands the user on the import line instead of the declaration.
+
+**Evidence:** `src/modules/workspace/Workspace.ts` (`goToDefinition`,
+`rehopThroughImportSpecifier`, `jumpToLocation`, the buffer-seam `openDocument`/`closeDocument`
+registration); `src/modules/ui/RootView.ts` (`codeBody.onMouseDown` modifier branch);
+`src/modules/app/Bootstrap.ts` (`'go.definition'` action + the document-revision sync watch);
+`src/modules/keybindings/keybindings.defaults.ts` (F12 → `go.definition`). Driven against a real
+`typescript-language-server`: `scripts/smoke-goto-definition.sh` Ctrl+clicks a use site in
+`bar.ts` and asserts the editor shows `foo.ts` with the cursor on the declaration, then repeats
+the jump via F12.
+
+**Impossible if true:** A Ctrl/Cmd+click on a resolvable symbol that starts a text selection
+instead of jumping; a jump that opens the declaring file but leaves the cursor away from the
+declaration; a crash or thrown error from the gesture when the server is missing.
+
+**Verification:** `bash scripts/smoke-goto-definition.sh` (skips cleanly when no server is
+installed) and `bun test src/modules/workspace/Workspace.goToDefinition.test.ts`.
+
+**Status:** provisional
+
+**Last refined:** 2026-07-22
+
 ### Diagnostic updates match current revisions
 
 **Invariant:** If a `publishDiagnostics` batch is applied to a document, then the revision it is

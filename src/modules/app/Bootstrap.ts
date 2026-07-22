@@ -177,6 +177,17 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     () => workspaceSet.active.git.value?.lastRefreshAt.value ?? null,
     () => void workspaceSet.active.refreshActiveHeadText(),
   );
+  // Language-server document sync: every edit bumps document.revision; this targeted watch pushes
+  // the new text as a revision-idempotent full-text didChange (LanguageClient skips versions it
+  // already sent). A TARGETED watch, not a $watchEffect — the handler must depend on the revision
+  // signal only, never on the other state syncActiveDocumentWithLanguageServer reads.
+  app.$watch(
+    () => {
+      const editor = workspaceSet.active.editor;
+      return editor.hasDocument.value ? editor.document.revision.value : -1;
+    },
+    () => workspaceSet.active.syncActiveDocumentWithLanguageServer(),
+  );
 
   // Last mouse event seen (for the observability side channel — proves the mouse path is live).
   let lastMouse: { type: string; x: number; y: number; button: number } | null = null;
@@ -618,6 +629,8 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'diff.previousChange': () => view.activeDiffView()?.jumpToPreviousChange(),
     'markdown.togglePreview': () => workspaceSet.active.toggleMarkdownPreview(),
     'markdown.openHoveredReference': () => view.activeMarkdownSplitView()?.openHoveredReference(),
+    // F12 parity with Ctrl/Cmd+click: definition of the symbol AT THE CURSOR.
+    'go.definition': () => void workspaceSet.active.goToDefinition(),
     'git.togglePanel': () => {
       workspaceSet.active.toggleGit();
       if (workspaceSet.active.focus.value === 'git') {

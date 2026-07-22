@@ -161,6 +161,13 @@ class $LanguageClient {
       : new LspTransport.Class(process);
   }
 
+  /** True when some provider can serve this document — the guard callers use before a
+   *  semantic request, so an unsupported file never triggers a server start. */
+  supportsDocument(document: TextDocumentModel): boolean {
+    return Boolean(document.path) &&
+      this.providers.some((provider) => provider.supportsPath(document.path));
+  }
+
   /**
    * Register a TS/JS document and schedule activation without making file-open wait for a
    * subprocess. Unsupported files remain entirely local.
@@ -168,8 +175,7 @@ class $LanguageClient {
    * invariant: LSP activation follows semantic demand (src/modules/lsp/lsp.invariants.md)
    */
   openDocument(document: TextDocumentModel): void {
-    if (this.disposed || !document.path) return;
-    if (!this.providers.some((provider) => provider.supportsPath(document.path))) return;
+    if (this.disposed || !this.supportsDocument(document)) return;
     const state = this.rememberDocument(document);
     void this.ensureStarted(document.path).then((ready) => {
       if (ready) return this.synchronize(state);
