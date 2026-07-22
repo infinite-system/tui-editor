@@ -12,12 +12,8 @@ import {
   fg,
   bg,
   bold,
-  ScrollBarRenderable,
-  parseColor,
   type TextChunk,
   type CliRenderer,
-  type OptimizedBuffer,
-  type ColorInput,
 } from '@opentui/core';
 import { Static } from 'ivue/extras';
 import type { WorkspaceSet } from '../workspace/WorkspaceSet';
@@ -37,7 +33,6 @@ import { EditorPane } from './EditorPane';
 import { EditorContentMount } from './EditorContentMount';
 import { ScrollbarSync } from './ScrollbarSync';
 import { OverlayLayer } from './OverlayLayer';
-import { HitTransparentText } from './HitTransparentText';
 import { EditorWrap } from '../editor/EditorWrap';
 import { DiffView } from '../diff/DiffView';
 import { MarkdownSplitView } from '../markdown/MarkdownSplitView';
@@ -59,46 +54,6 @@ import type { TabStrip } from './TabStrip';
 
 // roleColor moved to EditorPaneRenderer with the editor render that used it.
 
-/**
- * OpenTUI paints a horizontal slider as a full-cell rectangle. Terminal cells are roughly twice as
- * tall as they are wide, so a one-row bar reads about twice as thick as a one-column vertical bar.
- * Keep OpenTUI's native slider for hit-testing and drag math, then repaint its exact thumb rectangle
- * with half-height glyphs: one configured row now carries about one configured column of visual ink.
- */
-function paintAxisBalancedHorizontalScrollbar(
-  scrollbar: ScrollBarRenderable,
-  buffer: OptimizedBuffer,
-  backgroundColor: ColorInput,
-  trackColor: ColorInput,
-  thumbColor: ColorInput,
-): void {
-  if (!scrollbar.visible) return;
-  const slider = scrollbar.slider;
-  const sliderGeometry = slider as unknown as {
-    getThumbRect?: () => { x: number; y: number; width: number; height: number };
-  };
-  const thumbRectangle = sliderGeometry.getThumbRect?.();
-  if (!thumbRectangle) return;
-  const parsedBackgroundColor = parseColor(backgroundColor);
-  const parsedTrackColor = parseColor(trackColor);
-  const parsedThumbColor = parseColor(thumbColor);
-  for (let row = slider.y; row < slider.y + slider.height; row += 1) {
-    for (let column = slider.x; column < slider.x + slider.width; column += 1) {
-      const insideThumb =
-        column >= thumbRectangle.x &&
-        column < thumbRectangle.x + thumbRectangle.width &&
-        row >= thumbRectangle.y &&
-        row < thumbRectangle.y + thumbRectangle.height;
-      buffer.setCellWithAlphaBlending(
-        column,
-        row,
-        insideThumb ? '▄' : '▂',
-        insideThumb ? parsedThumbColor : parsedTrackColor,
-        parsedBackgroundColor,
-      );
-    }
-  }
-}
 
 
 export interface RootView {
@@ -126,38 +81,6 @@ export interface RootView {
 // there is no opt-out option, so the stamp call is masked for the duration of this one render.)
 // invariant: A tooltip never intercepts input (src/modules/ui/ui.invariants.md)
 
-class AxisBalancedHorizontalScrollbarPaint extends HitTransparentText {
-  constructor(
-    renderer: CliRenderer,
-    private readonly scrollbar: ScrollBarRenderable,
-    private readonly palette: () => Palette,
-    private readonly backgroundColor: () => ColorInput,
-  ) {
-    super(renderer, {
-      id: `${scrollbar.id}-axis-balanced-paint`,
-      content: ' ',
-      position: 'absolute',
-      left: 0,
-      top: 0,
-      width: 1,
-      height: 1,
-      zIndex: 100,
-      selectable: false,
-    });
-  }
-
-  override render(buffer: OptimizedBuffer, deltaTime: number): void {
-    super.render(buffer, deltaTime);
-    const palette = this.palette();
-    paintAxisBalancedHorizontalScrollbar(
-      this.scrollbar,
-      buffer,
-      this.backgroundColor(),
-      palette.border,
-      palette.accent,
-    );
-  }
-}
 
 function $buildRootView(
   renderer: CliRenderer,
@@ -344,151 +267,6 @@ function $buildRootView(
   // programmatic writes too, and treating those as user thumb-drags halted the momentum glide on
   // every paint (the 'wheel not smooth since scrollbars' regression). onChange handlers must act
   // only on USER-initiated changes — a real thumb drag then halts momentum and adopts authority.
-  const createAxisBalancedHorizontalPaint = (
-    scrollbar: ScrollBarRenderable,
-    backgroundColor: () => ColorInput,
-  ): HitTransparentText => {
-    scrollbar.onMouseMove = (event) => {
-      tooltip.point('Horizontal scroll — drag or Option+wheel', event.x, event.y);
-    };
-    scrollbar.onMouseOut = () => tooltip.clear();
-    return new AxisBalancedHorizontalScrollbarPaint(renderer, scrollbar, readPalette, backgroundColor);
-  };
-
-  // Thin draggable scrollbars (OpenTUI ScrollBar: built-in draggable thumb + onChange). Each bar
-  // is a 1-cell strip INSIDE its pane's border; onChange writes the SAME model offset the wheel
-  // and keyboard write (One-Writer: the newest input wins; momentum halts on thumb drags).
-  const editorVerticalBar = new ScrollBarRenderable(renderer, {
-    id: 'editor-scrollbar-v',
-    orientation: 'vertical',
-    position: 'absolute',
-    width: 1,
-    showArrows: false,
-    onChange: (position) => {
-      if (scrollbarSync.applyingGeometry) return;
-      workspaceSet.active.editor.viewport.haltScrollMomentum(); // real thumb drag adopts authority
-      workspaceSet.active.editor.viewport.scrollTop.value = scrollbarSync.trueScrollPosition(editorVerticalBar, position);
-    },
-  });
-  const editorHorizontalBar = new ScrollBarRenderable(renderer, {
-    id: 'editor-scrollbar-h',
-    orientation: 'horizontal',
-    position: 'absolute',
-    height: 1,
-    showArrows: false,
-    trackOptions: { backgroundColor: readPalette().bg, foregroundColor: readPalette().accent },
-    onChange: (position) => {
-      if (scrollbarSync.applyingGeometry) return;
-      workspaceSet.active.editor.viewport.haltScrollMomentum(); // real thumb drag adopts authority
-      workspaceSet.active.editor.viewport.scrollLeft.value = scrollbarSync.trueScrollPosition(editorHorizontalBar, position);
-    },
-  });
-  const editorHorizontalBarPaint = createAxisBalancedHorizontalPaint(
-    editorHorizontalBar,
-    () => readPalette().bg,
-  );
-  editorArea.add(editorVerticalBar);
-  editorArea.add(editorHorizontalBar);
-  editorArea.add(editorHorizontalBarPaint);
-  const changesVerticalBar = new ScrollBarRenderable(renderer, {
-    id: 'git-changes-scrollbar-v',
-    orientation: 'vertical',
-    position: 'absolute',
-    width: 2,
-    showArrows: false,
-    onChange: (position) => {
-      if (scrollbarSync.applyingGeometry) return;
-      workspaceSet.active.haltGitChangesScroll(); // real thumb drag adopts authority
-      workspaceSet.active.gitPanel.changesScrollTop.value = scrollbarSync.trueScrollPosition(changesVerticalBar, position);
-    },
-  });
-  const changesHorizontalBar = new ScrollBarRenderable(renderer, {
-    id: 'git-changes-scrollbar-h',
-    orientation: 'horizontal',
-    position: 'absolute',
-    height: 1,
-    showArrows: false,
-    trackOptions: { backgroundColor: readPalette().panel, foregroundColor: readPalette().accent },
-    onChange: (position) => {
-      if (scrollbarSync.applyingGeometry) return;
-      workspaceSet.active.haltGitChangesHorizontalScroll();
-      workspaceSet.active.gitPanel.changesScrollLeft.value = scrollbarSync.trueScrollPosition(changesHorizontalBar, position);
-    },
-  });
-  const changesHorizontalBarPaint = createAxisBalancedHorizontalPaint(
-    changesHorizontalBar,
-    () => readPalette().panel,
-  );
-  const logVerticalBar = new ScrollBarRenderable(renderer, {
-    id: 'git-log-scrollbar-v',
-    orientation: 'vertical',
-    position: 'absolute',
-    width: 2,
-    showArrows: false,
-    onChange: (position) => {
-      if (scrollbarSync.applyingGeometry) return; // ignore our own per-frame scrollPosition sync (One-Writer)
-      workspaceSet.active.haltGitLogScroll(); // a real thumb drag adopts authority
-      workspaceSet.active.gitPanel.logScrollTop.value = scrollbarSync.trueScrollPosition(logVerticalBar, position);
-      workspaceSet.active.ensureLogWindow(workspaceSet.active.gitPanel.logScrollTop.value);
-    },
-  });
-  const logHorizontalBar = new ScrollBarRenderable(renderer, {
-    id: 'git-log-scrollbar-h',
-    orientation: 'horizontal',
-    position: 'absolute',
-    height: 1,
-    showArrows: false,
-    trackOptions: { backgroundColor: readPalette().panel, foregroundColor: readPalette().accent },
-    onChange: (position) => {
-      if (scrollbarSync.applyingGeometry) return;
-      workspaceSet.active.haltGitLogHorizontalScroll();
-      workspaceSet.active.gitPanel.logScrollLeft.value = scrollbarSync.trueScrollPosition(logHorizontalBar, position);
-    },
-  });
-  const logHorizontalBarPaint = createAxisBalancedHorizontalPaint(
-    logHorizontalBar,
-    () => readPalette().panel,
-  );
-  // File-tree vertical scrollbar (files view). The tree owns an independent scrollTop; a thumb drag
-  // adopts authority (halts the wheel-momentum) and writes the offset, the same One-Writer pattern.
-  const treeVerticalBar = new ScrollBarRenderable(renderer, {
-    id: 'tree-scrollbar-v',
-    orientation: 'vertical',
-    position: 'absolute',
-    width: 2,
-    showArrows: false,
-    onChange: (position) => {
-      if (scrollbarSync.applyingGeometry) return;
-      workspaceSet.active.haltTreeScroll();
-      workspaceSet.active.tree.scrollTop.value = scrollbarSync.trueScrollPosition(treeVerticalBar, position);
-    },
-  });
-  const treeHorizontalBar = new ScrollBarRenderable(renderer, {
-    id: 'tree-scrollbar-h',
-    orientation: 'horizontal',
-    position: 'absolute',
-    height: 1,
-    showArrows: false,
-    trackOptions: { backgroundColor: readPalette().panel, foregroundColor: readPalette().accent },
-    onChange: (position) => {
-      if (scrollbarSync.applyingGeometry) return;
-      workspaceSet.active.haltTreeHorizontalScroll();
-      workspaceSet.active.tree.scrollLeft.value = scrollbarSync.trueScrollPosition(treeHorizontalBar, position);
-    },
-  });
-  const treeHorizontalBarPaint = createAxisBalancedHorizontalPaint(
-    treeHorizontalBar,
-    () => readPalette().panel,
-  );
-  sidebar.add(treeVerticalBar);
-  sidebar.add(treeHorizontalBar);
-  sidebar.add(changesVerticalBar);
-  sidebar.add(changesHorizontalBar);
-  sidebar.add(logVerticalBar);
-  sidebar.add(logHorizontalBar);
-  sidebar.add(treeHorizontalBarPaint);
-  sidebar.add(changesHorizontalBarPaint);
-  sidebar.add(logHorizontalBarPaint);
 
   // Draggable git changes↔log divider: a 1-row grab strip over the divider glyph row (git view only).
   // Dragging sets settings.gitSplitRatio LIVE via workspaceSet.active.setGitSplit — the SAME persisted value the
@@ -940,15 +718,8 @@ function $buildRootView(
     editorArea,
     codeBody,
     sidebar,
-    editorVerticalBar,
-    editorHorizontalBar,
-    treeVerticalBar,
-    treeHorizontalBar,
-    changesVerticalBar,
-    changesHorizontalBar,
-    logVerticalBar,
-    logHorizontalBar,
     gitSplitDivider,
+    tooltip,
     editorViewportHeight,
     editorViewportWidth,
     sidebarWidth,
