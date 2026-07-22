@@ -38,6 +38,7 @@ const SETTING_DESCRIPTORS: readonly SettingDescriptor[] = [
   { key: 'wordWrap', label: 'Word wrap', spec: { kind: 'boolean' } },
   { key: 'sidebarWidth', label: 'Sidebar width', spec: { kind: 'number', step: 1, minimum: 16, maximum: 80, decimals: 0 } },
   { key: 'gitSplitRatio', label: 'Git changes/log split', spec: { kind: 'number', step: 0.05, minimum: 0.1, maximum: 0.9, decimals: 2 } },
+  { key: 'diffSplitRatio', label: 'Diff previous/current split', spec: { kind: 'number', step: 0.05, minimum: 0.15, maximum: 0.85, decimals: 2 } },
 ];
 
 /** One rendered row: the label, the current value as text, and whether it is the selected row. */

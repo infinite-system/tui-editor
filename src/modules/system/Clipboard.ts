@@ -3,6 +3,7 @@
 // SSH, write-only). Stateless behavior → a Static capability. Detection is cached at module scope.
 import { Static } from 'ivue/extras';
 import { openSync, writeSync, closeSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 
 export interface ClipboardTool {
   copy: string[];
@@ -50,6 +51,8 @@ async function detectTool(): Promise<ClipboardTool | null> {
 class $Clipboard {
   /** Which delivery worked on the last copy: the tool name, 'osc52', or null before any copy. */
   static lastBackend: string | null = null;
+  /** SHA-256 of the exact bytes offered to the last copy backend (observability without text leak). */
+  static lastCopiedTextHash: string | null = null;
 
   // In-app clipboard buffer: paste ALWAYS works in-app after an in-app copy, even on machines with
   // no clipboard tool and a write-only OSC 52 (this VM: no xclip/xsel/wl-copy, no DISPLAY).
@@ -58,6 +61,7 @@ class $Clipboard {
   /** Copy text: system tool if present, else OSC 52 (tmux-passthrough aware); always buffers in-app. */
   static async copy(text: string): Promise<boolean> {
     this.internalBuffer = text;
+    this.lastCopiedTextHash = createHash('sha256').update(text, 'utf8').digest('hex');
     const tool = await detectTool();
     if (tool) {
       try {

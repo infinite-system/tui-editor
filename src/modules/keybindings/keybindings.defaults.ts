@@ -33,6 +33,10 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 'tab', ctrl: true, shift: true }, action: 'buffer.previous' },
   { chord: { key: 'pagedown', ctrl: true }, action: 'buffer.next' },
   { chord: { key: 'pageup', ctrl: true }, action: 'buffer.previous' },
+  // Diff change navigation uses the conventional debugger/diff keys. The same actions are visible
+  // as toolbar buttons and command-palette entries; these bindings are discoverable accelerators.
+  { chord: { key: 'f7', shift: true }, action: 'diff.previousChange', context: 'editor' },
+  { chord: { key: 'f7', shift: false }, action: 'diff.nextChange', context: 'editor' },
 
   // --- palette (captures input while open) ---
   { chord: { key: 'escape' }, action: 'palette.close', context: 'palette' },

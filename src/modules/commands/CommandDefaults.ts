@@ -12,6 +12,9 @@ export interface CommandContext {
   theme: Theme.Instance;
   quit: () => void;
   requestRender: () => void;
+  hasOpenDiff: () => boolean;
+  nextDiffChange: () => void;
+  previousDiffChange: () => void;
 }
 
 // Manifest first — the capability's surface reads at the top of the file; implementations follow.
@@ -96,6 +99,20 @@ function $registerDefaultCommands(
       category: 'Go',
       when: hasDocument,
       run: () => getEditor().gotoBottom(),
+    },
+    {
+      id: 'diff.previousChange',
+      title: 'Diff: Previous Change',
+      category: 'Diff',
+      when: context.hasOpenDiff,
+      run: context.previousDiffChange,
+    },
+    {
+      id: 'diff.nextChange',
+      title: 'Diff: Next Change',
+      category: 'Diff',
+      when: context.hasOpenDiff,
+      run: context.nextDiffChange,
     },
     {
       id: 'files.refresh',
