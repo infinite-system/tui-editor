@@ -33,6 +33,8 @@ import { EditorPane } from './EditorPane';
 import { EditorContentMount } from './EditorContentMount';
 import { ScrollbarSync } from './ScrollbarSync';
 import { OverlayLayer } from './OverlayLayer';
+import { HoverCard } from './HoverCard';
+import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { EditorWrap } from '../editor/EditorWrap';
 import { DiffView } from '../diff/DiffView';
 import { MarkdownSplitView } from '../markdown/MarkdownSplitView';
@@ -72,6 +74,13 @@ export interface RootView {
   findTarget(): FindBarTarget | null;
   /** Rows the shortcut cheat-sheet can show at once (scroll actions clamp against this). */
   shortcutHelpViewportRows(): number;
+  /** Frame-tick hook: advance the LSP hover-card dwell; true while counting or a request is in flight. */
+  tickHover(dtSeconds: number): boolean;
+  /** Dismiss the LSP hover card (any keypress or click — VS Code behaviour). */
+  dismissHover(): void;
+  /** Read the hover card's reactive paint signal inside the frame effect so an ASYNC hover landing
+   *  (which no keypress/mouse-move accompanies) still triggers a repaint that projects the card. */
+  observeHoverRepaint(): void;
   dispose(): void;
 }
 
@@ -542,6 +551,7 @@ function $buildRootView(
     editorController.applySelection(); // after content is set, so selection maps onto the current buffer
     statusBar.update(palette, editorContentMount.markdownSplitView?.previewFocused ?? false);
     overlayLayer.update(palette);
+    hoverCard.update(palette);
 
     scrollbarSync.syncScrollbars();
 
@@ -669,6 +679,16 @@ function $buildRootView(
   // model→native selection sync, the selection-drag behaviour, Ctrl/Cmd+click go-to-definition, and
   // wheel scroll. RootView keeps the renderables + viewport geometry (public interface) and the
   // markdown mount; update() calls renderEditor()/applySelection()/wrapVisualPosition() through it.
+  // The LSP hover card: a display-only overlay controller that owns its bordered box, content text,
+  // and vertical scrollbar. A >0.5s mouse dwell over a symbol shows the language server's type/docs;
+  // update() re-syncs it each frame, and the frame loop ticks its dwell.
+  const hoverCard = new HoverCard.Class({
+    renderer,
+    theme,
+    requestHover: (position) => workspaceSet.active.hoverAt(position),
+    languageForActive: () => LanguageRegistry.Class.forPath(workspaceSet.active.editor.document.path),
+  });
+
   const editorController = new EditorPane.Class({
     renderer,
     editorArea,
@@ -680,6 +700,10 @@ function $buildRootView(
     editorViewportHeight,
     editorViewportWidth,
     focusMarkdownSource: () => editorContentMount.markdownSplitView?.focusSource(),
+    hover: {
+      pointAt: (position, screenX, screenY) => hoverCard.pointAt(position, screenX, screenY),
+      clear: () => hoverCard.clear(),
+    },
   });
 
   // The scrollbar geometry controller derives every bar's track from the live layout each frame and
@@ -749,6 +773,9 @@ function $buildRootView(
     activeMarkdownSplitView: () => editorContentMount.markdownSplitView,
     findTarget,
     shortcutHelpViewportRows: () => overlayLayer.shortcutHelpViewportRows(),
+    tickHover: (dtSeconds: number) => hoverCard.tick(dtSeconds),
+    dismissHover: () => hoverCard.clear(),
+    observeHoverRepaint: () => { void hoverCard.paintRevision.value; },
     dispose() {
       try {
         editorContentMount.dispose();

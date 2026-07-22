@@ -246,6 +246,49 @@ tmux — with the tooltip visible, click through it and assert the underlying ac
 
 **Last refined:** 2026-07-21
 
+### A hover card reflects the language server's type at the pointed symbol
+
+**Invariant:** The hover card shows content that came from `client.hover` for the exact document
+position the pointer dwelled on, and it appears ONLY after the pointer rests on ONE document
+position for at least the dwell (0.5s). It is display-only over the panes — like a tooltip it
+never intercepts pointer or keyboard input that lands on the code beneath it — with the SINGLE
+exception that the card's own box receives its own vertical scroll (wheel/scrollbar) so long
+content is reachable. A response whose dwell generation is no longer current (the pointer moved,
+so a newer dwell superseded it) is dropped, never shown.
+
+**Scope:** `HoverCard` (the dwell + async + layout controller and its box/content/scrollbar
+renderables), `Workspace.hoverAt` (the guarded `client.hover` call), and the `EditorPane`
+`codeBody.onMouseMove` that maps a cell to a document position.
+
+**Mechanism:** `codeBody.onMouseMove` maps the cell to a document position and calls
+`hoverCard.pointAt(position, x, y)`; a NEW `key` (`line:column`) bumps `generation`, resets the
+dwell, and hides any shown card. `tick(deltaSeconds)` (the momentum/auto-scroll contract) advances
+the dwell and, once ≥0.5s, fires `requestHover` EXACTLY once per dwell (`requestedGeneration`
+latch), capturing `generation`; the resolved response is applied only when its captured generation
+still equals the live `generation` (stale responses from a moved pointer are dropped). The card's
+box/scrollbar receive their own `onMouseMove`/`onMouseScroll` (`pointerOverCard`) so moving in to
+scroll does not dismiss it; `Bootstrap` dismisses the card on any keypress and any mouse-down.
+
+**Generates:** VS-Code-style type/documentation hover cards for any LSP-backed language, scrollable
+for long content, with zero risk of intercepting the clicks/keys that drive the editor beneath.
+
+**Evidence:** driven tmux smoke (`scripts/smoke-hover.sh`): dwelling the mouse over a typed symbol
+for >0.5s renders a bordered card carrying the server's type text; a move-through under the dwell
+threshold shows no card. Unit coverage of the dwell/generation machine mirrors `Tooltip.test.ts`.
+
+**Impossible if true:** a card that appears before the dwell elapses; a card showing content for a
+position the pointer already left (a stale async response applied after `generation` changed); a
+card that swallows a click or keypress meant for the code beneath it; hover content invented
+locally rather than returned by `client.hover`.
+
+**Verification:** `bash scripts/smoke-hover.sh` (dwell shows the card + its type text; sub-dwell
+move-through does not); grep — `HoverCard.tick` gates on `requestedGeneration`/`generation` and
+`renderContents` only runs on `client.hover` output.
+
+**Status:** provisional
+
+**Last refined:** 2026-07-22
+
 ### Renderables hold no model state
 
 **Invariant:** If a renderable exists, then it holds only presentation state; it pulls all

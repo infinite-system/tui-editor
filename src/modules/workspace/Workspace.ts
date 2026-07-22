@@ -24,6 +24,7 @@ import { Logging } from '../system/Logging';
 import { GutterDiff, type GutterDiffStatus } from '../diff/GutterDiff';
 import {
   LanguageClient,
+  type LanguageHover,
   type LanguageLocation,
   type TextDocumentModel,
   type TextPosition,
@@ -167,6 +168,23 @@ class $Workspace {
       rehoppedLocation.range.start.line === location.range.start.line &&
       rehoppedLocation.range.start.column === location.range.start.column;
     return rehoppedToSameSpot ? location : rehoppedLocation;
+  }
+
+  /**
+   * VS-Code-style hover: resolve the type/documentation for the symbol at `position` through the
+   * language client so the mouse-hover card can show it. Mirrors goToDefinition's guards exactly —
+   * resolves null (never throws) when no document, an unsupported file, a missing server, or the
+   * server returns nothing. The client applies its own revision-staleness guard on the response.
+   *
+   * invariant: A hover card reflects the language server's type at the pointed symbol (src/modules/ui/ui.invariants.md)
+   */
+  async hoverAt(position: TextPosition): Promise<LanguageHover | null> {
+    if (this.showingDiff.value) return null;
+    const editor = this.buffers.activeBuffer as Editor.Instance | null;
+    if (!editor || !editor.hasDocument.value || !editor.document.path) return null;
+    const client = this.ensureLanguageClient();
+    if (!client.supportsDocument(editor.document)) return null;
+    return client.hover(editor.document, position);
   }
 
   /** Open the located file through the existing tab path and reveal the declaration. */
