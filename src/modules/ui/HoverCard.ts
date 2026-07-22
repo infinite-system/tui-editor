@@ -30,6 +30,9 @@ import type { LanguageHover, TextPosition } from '../lsp/LanguageClient';
 
 /** The pointer must rest on ONE document position this long before the card shows (VS Code uses ~0.5s). */
 export const HOVER_DWELL_SECONDS = 0.5;
+/** Once shown, if the pointer leaves BOTH the symbol and the card, the card auto-dismisses after this
+ *  grace — long enough to move the pointer INTO the card to scroll/read it without it vanishing. */
+export const HOVER_IDLE_DISMISS_SECONDS = 2.5;
 /** Longest content line (display cells) the card renders; longer lines are truncated. */
 const MAX_CONTENT_WIDTH = 64;
 /** Largest interior row count the card renders before the vertical scrollbar takes over. */
@@ -89,6 +92,10 @@ class $HoverCard {
   private requestedGeneration = -1;
   /** True while the pointer is over the card's own box (so moving in to scroll never dismisses it). */
   pointerOverCard = false;
+  /** True while the pointer rests on the card's own symbol (kept engaged while re-pointing the same key). */
+  private onSymbol = false;
+  /** Grace elapsed since the pointer left BOTH the symbol and the card (drives the idle auto-dismiss). */
+  private idleSeconds = 0;
 
   /**
    * The ONE reactive signal on this otherwise-plain controller: the frame paint effect observes it so
@@ -101,7 +108,7 @@ class $HoverCard {
   }
 
   // Owned renderables (constructed + mounted here).
-  private readonly backdrop: BoxRenderable;
+  private readonly backdrop: HitTransparentText;
   private readonly box: BoxRenderable;
   private readonly content: TextRenderable;
   private readonly scrollbar: ScrollBarRenderable;
@@ -113,15 +120,16 @@ class $HoverCard {
   constructor(private readonly deps: HoverCardDeps) {
     const { renderer } = deps;
     const root = renderer.root;
-    // A full-screen, hit-transparent, non-drawing backdrop that is visible exactly while the card is.
+    // A full-screen, GENUINELY hit-transparent, non-drawing backdrop visible exactly while the card is.
     // OpenTUI composites incrementally: hiding a small overlay does NOT repaint the panes beneath, so a
-    // keypress/click dismiss with no other change would leave the card's glyphs stale. A full-screen
-    // renderable toggling visible→false invalidates the WHOLE screen (the same mechanism the shortcut
-    // sheet uses), forcing a full repaint that clears the card. Hit-transparent so the card stays
-    // display-only — the pointer still reaches the editor beneath to move/dismiss the hover.
-    this.backdrop = new BoxRenderable(renderer, {
-      id: 'hover-card-backdrop', position: 'absolute', left: 0, top: 0,
-      width: '100%', height: '100%', visible: false, zIndex: 134,
+    // dismiss with no other change would leave the card's glyphs stale. A full-screen renderable
+    // toggling visible→false invalidates the WHOLE screen, forcing a full repaint that clears the card.
+    // It MUST be hit-transparent (HitTransparentText masks addToHitGrid) so the pointer passes THROUGH
+    // it to the editor beneath — otherwise a plain BoxRenderable captures every wheel/move and the card
+    // traps the doc: you couldn't scroll the code or hover a different symbol while a card was open.
+    this.backdrop = new HitTransparentText(renderer, {
+      id: 'hover-card-backdrop', content: '', position: 'absolute', left: 0, top: 0,
+      width: '100%', height: '100%', visible: false, zIndex: 134, selectable: false,
     });
     root.add(this.backdrop);
     this.box = new BoxRenderable(renderer, {
@@ -144,8 +152,8 @@ class $HoverCard {
 
     // The card receives its OWN pointer: moving into it (to scroll) must NOT dismiss it, and a wheel
     // over it scrolls the content. It never touches the editor's cursor/selection.
-    this.box.onMouseMove = () => { this.pointerOverCard = true; };
-    this.box.onMouseOut = () => { this.pointerOverCard = false; };
+    this.box.onMouseMove = () => { this.pointerOverCard = true; this.idleSeconds = 0; };
+    this.box.onMouseOut = () => { this.pointerOverCard = false; this.requestPaint(); };
     this.box.onMouseScroll = (event: MouseEvent) =>
       this.scrollBy(event.scroll?.direction === 'up' ? -1 : 1);
   }
@@ -174,6 +182,9 @@ class $HoverCard {
    * position bumps the generation, hides any shown card, and restarts the dwell for the new symbol.
    */
   pointAt(position: TextPosition, screenX: number, screenY: number): void {
+    // The pointer is on a symbol → engaged; reset the idle grace either way.
+    this.onSymbol = true;
+    this.idleSeconds = 0;
     const key = `${position.line}:${position.column}`;
     if (this.pending && this.pending.key === key) {
       this.anchorX = screenX;
@@ -190,11 +201,26 @@ class $HoverCard {
     this.requestPaint();
   }
 
-  /** Any disqualifying input (pointer off the code, a click, a keypress): hide now and disarm the dwell. */
+  /** The pointer moved off the symbol (to an empty cell / out of the code) without a hard dismiss: a
+   *  shown card is NOT killed immediately — it enters the idle grace and auto-dismisses if the pointer
+   *  does not return to it or another symbol. A card that isn't showing yet just disarms its dwell. */
+  pointerOffSymbol(): void {
+    this.onSymbol = false;
+    if (this.visible) {
+      this.requestPaint(); // kick the frame loop so tick() can run the idle countdown
+    } else {
+      this.pending = null;
+      this.dwellSeconds = 0;
+    }
+  }
+
+  /** Any disqualifying input (a click, a keypress, a doc scroll): hide now and disarm the dwell. */
   clear(): void {
     this.pending = null;
     this.dwellSeconds = 0;
     this.pointerOverCard = false;
+    this.onSymbol = false;
+    this.idleSeconds = 0;
     if (this.visible) {
       this.visible = false;
       // invariant: An overlay's dismissal clears its cells in the same frame (src/modules/ui/ui.invariants.md)
@@ -217,8 +243,22 @@ class $HoverCard {
    * contract), and false once the card is shown or the dwell is disarmed.
    */
   tick(deltaSeconds: number): boolean {
+    // Once shown, run the idle auto-dismiss: while the pointer is over the card or its symbol the card
+    // is engaged and idle time resets; when it leaves both, count the grace and dismiss at the limit.
+    // (Returning true keeps the frame loop alive through the countdown; false lets it quiesce.)
+    if (this.visible) {
+      if (this.pointerOverCard || this.onSymbol) {
+        this.idleSeconds = 0;
+        return false;
+      }
+      this.idleSeconds += deltaSeconds;
+      if (this.idleSeconds >= HOVER_IDLE_DISMISS_SECONDS) {
+        this.clear();
+        return false;
+      }
+      return true;
+    }
     if (!this.pending) return false;
-    if (this.visible) return false;
     this.dwellSeconds += deltaSeconds;
     if (this.dwellSeconds < HOVER_DWELL_SECONDS) return true;
     if (this.requestedGeneration !== this.generation) {

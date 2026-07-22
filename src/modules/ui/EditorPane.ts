@@ -33,7 +33,7 @@ export interface EditorPaneDeps {
   /** Focus the markdown split's source pane on an editor click (no-op when no split is mounted). */
   focusMarkdownSource: () => void;
   /** The LSP hover-card handle: a mouse-move over a symbol points it; leaving the code clears it. */
-  hover: { pointAt(position: { line: number; column: number }, screenX: number, screenY: number): void; clear(): void };
+  hover: { pointAt(position: { line: number; column: number }, screenX: number, screenY: number): void; clear(): void; pointerOffSymbol(): void };
 }
 
 class $EditorPane {
@@ -246,6 +246,10 @@ class $EditorPane {
 
     editorArea.onMouseScroll = (event) => {
       if (!workspaceSet.active.editor.hasDocument.value) return;
+      // Scrolling the DOCUMENT dismisses any open hover card — its anchored symbol is moving away; a
+      // new dwell on the newly-hovered symbol re-shows one. (A wheel over the card's OWN box scrolls
+      // the card instead — that handler lives on the box, which sits above the editor.)
+      hover.clear();
       // Horizontal scroll arrives by SEVERAL terminal-dependent encodings; route them ALL to columns.
       const direction = event.scroll?.direction;
       const step = ScrollGesture.Class.wheelStep(event, settings);
@@ -303,8 +307,11 @@ class $EditorPane {
       }
       const position = this.documentPositionAtCell(event.x, event.y);
       if (position) hover.pointAt(position, event.x, event.y);
-      else hover.clear();
+      else hover.pointerOffSymbol(); // off the symbol (empty cell): a shown card enters its idle grace
     };
+    // Pointer leaves the code pane entirely (to the sidebar, a tab, etc.): also a "left the symbol"
+    // signal — a shown card idles out rather than hanging around, but is not hard-killed mid-move.
+    codeBody.onMouseOut = () => hover.pointerOffSymbol();
   }
 }
 
