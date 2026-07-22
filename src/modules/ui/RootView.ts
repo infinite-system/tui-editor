@@ -36,6 +36,8 @@ import { Sidebar } from './Sidebar';
 import { EditorPane } from './EditorPane';
 import { EditorContentMount } from './EditorContentMount';
 import { ScrollbarSync } from './ScrollbarSync';
+import { OverlayLayer } from './OverlayLayer';
+import { HitTransparentText } from './HitTransparentText';
 import { EditorWrap } from '../editor/EditorWrap';
 import { DiffView } from '../diff/DiffView';
 import { MarkdownSplitView } from '../markdown/MarkdownSplitView';
@@ -123,18 +125,6 @@ export interface RootView {
 // exist. (OpenTUI stamps every rendered renderable into the hit grid inside Renderable.render;
 // there is no opt-out option, so the stamp call is masked for the duration of this one render.)
 // invariant: A tooltip never intercepts input (src/modules/ui/ui.invariants.md)
-class HitTransparentText extends TextRenderable {
-  override render(buffer: OptimizedBuffer, deltaTime: number): void {
-    const context = this._ctx;
-    const originalAddToHitGrid = context.addToHitGrid;
-    context.addToHitGrid = () => {};
-    try {
-      super.render(buffer, deltaTime);
-    } finally {
-      context.addToHitGrid = originalAddToHitGrid;
-    }
-  }
-}
 
 class AxisBalancedHorizontalScrollbarPaint extends HitTransparentText {
   constructor(
@@ -395,196 +385,6 @@ function $buildRootView(
   column.add(statusBar.bar);
   root.add(column);
 
-  // Command palette overlay — added last so it renders on top; shown only when open.
-  const commandPalette = new BoxRenderable(renderer, {
-    id: 'palette',
-    position: 'absolute',
-    left: '20%',
-    top: 2,
-    width: '60%',
-    border: true,
-    borderStyle: 'rounded',
-    title: 'Command Palette',
-    flexDirection: 'column',
-    visible: false,
-    zIndex: 100,
-  });
-  const commandPaletteInput = new TextRenderable(renderer, { id: 'palette-input', content: '' });
-  const commandPaletteList = new TextRenderable(renderer, { id: 'palette-list', content: '' });
-  commandPalette.add(commandPaletteInput);
-  commandPalette.add(commandPaletteList);
-  root.add(commandPalette);
-
-  // In-editor find/replace bar (Ctrl+F / Ctrl+H) — a top-right overlay (VS Code placement), shown while
-  // findBar.open. One text block: the query line with the N-of-M counter, plus a replacement line in
-  // replace mode, plus a key hint. Content is projected from the FindBar model each paint.
-  const findBarBox = new BoxRenderable(renderer, {
-    id: 'find-bar',
-    position: 'absolute',
-    top: 1,
-    left: '45%',
-    width: '54%',
-    border: true,
-    borderStyle: 'rounded',
-    title: 'Find',
-    flexDirection: 'column',
-    visible: false,
-    zIndex: 100,
-  });
-  const findBarText = new TextRenderable(renderer, { id: 'find-bar-text', content: '' });
-  findBarBox.add(findBarText);
-  root.add(findBarBox);
-
-  // Quick-open (Ctrl+P): a centered modal — a query input + the fuzzy-ranked project-file list. Mirrors
-  // the command palette; content projected from the QuickOpen model each paint.
-  const quickOpenBox = new BoxRenderable(renderer, {
-    id: 'quick-open',
-    position: 'absolute',
-    left: '20%',
-    top: 2,
-    width: '60%',
-    border: true,
-    borderStyle: 'rounded',
-    title: 'Go to File',
-    flexDirection: 'column',
-    visible: false,
-    zIndex: 100,
-  });
-  const quickOpenInput = new TextRenderable(renderer, { id: 'quick-open-input', content: '' });
-  const quickOpenList = new TextRenderable(renderer, { id: 'quick-open-list', content: '' });
-  quickOpenBox.add(quickOpenInput);
-  quickOpenBox.add(quickOpenList);
-  root.add(quickOpenBox);
-
-  // Destructive-action confirmation (discard) — a small modal strip; y confirms, anything else
-  // cancels. invariant: Destructive working-tree operations require confirmation (src/modules/git/git.invariants.md)
-  const confirmBox = new BoxRenderable(renderer, {
-    id: 'confirm-discard',
-    position: 'absolute',
-    left: '20%',
-    top: 4,
-    width: '60%',
-    border: true,
-    borderStyle: 'rounded',
-    title: 'Confirm',
-    visible: false,
-    zIndex: 120,
-  });
-  const confirmText = new TextRenderable(renderer, { id: 'confirm-discard-text', content: '' });
-  confirmBox.add(confirmText);
-  root.add(confirmBox);
-
-  // Settings panel (Ctrl+,) — an overlay pane over the reactive settings store. ↑/↓ select, ←/→ change.
-  const settingsBox = new BoxRenderable(renderer, {
-    id: 'settings-panel',
-    position: 'absolute',
-    left: '15%',
-    top: 2,
-    width: '70%',
-    border: true,
-    borderStyle: 'rounded',
-    title: 'Settings',
-    visible: false,
-    zIndex: 122,
-  });
-  const settingsText = new TextRenderable(renderer, { id: 'settings-panel-text', content: '' });
-  settingsBox.add(settingsText);
-  root.add(settingsBox);
-
-  // Shortcut cheat-sheet overlay (Shift+F1 / the status-bar `?`). A centered modal listing the
-  // registry's effective bindings grouped by category; scrollable; Esc or the same chord closes.
-  // The invisible backdrop makes it modal the same way the context menu is: while open, every
-  // pointer cell resolves to the sheet or the backdrop (whose only behavior is to close the sheet),
-  // so "clicking outside closes it" holds by construction.
-  // invariant: The shortcut sheet lists the effective bindings (src/modules/ui/ui.invariants.md)
-  // invariant: Input overlays share one modal slot (src/modules/ui/ui.invariants.md)
-  const shortcutHelpBackdrop = new BoxRenderable(renderer, {
-    id: 'shortcut-help-backdrop',
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    width: '100%',
-    height: '100%',
-    visible: false,
-    zIndex: 118,
-  });
-  const shortcutHelpBox = new BoxRenderable(renderer, {
-    id: 'shortcut-help',
-    position: 'absolute',
-    left: '15%',
-    top: 1,
-    width: '70%',
-    border: true,
-    borderStyle: 'rounded',
-    title: 'Keyboard Shortcuts',
-    flexDirection: 'column',
-    visible: false,
-    zIndex: 120,
-  });
-  const shortcutHelpText = new TextRenderable(renderer, {
-    id: 'shortcut-help-text',
-    content: '',
-    selectable: false,
-  });
-  shortcutHelpBox.add(shortcutHelpText);
-  root.add(shortcutHelpBackdrop);
-  root.add(shortcutHelpBox);
-  shortcutHelpBackdrop.onMouseDown = () => shortcutHelp.close();
-  // The sheet's interior height: box height minus the borders and the one hint line at the top.
-  const shortcutHelpBoxHeight = (): number => Math.max(6, renderer.height - 3);
-  const shortcutHelpViewportRows = (): number => Math.max(1, shortcutHelpBoxHeight() - 3);
-
-  // Context-menu modal layer. The BACKDROP is an invisible (transparent, borderless) full-screen
-  // box just beneath the menu: OpenTUI stamps the hit grid in render order (zIndex ascending), so
-  // while the menu is open EVERY pointer cell resolves to either the menu box (above) or this
-  // backdrop — the panes beneath are unreachable by construction. The backdrop's only behavior is
-  // to close the menu; the click it consumed acts on nothing else.
-  // invariant: A context menu is modal and single-consumer (src/modules/ui/ui.invariants.md)
-  const contextMenuBackdrop = new BoxRenderable(renderer, {
-    id: 'context-menu-backdrop',
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    width: '100%',
-    height: '100%',
-    visible: false,
-    zIndex: 125,
-  });
-  const contextMenuBox = new BoxRenderable(renderer, {
-    id: 'context-menu',
-    position: 'absolute',
-    border: true,
-    borderStyle: 'rounded',
-    visible: false,
-    zIndex: 130,
-  });
-  // selectable:false — a click on the menu must ONLY run the item: OpenTUI text is selectable by
-  // default, and a default-selectable menu list starts a native text selection on click, which
-  // then swallows the NEXT ctrl+click as a selection-extend (verified live).
-  const contextMenuList = new TextRenderable(renderer, { id: 'context-menu-list', content: '', selectable: false });
-  contextMenuBox.add(contextMenuList);
-  root.add(contextMenuBackdrop);
-  root.add(contextMenuBox);
-
-  contextMenuBackdrop.onMouseDown = () => contextMenu.close();
-  // Screen row -> item index (the +1 skips the top border); out-of-range rows resolve to no item.
-  const contextMenuItemAt = (screenY: number): number => screenY - (contextMenuBox.y + 1);
-  contextMenuBox.onMouseMove = (event) => contextMenu.hover(contextMenuItemAt(event.y));
-  contextMenuBox.onMouseOut = () => contextMenu.hover(-1);
-  contextMenuBox.onMouseDown = (event) => contextMenu.runAt(contextMenuItemAt(event.y));
-
-  // Tooltip overlay: display-only and hit-transparent (see HitTransparentText above) — it can
-  // never receive or consume a pointer event.
-  // invariant: A tooltip never intercepts input (src/modules/ui/ui.invariants.md)
-  const tooltipText = new HitTransparentText(renderer, {
-    id: 'tooltip',
-    content: '',
-    position: 'absolute',
-    visible: false,
-    zIndex: 140,
-    selectable: false, // display-only in every sense
-  });
-  root.add(tooltipText);
 
 
   // Scale map (reported->true position per bar) + intended thickness (cells; NEVER read back from
@@ -1040,204 +840,7 @@ function $buildRootView(
     codeBody.selectionBg = palette.selection;
     editorController.applySelection(); // after content is set, so selection maps onto the current buffer
     statusBar.update(palette, editorContentMount.markdownSplitView?.previewFocused ?? false);
-
-    // Palette overlay.
-    const open = commands.open.value;
-    commandPalette.visible = open;
-    if (open) {
-      commandPalette.borderColor = palette.borderActive;
-      commandPalette.titleColor = palette.accent;
-      commandPalette.backgroundColor = palette.panel;
-      commandPaletteInput.content = `> ${commands.query.value}▏`;
-      commandPaletteInput.fg = palette.fg;
-      const items = commands.filtered.slice(0, 12);
-      const selectedIndex = commands.selectedIndex.value;
-      commandPaletteList.content = items.length
-        ? items
-            .map((command, index) => `${index === selectedIndex ? '›' : ' '} ${command.title}`)
-            .join('\n')
-        : '  (no matching commands)';
-      commandPaletteList.fg = palette.dim;
-    }
-
-    // Find/replace bar overlay.
-    findBarBox.visible = findBar.open.value;
-    if (findBar.open.value) {
-      const engine = findBar.engine;
-      const replaceMode = findBar.mode.value === 'replace';
-      const queryFocused = !(replaceMode && findBar.replaceFocused.value);
-      const count = engine ? engine.matchCount : 0;
-      const position = engine && engine.currentMatchIndex.value >= 0 ? engine.currentMatchIndex.value + 1 : 0;
-      const counter = count > 0 ? `${position} of ${count}` : engine && engine.query.value ? 'no results' : '';
-      findBarBox.title = replaceMode ? 'Find / Replace' : 'Find';
-      findBarBox.borderColor = palette.borderActive;
-      findBarBox.titleColor = palette.accent;
-      findBarBox.backgroundColor = palette.panel;
-      const lines: string[] = [];
-      lines.push(`⌕ ${engine?.query.value ?? ''}${queryFocused ? '▏' : ''}   ${counter}`);
-      if (replaceMode) lines.push(`⇄ ${engine?.replacement.value ?? ''}${queryFocused ? '' : '▏'}`);
-      lines.push(replaceMode ? '↵ next · ⇧↵ prev · ⌃↵ replace · ⌃⇧↵ all · ⇥ field · esc' : '↵ next · ⇧↵ prev · esc close');
-      findBarText.content = lines.join('\n');
-      findBarText.fg = palette.fg;
-    }
-
-    // Quick-open (Ctrl+P) overlay.
-    quickOpenBox.visible = quickOpen.open.value;
-    if (quickOpen.open.value) {
-      const openingWorkspace = quickOpen.mode.value === 'workspacePath';
-      quickOpenBox.title = openingWorkspace ? 'Open Project Folder' : 'Go to File';
-      quickOpenBox.borderColor = palette.borderActive;
-      quickOpenBox.titleColor = palette.accent;
-      quickOpenBox.backgroundColor = palette.panel;
-      quickOpenInput.content = `${openingWorkspace ? '+' : theme.actionIcons.open} ${quickOpen.query.value}▏`;
-      quickOpenInput.fg = palette.fg;
-      const matches = quickOpen.matches.value.slice(0, 14);
-      const selectedIndex = quickOpen.selectedIndex.value;
-      quickOpenList.content = openingWorkspace
-        ? quickOpen.errorMessage.value
-          ? `  ${quickOpen.errorMessage.value}\n  Enter opens · Esc cancels`
-          : '  Type an existing folder path\n  Enter opens · Esc cancels'
-        : matches.length
-          ? matches.map((match, index) => `${index === selectedIndex ? '›' : ' '} ${match.path}`).join('\n')
-          : quickOpen.query.value
-            ? '  (no matching files)'
-            : '  (type to filter project files)';
-      quickOpenList.fg = palette.dim;
-    }
-
-    const pendingDiscard = workspaceSet.active.gitPanel.confirmDiscard.value;
-    const pendingCloseTabIndex = workspaceSet.active.pendingCloseTabIndex.value;
-    confirmBox.visible = pendingDiscard !== null || pendingCloseTabIndex >= 0;
-    if (pendingDiscard) {
-      confirmBox.borderColor = palette.deleted;
-      confirmBox.titleColor = palette.deleted;
-      confirmBox.backgroundColor = palette.panel;
-      confirmText.content =
-        pendingDiscard.paths.length === 1
-          ? ` Discard changes to ${pendingDiscard.paths[0]}?  [y/N]`
-          : ` Discard changes to ${pendingDiscard.paths.length} files (${pendingDiscard.paths.join(', ').slice(0, 60)}…)?  [y/N]`;
-      confirmText.fg = palette.fg;
-    } else if (pendingCloseTabIndex >= 0) {
-      // Same modal, for closing a tab with unsaved edits.
-      const tabPath = workspaceSet.active.buffers.tabs()[pendingCloseTabIndex]?.path ?? '';
-      confirmBox.borderColor = palette.warning;
-      confirmBox.titleColor = palette.warning;
-      confirmBox.backgroundColor = palette.panel;
-      confirmText.content = ` Close ${Files.Class.basename(tabPath)} with unsaved changes?  [y/N]`;
-      confirmText.fg = palette.fg;
-    }
-
-    // Settings panel overlay — projected from the SettingsPanel model (↑/↓ select, ←/→ change).
-    settingsBox.visible = settingsPanel.open.value;
-    if (settingsPanel.open.value) {
-      settingsBox.borderColor = palette.accent;
-      settingsBox.titleColor = palette.accent;
-      settingsBox.backgroundColor = palette.panel;
-      const settingsChunks: TextChunk[] = [];
-      settingsChunks.push(fg(palette.dim)('  ↑/↓ select   ←/→ change   Esc close   (saved live)\n\n'));
-      const settingsRows = settingsPanel.rows();
-      const labelWidth = settingsRows.reduce((widest, row) => Math.max(widest, row.label.length), 0);
-      settingsRows.forEach((row) => {
-        const marker = row.selected ? '›' : ' ';
-        const labelText = ` ${marker} ${row.label.padEnd(labelWidth, ' ')}   `;
-        const valueText = `${row.valueText}\n`;
-        if (row.selected) {
-          settingsChunks.push(bg(palette.selection)(fg(palette.fg)(labelText)));
-          settingsChunks.push(bg(palette.selection)(fg(palette.accent)(valueText)));
-        } else {
-          settingsChunks.push(fg(palette.fg)(labelText));
-          settingsChunks.push(fg(palette.dim)(valueText));
-        }
-      });
-      settingsText.content = new StyledText(settingsChunks);
-    }
-
-    // Shortcut cheat-sheet overlay — every row projected from the ShortcutHelp model, whose chords
-    // come from KeybindingRegistry.effectiveBindings (never a hand-written list).
-    // invariant: The shortcut sheet lists the effective bindings (src/modules/ui/ui.invariants.md)
-    shortcutHelpBackdrop.visible = shortcutHelp.open.value;
-    shortcutHelpBox.visible = shortcutHelp.open.value;
-    if (shortcutHelp.open.value) {
-      shortcutHelpBox.height = shortcutHelpBoxHeight();
-      shortcutHelpBox.borderColor = palette.borderActive;
-      shortcutHelpBox.titleColor = palette.accent;
-      shortcutHelpBox.backgroundColor = palette.panel;
-      const sheetRows = shortcutHelp.rows();
-      const sheetViewportRows = shortcutHelpViewportRows();
-      const sheetMaximumScrollTop = Math.max(0, sheetRows.length - sheetViewportRows);
-      // Read-only clamp for this paint; the model clamps its own writes in scrollBy.
-      const sheetScrollTop = Math.min(shortcutHelp.scrollTop.value, sheetMaximumScrollTop);
-      const sheetVisibleRows = sheetRows.slice(sheetScrollTop, sheetScrollTop + sheetViewportRows);
-      const chordColumnWidth = sheetRows.reduce(
-        (widestWidth, sheetRow) => Math.max(widestWidth, sheetRow.chordLabel.length),
-        0,
-      );
-      const sheetScrollHint =
-        sheetRows.length > sheetViewportRows
-          ? `   ${sheetScrollTop + 1}-${Math.min(sheetScrollTop + sheetViewportRows, sheetRows.length)} of ${sheetRows.length}`
-          : '';
-      const sheetChunks: TextChunk[] = [];
-      sheetChunks.push(fg(palette.dim)(`  ↑/↓ scroll · Esc close${sheetScrollHint}\n`));
-      sheetVisibleRows.forEach((sheetRow, sheetRowIndex) => {
-        const lineBreak = sheetRowIndex < sheetVisibleRows.length - 1 ? '\n' : '';
-        if (sheetRow.kind === 'category') {
-          sheetChunks.push(bold(fg(palette.accent)(` ${sheetRow.label}${lineBreak}`)));
-        } else {
-          sheetChunks.push(
-            fg(palette.accent)(`   ${sheetRow.chordLabel.padEnd(chordColumnWidth, ' ')}`),
-          );
-          sheetChunks.push(fg(palette.fg)(`  ${sheetRow.label}${lineBreak}`));
-        }
-      });
-      shortcutHelpText.content = new StyledText(sheetChunks);
-    }
-
-    // Context menu overlay (+ its modal backdrop) — projected purely from the ContextMenu model.
-    const menuOpen = contextMenu.open.value;
-    contextMenuBackdrop.visible = menuOpen;
-    contextMenuBox.visible = menuOpen;
-    if (menuOpen) {
-      contextMenuBox.left = contextMenu.anchorX.value;
-      contextMenuBox.top = contextMenu.anchorY.value;
-      contextMenuBox.width = contextMenu.width;
-      contextMenuBox.height = contextMenu.height;
-      contextMenuBox.backgroundColor = palette.panel;
-      contextMenuBox.borderColor = palette.borderActive;
-      const rowWidth = contextMenu.width - 2; // interior width between the borders
-      const menuChunks: TextChunk[] = [];
-      contextMenu.items.value.forEach((item, index) => {
-        const label = ` ${item.label}`.padEnd(rowWidth, ' ').slice(0, rowWidth);
-        const rowBackground =
-          index === contextMenu.selectedIndex.value
-            ? palette.selection
-            : index === contextMenu.hoveredIndex.value
-              ? palette.cursorLine
-              : null;
-        const styled = fg(item.enabled ? palette.fg : palette.dim)(label);
-        menuChunks.push(rowBackground ? bg(rowBackground)(styled) : styled);
-        if (index < contextMenu.items.value.length - 1) menuChunks.push(fg(palette.fg)('\n'));
-      });
-      contextMenuList.content = new StyledText(menuChunks);
-    }
-
-    // Tooltip overlay — display-only; clamped so it stays on screen.
-    tooltipText.visible = tooltip.visible.value;
-    if (tooltip.visible.value) {
-      const tooltipLabel = ` ${tooltip.text.value} `;
-      // CENTER the tooltip horizontally over the anchor cell (its midpoint aligns to the cursor
-      // column), then clamp so it never overflows the canvas (the scrollbar-geometry lesson).
-      const tooltipWidth = EditorCoordinates.Class.lineWidth(tooltipLabel);
-      const centeredLeft = tooltip.anchorX.value - Math.floor(tooltipWidth / 2);
-      tooltipText.left = Math.max(0, Math.min(centeredLeft, renderer.width - tooltipWidth));
-      // Vertical: default ABOVE the anchor row (so it does not cover the pointed-at row); flip BELOW
-      // only when there is no room above (near the top edge). Explicit 'below' forces below.
-      const anchorY = tooltip.anchorY.value;
-      const roomAbove = anchorY - 1 >= 0;
-      const placeAbove = tooltip.placement.value === 'above' || (tooltip.placement.value === 'auto' && roomAbove);
-      const desiredTop = placeAbove ? anchorY - 1 : anchorY + 1;
-      tooltipText.top = Math.max(0, Math.min(desiredTop, renderer.height - 1));
-      tooltipText.content = new StyledText([bg(palette.selection)(fg(palette.fg)(tooltipLabel))]);
-    }
+    overlayLayer.update(palette);
 
     scrollbarSync.syncScrollbars();
 
@@ -1255,7 +858,7 @@ function $buildRootView(
       // tmux's own #{cursor_x},#{cursor_y}.
       // invariant: The caret renders at the cursor display column (ui.invariants.md)
       const caretPosition =
-        editor.hasDocument.value && workspaceSet.active.focus.value === 'editor' && !editorContentMount.markdownSplitView?.previewFocused && !open
+        editor.hasDocument.value && workspaceSet.active.focus.value === 'editor' && !editorContentMount.markdownSplitView?.previewFocused && !commands.open.value
           ? editorController.wrapVisualPosition(cursorLine, editor.cursor.col.value)
           : null;
       if (caretPosition && typeof caretPosition === 'object') {
@@ -1272,7 +875,7 @@ function $buildRootView(
         editor.viewport.scrollLeft.value &&
       EditorCoordinates.Class.displayColumn(editor.document.line(Math.min(cursorLine, editor.document.lineCount - 1)), editor.cursor.col.value) <
         editor.viewport.scrollLeft.value + editorViewportWidth();
-    if (editor.hasDocument.value && workspaceSet.active.focus.value === 'editor' && !editorContentMount.markdownSplitView?.previewFocused && !open && cursorLine >= scrollTop && cursorLine < scrollTop + viewportHeight && caretVisibleHorizontally) {
+    if (editor.hasDocument.value && workspaceSet.active.focus.value === 'editor' && !editorContentMount.markdownSplitView?.previewFocused && !commands.open.value && cursorLine >= scrollTop && cursorLine < scrollTop + viewportHeight && caretVisibleHorizontally) {
       const cursorDisplayColumn = EditorCoordinates.Class.displayColumn(editor.document.line(cursorLine), editor.cursor.col.value);
       // Anchor the caret to the code renderable's ACTUAL laid-out screen cell (codeBody.x/y from
       // yoga), not hand-derived layout constants — the constants drifted from the real layout (the
@@ -1382,6 +985,21 @@ function $buildRootView(
   // converges the panes' viewport extents. RootView constructs the bars (their onChange handlers call
   // scrollbarSync.trueScrollPosition + read applyingGeometry); update() calls syncScrollbars() and the
   // frame loop calls syncPaneViewportGeometry().
+  // The overlay layer constructs + drives every modal/floating overlay (palette, find, quick-open,
+  // confirm, settings, shortcut sheet, context menu, tooltip). update() calls overlayLayer.update().
+  const overlayLayer = new OverlayLayer.Class({
+    renderer,
+    commands,
+    findBar,
+    quickOpen,
+    contextMenu,
+    settingsPanel,
+    shortcutHelp,
+    tooltip,
+    theme,
+    workspaceSet,
+  });
+
   const scrollbarSync = new ScrollbarSync.Class({
     renderer,
     workspaceSet,
@@ -1426,7 +1044,7 @@ function $buildRootView(
     activeDiffView: () => editorContentMount.diffView,
     activeMarkdownSplitView: () => editorContentMount.markdownSplitView,
     findTarget,
-    shortcutHelpViewportRows,
+    shortcutHelpViewportRows: () => overlayLayer.shortcutHelpViewportRows(),
     dispose() {
       try {
         editorContentMount.dispose();
