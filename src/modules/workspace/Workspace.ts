@@ -1,6 +1,5 @@
 // A workspace: one project root with its file tree, an editor, and which pane has focus.
-// (Multi-workspace tabs + per-workspace snapshot restoration are layered on in M2 via
-// WorkspaceManager; this is the single-workspace core.)
+// WorkspaceSet layers project tabs and flyweight activation over this per-root core.
 //
 // invariant: Workspace and file navigation are separate layers (workspace.invariants.md)
 import { Reactive } from 'ivue';
@@ -161,6 +160,10 @@ class $Workspace {
   }
   private gitWatcher: GitWatcher.Model | null = null;
 
+  get hasLiveGitWatcher(): boolean {
+    return this.gitWatcher !== null;
+  }
+
   // Optional live settings source: when attached, the vertical scroll-momentum profile reads its
   // ceiling / gain / friction from the reactive Settings store so the settings panel LIVE-APPLIES
   // (no restart). Unattached (tests) falls back to the tuned VERTICAL_MOMENTUM default.
@@ -243,6 +246,24 @@ class $Workspace {
     // Watch the working tree so external changes refresh the panel WITHOUT any in-app action.
     this.gitWatcher?.dispose();
     this.gitWatcher = this.createGitWatcher(root, this.git.value);
+  }
+
+  // invariant: N open workspaces do not cost N live GitWatchers (workspace.invariants.md)
+  /** Release per-root live resources while preserving this workspace's resumable model state. */
+  suspendOwnedResources(): void {
+    this.gitWatcher?.dispose();
+    this.gitWatcher = null;
+    this.buffers.deactivate();
+  }
+
+  // invariant: N open workspaces do not cost N live GitWatchers (workspace.invariants.md)
+  /** Recreate per-root live resources when this workspace becomes the observed project again. */
+  resumeOwnedResources(): void {
+    this.buffers.reactivate();
+    if (this.root && this.git.value && !this.gitWatcher) {
+      this.gitWatcher = this.createGitWatcher(this.root, this.git.value);
+      void this.git.value.refresh();
+    }
   }
 
   /** Tear down owned resources with effects/handles (the working-tree watcher + open buffers). */

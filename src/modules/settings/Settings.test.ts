@@ -48,6 +48,7 @@ describe('Settings', () => {
     expect(settings.glyphMode.value).toBe('auto');
     expect(settings.theme.value).toBe('dark');
     expect(settings.wordWrap.value).toBe(false);
+    expect(settings.workspaceTabPosition.value).toBe('top');
     expect(settings.sidebarWidth.value).toBe(32);
     expect(settings.diffSplitRatio.value).toBe(0.5);
     expect(settings.gitSplitRatio.value).toBe(0.5);

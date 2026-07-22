@@ -142,6 +142,16 @@ class $OpenBufferSet {
     this.activeIndex.value = -1;
   }
 
+  /** Dehydrate the clean active document while its workspace is not the observed project. */
+  deactivate(): void {
+    this.dehydrateIfClean(this.activeIndex.value);
+  }
+
+  /** Rehydrate the selected document when its workspace becomes active again. */
+  reactivate(): void {
+    this.hydrate(this.activeIndex.value);
+  }
+
   private hydrate(index: number): void {
     const entry = this.entries.value[index];
     if (!entry || entry.buffer) return;

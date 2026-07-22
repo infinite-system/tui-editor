@@ -19,6 +19,9 @@ export type ScrollModifier = 'alt' | 'shift' | 'ctrl' | 'none';
 /** How glyphs are selected for rendering: automatic detection or a forced tier. */
 export type GlyphMode = 'auto' | 'nerd' | 'unicode' | 'ascii';
 
+/** Where the project-layer tab strip is mounted in the root frame. */
+export type WorkspaceTabPosition = 'top' | 'left';
+
 /** The full set of settable values — one field per reactive getter on the store. */
 export interface SettingsValues {
   // Scroll physics.
@@ -35,6 +38,7 @@ export interface SettingsValues {
   glyphMode: GlyphMode;
   theme: string;
   wordWrap: boolean;
+  workspaceTabPosition: WorkspaceTabPosition;
   // Splitter geometry.
   sidebarWidth: number;
   gitSplitRatio: number;
@@ -78,6 +82,10 @@ const ALLOWED_GLYPH_MODES: ReadonlySet<GlyphMode> = new Set<GlyphMode>([
   'unicode',
   'ascii',
 ]);
+const ALLOWED_WORKSPACE_TAB_POSITIONS: ReadonlySet<WorkspaceTabPosition> = new Set([
+  'top',
+  'left',
+]);
 
 class $Settings {
   constructor(readonly options: SettingsOptions = {}) {}
@@ -117,6 +125,9 @@ class $Settings {
   get wordWrap(): Ref<boolean> {
     return ref(false);
   }
+  get workspaceTabPosition(): Ref<WorkspaceTabPosition> {
+    return ref<WorkspaceTabPosition>('top');
+  }
   get sidebarWidth(): Ref<number> {
     return ref(32);
   }
@@ -141,6 +152,7 @@ class $Settings {
       glyphMode: this.glyphMode,
       theme: this.theme,
       wordWrap: this.wordWrap,
+      workspaceTabPosition: this.workspaceTabPosition,
       sidebarWidth: this.sidebarWidth,
       gitSplitRatio: this.gitSplitRatio,
       diffSplitRatio: this.diffSplitRatio,
@@ -281,6 +293,7 @@ class $Settings {
       glyphMode: 'auto',
       theme: 'dark',
       wordWrap: false,
+      workspaceTabPosition: 'top',
       sidebarWidth: 32,
       gitSplitRatio: 0.5,
       diffSplitRatio: 0.5,
@@ -315,6 +328,12 @@ class $Settings {
     }
     if (typeof record.theme === 'string') result.theme = record.theme;
     if (typeof record.wordWrap === 'boolean') result.wordWrap = record.wordWrap;
+    if (
+      typeof record.workspaceTabPosition === 'string' &&
+      ALLOWED_WORKSPACE_TAB_POSITIONS.has(record.workspaceTabPosition as WorkspaceTabPosition)
+    ) {
+      result.workspaceTabPosition = record.workspaceTabPosition as WorkspaceTabPosition;
+    }
     readNumber('sidebarWidth');
     readNumber('gitSplitRatio');
     readNumber('diffSplitRatio');

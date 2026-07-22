@@ -4,12 +4,13 @@
 // invariant: The core is complete without plugins (project.invariants.md)
 import { Static } from 'ivue/extras';
 import type { CommandRegistry } from './CommandRegistry';
-import type { Workspace } from '../workspace/Workspace';
+import type { WorkspaceSet } from '../workspace/WorkspaceSet';
 import type { Theme } from '../theme/Theme';
 
 export interface CommandContext {
-  workspace: Workspace.Instance;
+  workspaceSet: WorkspaceSet.Instance;
   theme: Theme.Instance;
+  openWorkspaceFolder: () => void;
   quit: () => void;
   requestRender: () => void;
   hasOpenDiff: () => boolean;
@@ -33,17 +34,44 @@ function $registerDefaultCommands(
   registry: CommandRegistry.Instance,
   context: CommandContext,
 ): void {
-  const getEditor = () => context.workspace.editor;
-  const hasDocument = () => context.workspace.editor.hasDocument.value;
+  const getEditor = () => context.workspaceSet.active.editor;
+  const hasDocument = () => context.workspaceSet.active.editor.hasDocument.value;
 
   registry.registerAll([
+    {
+      id: 'workspace.openFolder',
+      title: 'Workspace: Open Folder',
+      category: 'Workspace',
+      run: context.openWorkspaceFolder,
+    },
+    {
+      id: 'workspace.close',
+      title: 'Workspace: Close Project',
+      category: 'Workspace',
+      when: () => context.workspaceSet.count > 1,
+      run: () => context.workspaceSet.closeActive(),
+    },
+    {
+      id: 'workspace.next',
+      title: 'Workspace: Next Project',
+      category: 'Workspace',
+      when: () => context.workspaceSet.count > 1,
+      run: () => context.workspaceSet.cycle(1),
+    },
+    {
+      id: 'workspace.previous',
+      title: 'Workspace: Previous Project',
+      category: 'Workspace',
+      when: () => context.workspaceSet.count > 1,
+      run: () => context.workspaceSet.cycle(-1),
+    },
     {
       id: 'file.save',
       title: 'File: Save',
       category: 'File',
       when: hasDocument,
       run: () => {
-        context.workspace.saveActiveFile();
+        context.workspaceSet.active.saveActiveFile();
       },
     },
     {
@@ -71,14 +99,14 @@ function $registerDefaultCommands(
       id: 'view.focusFiles',
       title: 'View: Focus File Explorer',
       category: 'View',
-      run: () => context.workspace.focusFiles(),
+      run: () => context.workspaceSet.active.focusFiles(),
     },
     {
       id: 'view.focusEditor',
       title: 'View: Focus Editor',
       category: 'View',
       when: hasDocument,
-      run: () => context.workspace.focusEditor(),
+      run: () => context.workspaceSet.active.focusEditor(),
     },
     {
       id: 'view.toggleTheme',
@@ -125,7 +153,7 @@ function $registerDefaultCommands(
       id: 'files.refresh',
       title: 'Files: Refresh Tree',
       category: 'Files',
-      run: () => context.workspace.tree.refresh(),
+      run: () => context.workspaceSet.active.tree.refresh(),
     },
     {
       id: 'app.quit',

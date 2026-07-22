@@ -42,12 +42,12 @@ for _ in $(seq 1 "${tabs:-8}"); do [ "$(f activeBufferIndex)" = "0" ] && break; 
 "$H" settle "$S" >/dev/null 2>&1
 before="$(f activeBufferIndex)"
 # The COUNT BADGE (active/total digits) is the rightmost element. Assert it shows the total.
-badge_info="$("$BUN" -e 'const f=JSON.parse(require("fs").readFileSync(process.argv[1]));const cells=[...f.rows[0].text];let end=-1,start=-1;for(let x=cells.length-1;x>0;x--){if(/[0-9\/]/.test(cells[x])){if(end<0)end=x;start=x;}else if(end>=0)break;}console.log(start+" "+cells.slice(start,end+1).join(""));' "$DIR/../artifacts/frame-$S.json")"
-badge_start="$(echo "$badge_info" | cut -d' ' -f1)"; badge_text="$(echo "$badge_info" | cut -d' ' -f2)"
+badge_info="$("$BUN" -e 'const frame=JSON.parse(require("fs").readFileSync(process.argv[1]));const total=process.argv[2];for(let rowIndex=0;rowIndex<frame.rows.length;rowIndex+=1){const cells=Array.from(frame.rows[rowIndex].text);const slashIndex=cells.findIndex((cell,columnIndex)=>cell==="/"&&cells.slice(columnIndex+1,columnIndex+1+total.length).join("")===total);if(slashIndex<0)continue;let start=slashIndex;while(start>0&&/[0-9]/.test(cells[start-1]))start-=1;let end=slashIndex+1+total.length;console.log(start+" "+rowIndex+" "+cells.slice(start,end).join(""));process.exit(0)}console.log("-1 -1 missing");' "$DIR/../artifacts/frame-$S.json" "$tabs")"
+badge_start="$(echo "$badge_info" | cut -d' ' -f1)"; badge_row="$(echo "$badge_info" | cut -d' ' -f2)"; badge_text="$(echo "$badge_info" | cut -d' ' -f3)"
 if echo "$badge_text" | grep -q "/${tabs}"; then echo "  PASS  count badge shows total ($badge_text)"; else echo "  FAIL  count badge wrong ($badge_text, tabs=$tabs)"; fail=1; fi
 
 echo "== clicking the count badge opens the all-buffers dropdown; a row activates that tab =="
-"$H" click "$S" "$badge_start" 0 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
+"$H" click "$S" "$badge_start" "$badge_row" >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
 if [ "$(f contextMenuOpen)" = "true" ]; then echo "  PASS  badge click opened the dropdown"; else echo "  FAIL  badge click did not open the dropdown"; fail=1; fi
 "$H" send "$S" Escape >/dev/null; sleep 0.2; "$H" settle "$S" >/dev/null 2>&1
 
@@ -57,7 +57,7 @@ for _ in $(seq 1 "${tabs:-8}"); do [ "$(f activeBufferIndex)" = "0" ] && break; 
 "$H" settle "$S" >/dev/null 2>&1
 active_before="$(f activeBufferIndex)"
 arrow_col=$(( ${badge_start:-100} - 2 ))
-"$H" click "$S" "$arrow_col" 0 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
+"$H" click "$S" "$arrow_col" "$badge_row" >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
 active_after="$(f activeBufferIndex)"
 if [ "$active_after" = "$active_before" ]; then echo "  PASS  right-arrow panned the strip; active tab UNCHANGED ($active_before)"; else echo "  FAIL  right-arrow changed the active tab ($active_before -> $active_after) — must only pan"; fail=1; fi
 

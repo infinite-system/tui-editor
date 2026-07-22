@@ -9,11 +9,13 @@ import { Static } from 'ivue/extras';
 import { App } from './App';
 import { Kernel } from '../kernel/Kernel';
 import { Workspace } from '../workspace/Workspace';
+import { WorkspaceSet } from '../workspace/WorkspaceSet';
 import { Theme } from '../theme/Theme';
 import { TerminalCapabilities } from '../theme/TerminalCapabilities';
 import { CommandRegistry } from '../commands/CommandRegistry';
 import { CommandDefaults } from '../commands/CommandDefaults';
 import { RootView } from '../ui/RootView';
+import { TabStrip } from '../ui/TabStrip';
 import { ContextMenu } from '../ui/ContextMenu';
 import { Tooltip } from '../ui/Tooltip';
 import { Settings } from '../settings/Settings';
@@ -43,6 +45,7 @@ export interface BootOptions {
 export interface BootedApp {
   app: App.Instance;
   workspace: Workspace.Instance;
+  workspaceSet: WorkspaceSet.Instance;
   theme: Theme.Instance;
   renderer: CliRenderer;
   view: RootView;
@@ -70,17 +73,32 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   app.attach(renderer);
 
   const theme = new Theme.Class();
-  const workspace = new Workspace.Class();
-  workspace.open(options.root ?? Environment.Class.cwd);
-
   const commands = new CommandRegistry.Class();
 
   // Reactive settings store (item G): load user + project settings; changes live-apply + persist.
   const settings = new Settings.Class();
   settings.load({ workspaceRoot: options.root ?? Environment.Class.cwd });
-  // Live-apply the scroll physics: the momentum engine reads its ceiling/gain/friction from here, so
-  // editing them in the Ctrl+, panel changes scrolling immediately (no restart).
-  workspace.attachSettings(settings);
+  const workspaceSet = new WorkspaceSet.Class(settings);
+  workspaceSet.open(options.root ?? Environment.Class.cwd);
+  const bufferTabStrip = new TabStrip.Class('horizontal', () =>
+    workspaceSet.active.buffers.tabs().map((bufferTab) => ({
+      identifier: bufferTab.path,
+      label: Files.Class.basename(bufferTab.path),
+      active: bufferTab.active,
+      dirty: bufferTab.dirty,
+      closable: true,
+    })),
+  );
+  const workspaceTabStrip = new TabStrip.Class(
+    settings.workspaceTabPosition.value === 'left' ? 'vertical' : 'horizontal',
+    () =>
+      workspaceSet.tabs().map((workspaceTab) => ({
+        identifier: workspaceTab.root,
+        label: workspaceTab.name,
+        active: workspaceTab.active,
+        closable: workspaceSet.count > 1,
+      })),
+  );
 
   // App-level overlay view models (the view projects them; input routes through here).
   const contextMenu = new ContextMenu.Class();
@@ -91,7 +109,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
 
   const view = RootView.Class.buildRootView(
     renderer,
-    workspace,
+    workspaceSet,
+    bufferTabStrip,
+    workspaceTabStrip,
     theme,
     commands,
     app,
@@ -107,7 +127,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   const revealFindMatch = (): void => {
     const match = findBar.engine?.currentMatch;
     if (!match) return;
-    const editor = workspace.editor;
+    const editor = workspaceSet.active.editor;
     editor.placeCursor(match.line, match.endColumn);
     editor.cursor.anchor.value = { line: match.line, col: match.startColumn }; // after placeCursor -> selection
     editor.revealCursor();
@@ -126,6 +146,10 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     const mode = settings.glyphMode.value;
     theme.setGlyphLevel(mode === 'auto' ? TerminalCapabilities.Class.detectGlyphLevel() : mode);
   });
+  app.$watch(
+    () => settings.workspaceTabPosition.value,
+    (position) => workspaceTabStrip.setOrientation(position === 'left' ? 'vertical' : 'horizontal'),
+  );
   // Word wrap toggling (command OR settings panel) switches viewport.scrollTop between LOGICAL-line and
   // VISUAL-row units. Re-anchoring on the cursor sets a valid scrollTop in the new units — no fragile
   // conversion — so the cursor stays on screen. This MUST be a TARGETED watch on settings.wordWrap, NOT
@@ -134,13 +158,13 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   // file, wheel does nothing / can't leave the top" bug: cursor at line 0 pinned the viewport at 0).
   app.$watch(
     () => settings.wordWrap.value,
-    () => workspace.editor.revealCursor(),
+    () => workspaceSet.active.editor.revealCursor(),
   );
   // GitWatcher already reconciles into GitRepository.lastRefreshAt. Reuse that reactive completion
   // signal to refresh the active HEAD blob; no second filesystem watcher or diff-fetch path exists.
   app.$watch(
-    () => workspace.git.value?.lastRefreshAt.value ?? null,
-    () => void workspace.refreshActiveHeadText(),
+    () => workspaceSet.active.git.value?.lastRefreshAt.value ?? null,
+    () => void workspaceSet.active.refreshActiveHeadText(),
   );
 
   // Last mouse event seen (for the observability side channel — proves the mouse path is live).
@@ -148,12 +172,20 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
 
   // Publish model state to the observability side channel (read-only over model state).
   const publish = (): void => {
-    const editor = workspace.editor;
+    const editor = workspaceSet.active.editor;
     const diffView = view.activeDiffView();
     StatusChannel.Class.update({
       mouse: lastMouse,
-      activeWorkspace: workspace.name.value,
-      workspaces: [workspace.name.value],
+      activeWorkspace: workspaceSet.active.name.value,
+      workspaces: workspaceSet.tabs().map((workspaceTab) => workspaceTab.name),
+      activeWorkspaceIndex: workspaceSet.activeWorkspaceIndex.value,
+      activeWorkspaceRoot: workspaceSet.active.root,
+      workspaceCount: workspaceSet.count,
+      liveGitWatcherCount: workspaceSet.liveGitWatcherCount,
+      workspaceLiveGitWatchers: workspaceSet.entries.value.map(
+        (workspaceEntry) => workspaceEntry.hasLiveGitWatcher,
+      ),
+      workspaceTabPosition: settings.workspaceTabPosition.value,
       activeBuffer: editor.hasDocument.value ? editor.document.path : null,
       bufferRevision: editor.document.revision.value,
       dirty: editor.document.dirty.value,
@@ -166,26 +198,26 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       overlay: commands.open.value ? 'palette' : null,
       paletteQuery: commands.open.value ? commands.query.value : '',
       paletteMatches: commands.open.value ? commands.filtered.length : 0,
-      focus: workspace.focus.value,
-      treeRows: workspace.tree.rows.length,
-      treeSelected: workspace.tree.selectedIndex.value,
-      treeScrollTop: workspace.tree.scrollTop.value,
-      treeHovered: workspace.tree.hoveredIndex.value,
+      focus: workspaceSet.active.focus.value,
+      treeRows: workspaceSet.active.tree.rows.length,
+      treeSelected: workspaceSet.active.tree.selectedIndex.value,
+      treeScrollTop: workspaceSet.active.tree.scrollTop.value,
+      treeHovered: workspaceSet.active.tree.hoveredIndex.value,
       editorScrollTop: editor.viewport.scrollTop.value,
       editorScrollLeft: editor.viewport.scrollLeft.value,
       wordWrap: editor.wordWrap.value,
-      changesScrollTop: workspace.gitPanel.changesScrollTop.value,
-      gitLogScrollTop: workspace.gitPanel.logScrollTop.value,
-      gitLogIndex: workspace.gitPanel.logIndex.value,
-      gitLogLoaded: workspace.commitLog.value?.loadedCount ?? 0,
-      gitLogExpanded: workspace.commitExpansion.value?.entries.value.length ?? 0,
-      gitRegion: workspace.gitPanel.region.value,
-      gitSelectedPaths: [...workspace.gitPanel.selectedPaths.value],
+      changesScrollTop: workspaceSet.active.gitPanel.changesScrollTop.value,
+      gitLogScrollTop: workspaceSet.active.gitPanel.logScrollTop.value,
+      gitLogIndex: workspaceSet.active.gitPanel.logIndex.value,
+      gitLogLoaded: workspaceSet.active.commitLog.value?.loadedCount ?? 0,
+      gitLogExpanded: workspaceSet.active.commitExpansion.value?.entries.value.length ?? 0,
+      gitRegion: workspaceSet.active.gitPanel.region.value,
+      gitSelectedPaths: [...workspaceSet.active.gitPanel.selectedPaths.value],
       contextMenuOpen: contextMenu.open.value,
       tooltipVisible: tooltip.visible.value,
       // A diff is shown OVER the editor tabs (transient). Lets a driven contract confirm the diff
       // pane actually mounted, so pane-independence (editor extent survives the swap) is real-verified.
-      showingDiff: workspace.showingDiff.value,
+      showingDiff: workspaceSet.active.showingDiff.value,
       diffScrollTop: diffView?.alignedRowScrollOffset.value ?? 0,
       diffSelectionChars: diffView?.selectionCharacterCount() ?? 0,
       diffSelection: diffView?.selectionRange() ?? null,
@@ -195,7 +227,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       sidebarWidth: settings.sidebarWidth.value,
       // Total working-tree changes — proves the GitWatcher live-refreshes on EXTERNAL fs changes.
       gitChangedCount: (() => {
-        const repository = workspace.git.value;
+        const repository = workspaceSet.active.git.value;
         if (!repository) return 0;
         return (
           repository.staged.value.length + repository.unstaged.value.length + repository.untracked.value.length
@@ -203,10 +235,10 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       })(),
       // Editor buffer tabs (item 10a). liveBufferCount proves the FLYWEIGHT: it must stay far below
       // tabCount (only the active + any dirty background buffer holds a live document).
-      bufferTabCount: workspace.buffers.count,
-      bufferLiveCount: workspace.buffers.liveCount,
-      activeBufferIndex: workspace.buffers.activeIndex.value,
-      pendingCloseTab: workspace.pendingCloseTabIndex.value,
+      bufferTabCount: workspaceSet.active.buffers.count,
+      bufferLiveCount: workspaceSet.active.buffers.liveCount,
+      activeBufferIndex: workspaceSet.active.buffers.activeIndex.value,
+      pendingCloseTab: workspaceSet.active.pendingCloseTabIndex.value,
     });
   };
 
@@ -223,7 +255,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   // projection→model write feeding the effect it observes.
   // invariant: Rendering is one coarse frame effect (app.invariants.md)
   const syncSize = (): void => {
-    workspace.editor.viewport.setSize(view.editorViewportWidth(), view.editorViewportHeight());
+    workspaceSet.active.editor.viewport.setSize(view.editorViewportWidth(), view.editorViewportHeight());
   };
 
   // The single coarse reactive frame effect: observe the load-bearing signals and repaint on ANY
@@ -231,7 +263,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   // or an LSP diagnostic repaint the screen without a keypress.
   // invariant: Rendering is one coarse frame effect (app.invariants.md)
   app.$watchEffect(() => {
-    const editor = workspace.editor;
+    const editor = workspaceSet.active.editor;
     // The whole paint pass is exception-isolated: a throw while projecting model→renderables must
     // degrade this one frame (logged to file) and request a repaint, never wedge the demand-driven
     // loop. The signal reads stay first so reactive dependency tracking is unaffected by the guard.
@@ -246,13 +278,18 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     void editor.viewport.scrollLeft.value;
     void editor.wordWrap.value;
     void settings.diffSplitRatio.value;
-    void workspace.focus.value;
-    void workspace.sidebarView.value;
-    void workspace.tree.selectedIndex.value;
-    void workspace.tree.hoveredIndex.value;
+    void settings.workspaceTabPosition.value;
+    void workspaceSet.entries.value;
+    void workspaceSet.activeWorkspaceIndex.value;
+    void workspaceTabStrip.scrollOffset.value;
+    void bufferTabStrip.scrollOffset.value;
+    void workspaceSet.active.focus.value;
+    void workspaceSet.active.sidebarView.value;
+    void workspaceSet.active.tree.selectedIndex.value;
+    void workspaceSet.active.tree.hoveredIndex.value;
     // Git state is produced asynchronously (refresh/log outlive boot); observe it so the sidebar
     // repaints — and the status side-channel flushes — when git data arrives.
-    const git = workspace.git.value;
+    const git = workspaceSet.active.git.value;
     if (git) {
       void git.branch.value;
       void git.staged.value;
@@ -262,8 +299,8 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     }
     // Inline commit expansion is produced asynchronously (the lazy name-status fetch lands after
     // Enter); observe the entries so the loading row is replaced by file rows without a keypress.
-    void workspace.commitExpansion.value?.entries.value;
-    const gitPanel = workspace.gitPanel;
+    void workspaceSet.active.commitExpansion.value?.entries.value;
+    const gitPanel = workspaceSet.active.gitPanel;
     void gitPanel.changesIndex.value;
     void gitPanel.logIndex.value;
     void gitPanel.logScrollTop.value;
@@ -335,7 +372,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     let animating = false;
     // All pane wheel-momentum regimes (git log, editor V/H, tree, git changes) step here and each
     // settles to EXACTLY zero, so `animating` returns to false at rest — quiescence preserved.
-    animating = workspace.tickScrollAnimations(deltaTimeSeconds) || animating;
+    animating = workspaceSet.active.tickScrollAnimations(deltaTimeSeconds) || animating;
     // Drag-edge auto-scroll: while a selection drag holds at a pane edge, keep scrolling +
     // extending the selection.
     animating = view.tickDragAutoScroll(deltaTimeSeconds) || animating;
@@ -347,7 +384,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     // Converge the viewport size with the LAID-OUT layout (gutter width changes when a file opens
     // or its line count crosses a digit boundary; boot/resize alone goes stale). Mutating outside
     // the reactive effect: the write triggers one repaint and converges — no feedback loop.
-    const editorViewport = workspace.editor.viewport;
+    const editorViewport = workspaceSet.active.editor.viewport;
     const laidOutWidth = view.editorViewportWidth();
     const laidOutHeight = view.editorViewportHeight();
     if (editorViewport.width.value !== laidOutWidth || editorViewport.height.value !== laidOutHeight) {
@@ -365,7 +402,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   };
   renderer.on('frame', onFrame);
   app.onDispose(() => renderer.off('frame', onFrame));
-  app.onDispose(() => workspace.dispose()); // stop the working-tree watcher + dispose open buffers
+  app.onDispose(() => workspaceSet.dispose()); // stop all working-tree watchers + dispose open buffers
 
   // Awaitable render for boot/resize/harness determinism: sync size, paint, wait one frame.
   const render = async (): Promise<void> => {
@@ -397,11 +434,12 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   };
 
   CommandDefaults.Class.registerDefaultCommands(commands, {
-    workspace,
+    workspaceSet,
     theme,
+    openWorkspaceFolder: () => quickOpen.showWorkspacePath(),
     quit: () => void shutdown(),
     requestRender: () => app.requestRender(),
-    hasOpenDiff: () => workspace.showingDiff.value && view.activeDiffView() !== null,
+    hasOpenDiff: () => workspaceSet.active.showingDiff.value && view.activeDiffView() !== null,
     nextDiffChange: () => view.activeDiffView()?.jumpToNextChange(),
     previousDiffChange: () => view.activeDiffView()?.jumpToPreviousChange(),
   });
@@ -442,28 +480,28 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   // dispatch. No chord conditionals live here — bindings are data in keybindings.defaults/mac.
   // invariant: Bindings are intent addressed (src/modules/keybindings/keybindings.invariants.md)
   const keybindings = new KeybindingRegistry.Class();
-  keybindings.registerGuard('editorHasSelection', () => workspace.editor.cursor.hasSelection);
+  keybindings.registerGuard('editorHasSelection', () => workspaceSet.active.editor.cursor.hasSelection);
   keybindings.registerLayer('canonical', canonicalBindings);
   keybindings.registerLayer('mac', macOverlayBindings);
 
   // Git-panel helpers shared by the git action handlers (region-aware continuous flow).
   const currentChangeRows = () => {
-    const git = workspace.git.value;
+    const git = workspaceSet.active.git.value;
     return git ? GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value) : [];
   };
   const normalizeChangesIndex = (): void => {
     const rows = currentChangeRows();
-    if (rows[workspace.gitPanel.changesIndex.value]?.kind !== 'file') {
+    if (rows[workspaceSet.active.gitPanel.changesIndex.value]?.kind !== 'file') {
       const firstFile = GitRows.Class.nextFileRow(rows, -1, 1);
-      if (firstFile >= 0) workspace.gitPanel.changesIndex.value = firstFile;
+      if (firstFile >= 0) workspaceSet.active.gitPanel.changesIndex.value = firstFile;
     }
   };
   // Up/Down walk the FLAT log rows (commit headers AND expanded file rows are both selectable) —
   // logIndex is a flat-row index over the same row model the renderer draws.
   const moveLog = (delta: number): void => {
-    const gitPanel = workspace.gitPanel;
-    workspace.haltGitLogScroll(); // keyboard is precise — adopt-and-stop any glide (One-Writer)
-    const end = workspace.logFlatEnd();
+    const gitPanel = workspaceSet.active.gitPanel;
+    workspaceSet.active.haltGitLogScroll(); // keyboard is precise — adopt-and-stop any glide (One-Writer)
+    const end = workspaceSet.active.logFlatEnd();
     gitPanel.logIndex.value = Math.max(
       0,
       Math.min(gitPanel.logIndex.value + delta, Number.isFinite(end) ? end - 1 : gitPanel.logIndex.value + delta),
@@ -472,11 +510,11 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     if (gitPanel.logIndex.value < gitPanel.logScrollTop.value) gitPanel.logScrollTop.value = gitPanel.logIndex.value;
     else if (gitPanel.logIndex.value >= gitPanel.logScrollTop.value + approximateVisible)
       gitPanel.logScrollTop.value = gitPanel.logIndex.value - approximateVisible + 1;
-    workspace.ensureLogWindow(gitPanel.logScrollTop.value);
+    workspaceSet.active.ensureLogWindow(gitPanel.logScrollTop.value);
   };
   const moveChanges = (direction: 1 | -1): void => {
-    const gitPanel = workspace.gitPanel;
-    workspace.haltGitChangesScroll(); // keyboard is precise — adopt-and-stop wheel glide
+    const gitPanel = workspaceSet.active.gitPanel;
+    workspaceSet.active.haltGitChangesScroll(); // keyboard is precise — adopt-and-stop wheel glide
     const rows = currentChangeRows();
     const next = GitRows.Class.nextFileRow(rows, gitPanel.changesIndex.value, direction);
     if (next >= 0) gitPanel.changesIndex.value = next;
@@ -488,16 +526,20 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   const actionHandlers: Record<string, (key: KeyEvent) => void> = {
     'app.quit': () => void shutdown(),
     'find.open': () => {
-      if (!workspace.editor.hasDocument.value) return;
-      findBar.openFor(workspace.editor.document, 'find');
+      if (!workspaceSet.active.editor.hasDocument.value) return;
+      findBar.openFor(workspaceSet.active.editor.document, 'find');
       revealFindMatch();
     },
     'find.replace': () => {
-      if (!workspace.editor.hasDocument.value) return;
-      findBar.openFor(workspace.editor.document, 'replace');
+      if (!workspaceSet.active.editor.hasDocument.value) return;
+      findBar.openFor(workspaceSet.active.editor.document, 'replace');
       revealFindMatch();
     },
-    'quickopen.open': () => void quickOpen.show(workspace.root), // Ctrl+P: fuzzy go-to-file over rg --files
+    'quickopen.open': () => void quickOpen.show(workspaceSet.active.root), // Ctrl+P: fuzzy go-to-file over rg --files
+    'workspace.openFolder': () => quickOpen.showWorkspacePath(),
+    'workspace.close': () => workspaceSet.closeActive(),
+    'workspace.next': () => workspaceSet.cycle(1),
+    'workspace.previous': () => workspaceSet.cycle(-1),
     'palette.open': () => commands.openPalette(),
     'palette.close': () => commands.closePalette(),
     'palette.run': () => commands.runSelected(),
@@ -510,134 +552,134 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       findBar.deletePreviousWord();
       revealFindMatch();
     },
-    'focus.toggle': () => workspace.toggleFocus(),
+    'focus.toggle': () => workspaceSet.active.toggleFocus(),
     'settings.toggle': () => settingsPanel.toggle(),
     'settings.close': () => settingsPanel.close(),
     'settings.up': () => settingsPanel.moveSelection(-1),
     'settings.down': () => settingsPanel.moveSelection(1),
     'settings.increase': () => settingsPanel.adjust(1),
     'settings.decrease': () => settingsPanel.adjust(-1),
-    'buffer.close': () => workspace.closeActiveTab(),
-    'buffer.next': () => workspace.cycleTab(1),
-    'buffer.previous': () => workspace.cycleTab(-1),
+    'buffer.close': () => workspaceSet.active.closeActiveTab(),
+    'buffer.next': () => workspaceSet.active.cycleTab(1),
+    'buffer.previous': () => workspaceSet.active.cycleTab(-1),
     'diff.nextChange': () => view.activeDiffView()?.jumpToNextChange(),
     'diff.previousChange': () => view.activeDiffView()?.jumpToPreviousChange(),
     'git.togglePanel': () => {
-      workspace.toggleGit();
-      if (workspace.focus.value === 'git') {
-        workspace.gitPanel.region.value = 'changes';
-        void workspace.git.value?.refresh();
-        void workspace.commitLog.value?.ensureRange(0, 50);
+      workspaceSet.active.toggleGit();
+      if (workspaceSet.active.focus.value === 'git') {
+        workspaceSet.active.gitPanel.region.value = 'changes';
+        void workspaceSet.active.git.value?.refresh();
+        void workspaceSet.active.commitLog.value?.ensureRange(0, 50);
       }
     },
     'git.up': () => {
       normalizeChangesIndex();
-      if (workspace.gitPanel.region.value === 'changes') moveChanges(-1);
-      else if (workspace.gitPanel.logIndex.value === 0) {
-        workspace.haltGitChangesScroll();
-        workspace.gitPanel.region.value = 'changes'; // flow back up into the changes
+      if (workspaceSet.active.gitPanel.region.value === 'changes') moveChanges(-1);
+      else if (workspaceSet.active.gitPanel.logIndex.value === 0) {
+        workspaceSet.active.haltGitChangesScroll();
+        workspaceSet.active.gitPanel.region.value = 'changes'; // flow back up into the changes
         const rows = currentChangeRows();
         const last = GitRows.Class.nextFileRow(rows, rows.length, -1);
-        if (last >= 0) workspace.gitPanel.changesIndex.value = last;
+        if (last >= 0) workspaceSet.active.gitPanel.changesIndex.value = last;
       } else moveLog(-1);
     },
     'git.down': () => {
       normalizeChangesIndex();
-      if (workspace.gitPanel.region.value === 'changes') moveChanges(1);
+      if (workspaceSet.active.gitPanel.region.value === 'changes') moveChanges(1);
       else moveLog(1);
     },
     'git.pageUp': () => {
-      if (workspace.gitPanel.region.value === 'log') moveLog(-10);
+      if (workspaceSet.active.gitPanel.region.value === 'log') moveLog(-10);
     },
     'git.pageDown': () => {
-      if (workspace.gitPanel.region.value === 'log') moveLog(10);
+      if (workspaceSet.active.gitPanel.region.value === 'log') moveLog(10);
     },
     'git.stageToggle': () => {
       // Enter in the LOG region activates the flat row: commit header = toggle inline expansion
       // (lazy fetch); file row = open that file's diff for that commit.
-      if (workspace.gitPanel.region.value === 'log') {
-        workspace.activateLogRow(workspace.gitPanel.logIndex.value);
+      if (workspaceSet.active.gitPanel.region.value === 'log') {
+        workspaceSet.active.activateLogRow(workspaceSet.active.gitPanel.logIndex.value);
         return;
       }
       normalizeChangesIndex();
-      void workspace.toggleStageAtRow(workspace.gitPanel.changesIndex.value);
+      void workspaceSet.active.toggleStageAtRow(workspaceSet.active.gitPanel.changesIndex.value);
     },
     'git.openFile': () => {
-      if (workspace.gitPanel.region.value === 'log') {
-        workspace.activateLogRow(workspace.gitPanel.logIndex.value);
+      if (workspaceSet.active.gitPanel.region.value === 'log') {
+        workspaceSet.active.activateLogRow(workspaceSet.active.gitPanel.logIndex.value);
         return;
       }
       normalizeChangesIndex();
-      void workspace.openChangeAtRow(workspace.gitPanel.changesIndex.value);
+      void workspaceSet.active.openChangeAtRow(workspaceSet.active.gitPanel.changesIndex.value);
     },
     'git.expandRight': () => {
       // Right on a collapsed commit expands it; on an expanded one steps into its first file row
       // (tree parity). No-op outside the log region.
-      if (workspace.gitPanel.region.value !== 'log') return;
-      const row = workspace.logRowAt(workspace.gitPanel.logIndex.value);
+      if (workspaceSet.active.gitPanel.region.value !== 'log') return;
+      const row = workspaceSet.active.logRowAt(workspaceSet.active.gitPanel.logIndex.value);
       if (row?.kind !== 'commit') return;
       if (row.expanded) moveLog(1);
-      else workspace.activateLogRow(workspace.gitPanel.logIndex.value);
+      else workspaceSet.active.activateLogRow(workspaceSet.active.gitPanel.logIndex.value);
     },
     'git.collapseLeft': () => {
-      if (workspace.gitPanel.region.value === 'log')
-        workspace.collapseLogRow(workspace.gitPanel.logIndex.value);
+      if (workspaceSet.active.gitPanel.region.value === 'log')
+        workspaceSet.active.collapseLogRow(workspaceSet.active.gitPanel.logIndex.value);
     },
     'git.discard': () => {
       normalizeChangesIndex();
-      workspace.requestDiscardAtRow(workspace.gitPanel.changesIndex.value);
+      workspaceSet.active.requestDiscardAtRow(workspaceSet.active.gitPanel.changesIndex.value);
     },
-    'git.leave': () => workspace.focusFiles(),
+    'git.leave': () => workspaceSet.active.focusFiles(),
     'tree.up': () => {
-      workspace.haltTreeScroll();
-      workspace.tree.moveSelection(-1);
+      workspaceSet.active.haltTreeScroll();
+      workspaceSet.active.tree.moveSelection(-1);
     },
     'tree.down': () => {
-      workspace.haltTreeScroll();
-      workspace.tree.moveSelection(1);
+      workspaceSet.active.haltTreeScroll();
+      workspaceSet.active.tree.moveSelection(1);
     },
-    'tree.activate': () => void workspace.activate(),
+    'tree.activate': () => void workspaceSet.active.activate(),
     'tree.rightExpandOrOpen': () => {
       // Right on a FILE opens it; on a collapsed dir expands; on an expanded dir steps into it.
-      workspace.haltTreeScroll();
-      if (workspace.tree.selected?.isDir && workspace.tree.selected.expanded)
-        workspace.tree.moveSelection(1);
-      else workspace.activate();
+      workspaceSet.active.haltTreeScroll();
+      if (workspaceSet.active.tree.selected?.isDir && workspaceSet.active.tree.selected.expanded)
+        workspaceSet.active.tree.moveSelection(1);
+      else workspaceSet.active.activate();
     },
     'tree.leftCollapse': () => {
-      if (workspace.tree.selected?.isDir && workspace.tree.selected.expanded) workspace.activate();
+      if (workspaceSet.active.tree.selected?.isDir && workspaceSet.active.tree.selected.expanded) workspaceSet.active.activate();
     },
-    'editor.moveUp': (key) => workspace.editor.moveVertical(-movementAcceleration(key), key.shift),
-    'editor.moveDown': (key) => workspace.editor.moveVertical(movementAcceleration(key), key.shift),
-    'editor.moveLeft': (key) => workspace.editor.moveHorizontal(-movementAcceleration(key), key.shift),
-    'editor.moveRight': (key) => workspace.editor.moveHorizontal(movementAcceleration(key), key.shift),
-    'editor.pageUp': (key) => workspace.editor.pageUp(key.shift),
-    'editor.pageDown': (key) => workspace.editor.pageDown(key.shift),
-    'editor.lineStart': (key) => workspace.editor.moveToLineStart(key.shift),
-    'editor.lineEnd': (key) => workspace.editor.moveToLineEnd(key.shift),
+    'editor.moveUp': (key) => workspaceSet.active.editor.moveVertical(-movementAcceleration(key), key.shift),
+    'editor.moveDown': (key) => workspaceSet.active.editor.moveVertical(movementAcceleration(key), key.shift),
+    'editor.moveLeft': (key) => workspaceSet.active.editor.moveHorizontal(-movementAcceleration(key), key.shift),
+    'editor.moveRight': (key) => workspaceSet.active.editor.moveHorizontal(movementAcceleration(key), key.shift),
+    'editor.pageUp': (key) => workspaceSet.active.editor.pageUp(key.shift),
+    'editor.pageDown': (key) => workspaceSet.active.editor.pageDown(key.shift),
+    'editor.lineStart': (key) => workspaceSet.active.editor.moveToLineStart(key.shift),
+    'editor.lineEnd': (key) => workspaceSet.active.editor.moveToLineEnd(key.shift),
     'editor.jumpUp': (key) =>
-      workspace.editor.moveVertical(-ScrollPhysics.Class.jumpRows(movementRun(key)), key.shift),
+      workspaceSet.active.editor.moveVertical(-ScrollPhysics.Class.jumpRows(movementRun(key)), key.shift),
     'editor.jumpDown': (key) =>
-      workspace.editor.moveVertical(ScrollPhysics.Class.jumpRows(movementRun(key)), key.shift),
-    'editor.wordLeft': (key) => workspace.editor.moveWordHorizontal(-1, key.shift),
-    'editor.wordRight': (key) => workspace.editor.moveWordHorizontal(1, key.shift),
-    'editor.documentStart': (key) => workspace.editor.moveDocumentStart(key.shift),
-    'editor.documentEnd': (key) => workspace.editor.moveDocumentEnd(key.shift),
-    'editor.newline': () => workspace.editor.insertNewline(),
-    'editor.backspace': () => workspace.editor.backspace(),
-    'editor.delete': () => workspace.editor.deleteChar(),
+      workspaceSet.active.editor.moveVertical(ScrollPhysics.Class.jumpRows(movementRun(key)), key.shift),
+    'editor.wordLeft': (key) => workspaceSet.active.editor.moveWordHorizontal(-1, key.shift),
+    'editor.wordRight': (key) => workspaceSet.active.editor.moveWordHorizontal(1, key.shift),
+    'editor.documentStart': (key) => workspaceSet.active.editor.moveDocumentStart(key.shift),
+    'editor.documentEnd': (key) => workspaceSet.active.editor.moveDocumentEnd(key.shift),
+    'editor.newline': () => workspaceSet.active.editor.insertNewline(),
+    'editor.backspace': () => workspaceSet.active.editor.backspace(),
+    'editor.delete': () => workspaceSet.active.editor.deleteChar(),
     'edit.deletePreviousWord': () => commands.run('edit.deletePreviousWord'),
     'editor.escape': () => {
-      if (workspace.editor.hasSelection) workspace.editor.cursor.clearSelection();
-      else workspace.focusFiles();
+      if (workspaceSet.active.editor.hasSelection) workspaceSet.active.editor.cursor.clearSelection();
+      else workspaceSet.active.focusFiles();
     },
-    'editor.save': () => workspace.saveActiveFile(),
-    'editor.selectAll': () => workspace.editor.selectAll(),
+    'editor.save': () => workspaceSet.active.saveActiveFile(),
+    'editor.selectAll': () => workspaceSet.active.editor.selectAll(),
     'editor.copy': () => {
       // Publish how many characters landed on the clipboard — the observable proof that copy
       // actually copied (the human-QA "cannot copy" bug's verification channel).
-      const diffView = workspace.showingDiff.value ? view.activeDiffView() : null;
-      const copyPromise = diffView ? diffView.copySelection() : workspace.editor.copySelection();
+      const diffView = workspaceSet.active.showingDiff.value ? view.activeDiffView() : null;
+      const copyPromise = diffView ? diffView.copySelection() : workspaceSet.active.editor.copySelection();
       void copyPromise.then((copiedCharacters) => {
         if (copiedCharacters > 0) {
           app.copyNotice.value = `Copied ${copiedCharacters} chars (${Clipboard.Class.lastBackend ?? 'no backend'})`;
@@ -650,11 +692,11 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
         StatusChannel.Class.flush();
       });
     },
-    'editor.cut': () => void workspace.editor.cutSelection(),
-    'editor.paste': () => void workspace.editor.pasteClipboard(),
-    'editor.undo': () => workspace.editor.performUndo(),
-    'editor.redo': () => workspace.editor.performRedo(),
-    'editor.toggleWordWrap': () => workspace.editor.toggleWordWrap(),
+    'editor.cut': () => void workspaceSet.active.editor.cutSelection(),
+    'editor.paste': () => void workspaceSet.active.editor.pasteClipboard(),
+    'editor.undo': () => workspaceSet.active.editor.performUndo(),
+    'editor.redo': () => workspaceSet.active.editor.performRedo(),
+    'editor.toggleWordWrap': () => workspaceSet.active.editor.toggleWordWrap(),
     'menu.previous': () => contextMenu.moveSelection(-1),
     'menu.next': () => contextMenu.moveSelection(1),
     'menu.run': () => contextMenu.runSelected(),
@@ -681,15 +723,15 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     }
     // Destructive-confirm overlay is MODAL: y confirms, anything else cancels — the context's
     // residual, not a binding.
-    if (workspace.gitPanel.confirmDiscard.value) {
-      if (key.name === 'y') void workspace.confirmDiscard();
-      else workspace.cancelDiscard();
+    if (workspaceSet.active.gitPanel.confirmDiscard.value) {
+      if (key.name === 'y') void workspaceSet.active.confirmDiscard();
+      else workspaceSet.active.cancelDiscard();
       return;
     }
     // Same MODAL contract for closing a tab with unsaved edits.
-    if (workspace.pendingCloseTabIndex.value >= 0) {
-      if (key.name === 'y') workspace.confirmCloseTab();
-      else workspace.cancelCloseTab();
+    if (workspaceSet.active.pendingCloseTabIndex.value >= 0) {
+      if (key.name === 'y') workspaceSet.active.confirmCloseTab();
+      else workspaceSet.active.cancelCloseTab();
       return;
     }
 
@@ -716,7 +758,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
           ? 'quickopen'
           : findBar.open.value
             ? 'find'
-            : workspace.focus.value;
+            : workspaceSet.active.focus.value;
 
     const normalizedChordEvent = {
       name: key.name,
@@ -748,9 +790,18 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       }
       if (key.name === 'return') {
         const path = quickOpen.activate(); // a project-ROOT-relative path (rg/git ls-files)
-        quickOpen.close();
-        // Resolve against the workspace root — openFileInTab (like the tree) reads an ABSOLUTE path.
-        if (path) workspace.openFileInTab(Files.Class.join(workspace.root, path));
+        if (quickOpen.mode.value === 'workspacePath') {
+          if (!path || !Files.Class.isDir(path)) {
+            quickOpen.setError('Enter an existing folder path');
+            return;
+          }
+          quickOpen.close();
+          workspaceSet.open(path);
+        } else {
+          quickOpen.close();
+          // Resolve against the workspace root — openFileInTab (like the tree) reads an ABSOLUTE path.
+          if (path) workspaceSet.active.openFileInTab(Files.Class.join(workspaceSet.active.root, path));
+        }
         return;
       }
       if (key.name === 'backspace') {
@@ -810,13 +861,13 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     // really is Ctrl+A and must stay Select All. (Cmd+Right = raw ^E is handled by the Ctrl+E binding,
     // which is harmless because Ctrl+E was unbound.) Driven-verified against the real byte streams.
     if (context === 'editor' && renderer.useKittyKeyboard && key.ctrl && key.name === 'a' && key.sequence === '\u0001') {
-      workspace.editor.moveToLineStart(key.shift);
+      workspaceSet.active.editor.moveToLineStart(key.shift);
       return;
     }
 
     // A diff is open OVER the tabs: editor-context keys drive the DiffView (synced aligned-row panes),
     // not the hidden buffer. n/p jump changes, Enter promotes to a real editable tab, Esc closes.
-    if (context === 'editor' && workspace.showingDiff.value) {
+    if (context === 'editor' && workspaceSet.active.showingDiff.value) {
       const diff = view.activeDiffView();
       if (diff) {
         switch (key.name) {
@@ -829,7 +880,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
           case 'n': diff.jumpToNextChange(); return;
           case 'p': diff.jumpToPreviousChange(); return;
           case 'return': diff.openFull(); return;
-          case 'escape': workspace.showingDiff.value = false; workspace.diffRequest.value = null; return;
+          case 'escape': workspaceSet.active.showingDiff.value = false; workspaceSet.active.diffRequest.value = null; return;
           default: break;
         }
       }
@@ -850,7 +901,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     if (resolution.chordPending) return;
     // Residual defaults: unbound printable keys TYPE in type-accepting contexts.
     if (context === 'palette' && isTypedCharacter(key)) commands.appendQuery(key.sequence);
-    else if (context === 'editor' && isTypedCharacter(key)) workspace.editor.insertText(key.sequence);
+    else if (context === 'editor' && isTypedCharacter(key)) workspaceSet.active.editor.insertText(key.sequence);
     // No explicit render here — any model mutation above triggers the frame effect.
   };
   // A throw while handling a keystroke must not wedge the loop: isolate + repaint so the app stays
@@ -925,7 +976,18 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   await render();
 
   Logging.Class.info('Boot complete');
-  return { app, workspace, theme, renderer, view, render, shutdown };
+  return {
+    app,
+    get workspace() {
+      return workspaceSet.active;
+    },
+    workspaceSet,
+    theme,
+    renderer,
+    view,
+    render,
+    shutdown,
+  };
 }
 
 // invariant: Construction goes through overridable seams (project.invariants.md)
