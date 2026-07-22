@@ -18,6 +18,10 @@ export const canonicalBindings: Keybinding[] = [
   { steps: [{ key: 'x', ctrl: true }, { key: 'c', ctrl: true }], action: 'app.quit' },
   { chord: { key: 'p', ctrl: true }, action: 'quickopen.open' }, // VS Code: Ctrl+P = go-to-file
   { chord: { key: 'p', ctrl: true, shift: true }, action: 'palette.open' }, // Ctrl+Shift+P = command palette
+  // Find and Replace are global overlay-switch actions: from any current input overlay, one chord
+  // replaces the shared modal slot. They still no-op in Bootstrap when no document is open.
+  { chord: { key: 'f', ctrl: true }, action: 'find.open' },
+  { chord: { key: 'h', ctrl: true }, action: 'find.replace' },
   // F1 ALSO opens the palette (VS Code parity: F1 = Show All Commands). Ctrl+Shift+P is intercepted by
   // VS Code's own terminal AND is unencodable on legacy (non-kitty) terminals that drop the shift bit
   // on a control key — F1 is a single unshifted function key that always reaches the app, so the
@@ -114,10 +118,8 @@ export const canonicalBindings: Keybinding[] = [
   // Editing" Cmd+Right (which sends a raw ^E / 0x05) jump to the line end. (Cmd+Left = raw ^A is
   // disambiguated from Ctrl+A = Select All in the onKey handler, since both resolve the same here.)
   { chord: { key: 'e', ctrl: true }, action: 'editor.lineEnd', context: 'editor' },
-  // --- editor: find / replace (Ctrl+F opens find, Ctrl+H opens find+replace; the 'find' context owns
-  //     the bar's own keys — typing, Enter/Shift+Enter cycle, Ctrl+Enter replace, Tab field, Esc close) ---
-  { chord: { key: 'f', ctrl: true }, action: 'find.open', context: 'editor' },
-  { chord: { key: 'h', ctrl: true }, action: 'find.replace', context: 'editor' },
+  // --- editor: find / replace input is owned by the 'find' context — typing, Enter/Shift+Enter
+  //     cycle, Ctrl+Enter replace, Tab switches field, and Esc closes. The opening chords are global. ---
   // --- editor: editing ---
   { chord: { key: 'return' }, action: 'editor.newline', context: 'editor' },
   { chord: { key: 'backspace' }, action: 'editor.backspace', context: 'editor' },

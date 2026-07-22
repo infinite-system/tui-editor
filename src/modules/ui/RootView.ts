@@ -37,6 +37,7 @@ import { GitRows, type ChangeRow, type FileRow } from '../git/GitRows';
 import { GitLogRows, type CommitLogRow } from '../git/GitLogRows';
 import { ScrollbarGeometry } from './ScrollbarGeometry';
 import type { ContextMenu, ContextMenuItem } from './ContextMenu';
+import type { OverlayCoordinator } from './OverlayCoordinator';
 import type { Tooltip } from './Tooltip';
 import type { SettingsPanel } from '../settings/SettingsPanel';
 import type { ScrollModifier } from '../settings/Settings';
@@ -180,6 +181,7 @@ function $buildRootView(
   settingsPanel: SettingsPanel.Instance,
   findBar: FindBar.Instance,
   quickOpen: QuickOpen.Instance,
+  overlayCoordinator: OverlayCoordinator.Instance,
 ): RootView {
   const root = renderer.root;
   const readPalette = () => theme.palette;
@@ -1342,7 +1344,7 @@ function $buildRootView(
     } else if (segment.kind === 'panForward') {
       workspaceTabStrip.pan(1);
     } else {
-      quickOpen.showWorkspacePath();
+      overlayCoordinator.openExclusiveOverlay('quickOpen', () => quickOpen.showWorkspacePath());
     }
     renderer.requestRender();
   };
@@ -1568,12 +1570,14 @@ function $buildRootView(
       label: `${tab.active ? '●' : ' '} ${Files.Class.basename(tab.path)}${tab.dirty ? '  ✕' : ''}`,
       enabled: true,
     }));
-    contextMenu.openAt(
-      items,
-      (tabBar.x as number) + anchorColumn,
-      (tabBar.y as number) + 1,
-      { width: renderer.width, height: renderer.height },
-      (itemId) => workspaceSet.active.activateTab(Number(itemId)),
+    overlayCoordinator.openExclusiveOverlay('contextMenu', () =>
+      contextMenu.openAt(
+        items,
+        (tabBar.x as number) + anchorColumn,
+        (tabBar.y as number) + 1,
+        { width: renderer.width, height: renderer.height },
+        (itemId) => workspaceSet.active.activateTab(Number(itemId)),
+      ),
     );
   }
 
@@ -2595,12 +2599,14 @@ function $buildRootView(
     const firstSelectedIndex = rows.findIndex(
       (candidate) => candidate.kind === 'file' && gitPanel.selectedPaths.value.has(candidate.path),
     );
-    contextMenu.openAt(items, pointerX, pointerY, { width: renderer.width, height: renderer.height }, (itemId) => {
-      if (itemId === 'git.stageSelected') void workspaceSet.active.stageSelected();
-      else if (itemId === 'git.unstageSelected') void workspaceSet.active.unstageSelected();
-      else if (itemId === 'git.discardSelected') workspaceSet.active.requestDiscardSelected(); // y/N confirm
-      else if (itemId === 'git.openDiff' && firstSelectedIndex >= 0) void workspaceSet.active.openChangeAtRow(firstSelectedIndex);
-    });
+    overlayCoordinator.openExclusiveOverlay('contextMenu', () =>
+      contextMenu.openAt(items, pointerX, pointerY, { width: renderer.width, height: renderer.height }, (itemId) => {
+        if (itemId === 'git.stageSelected') void workspaceSet.active.stageSelected();
+        else if (itemId === 'git.unstageSelected') void workspaceSet.active.unstageSelected();
+        else if (itemId === 'git.discardSelected') workspaceSet.active.requestDiscardSelected(); // y/N confirm
+        else if (itemId === 'git.openDiff' && firstSelectedIndex >= 0) void workspaceSet.active.openChangeAtRow(firstSelectedIndex);
+      }),
+    );
   };
 
   // Shift+click: select the file rows in the range between the focused row and the clicked row

@@ -150,6 +150,9 @@ merge gate — `scripts/behavioral-contracts.sh`. Rules:
   a real wheel, so binding it would fire on every scroll and break scrolling. Cmd+Down produces NOTHING
   (swallowed). Document start/end stays on the canonical **Ctrl+Home / Ctrl+End** (which reach the app
   reliably). Making Cmd+Up/Down send distinct sequences would require a user-side iTerm2 remap. Thread closed.
+- Ctrl+H arrives through a legacy pty as raw **0x08**, which OpenTUI decodes as Backspace with no Ctrl
+  flag. Physical Backspace arrives as **0x7f**, so they are distinguishable: Bootstrap normalizes only
+  raw 0x08 back to the intent-addressed Ctrl+H chord (`find.replace`); ordinary Backspace stays editing.
 
 ## Behavioural requirements
 - RESPECT `.gitignore` in BOTH the git panel display AND the GitWatcher recursion — never
