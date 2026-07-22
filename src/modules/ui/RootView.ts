@@ -1055,6 +1055,7 @@ function $buildRootView(
   // marker) and the code (syntax colors only, NO gutter). Only the visible lines are tokenized
   // (flyweight). Returns null for the empty state.
   function renderEditor(): { gutter: StyledText; code: StyledText } | null {
+    if (workspace.showingDiff.value) return null;
     const editor = workspace.editor;
     if (!editor.hasDocument.value) return null;
     const palette = readPalette();
@@ -1065,8 +1066,22 @@ function $buildRootView(
     const lineNumberWidth = String(editor.document.lineCount).length + 1;
     const currentLineIndex = editor.cursor.line.value;
     const focused = workspace.focus.value === 'editor';
+    const gutterDiffByLine = workspace.gutterDiffByLine.value;
     const gutterChunks: TextChunk[] = [];
     const codeChunks: TextChunk[] = [];
+    // invariant: The editor gutter reflects HEAD changes (src/modules/diff/diff.invariants.md)
+    const pushGutterMarker = (lineIndex: number, isCurrentLine: boolean): void => {
+      const gutterDiffStatus = gutterDiffByLine.get(lineIndex);
+      if (gutterDiffStatus === 'added') {
+        gutterChunks.push(fg(palette.added)('▎'));
+      } else if (gutterDiffStatus === 'modified') {
+        gutterChunks.push(fg(palette.modified)('▎'));
+      } else if (gutterDiffStatus === 'deleted') {
+        gutterChunks.push(fg(palette.deleted)('▁'));
+      } else {
+        gutterChunks.push(fg(palette.accent)(isCurrentLine && focused ? '▏' : ' '));
+      }
+    };
     const pushCodeChunks = (windowText: string): void => {
       if (editor.document.binary.value || language === 'plain') {
         codeChunks.push(fg(palette.fg)(windowText));
@@ -1090,7 +1105,7 @@ function $buildRootView(
         if (row.firstOfLine) {
           const lineNumberText = String(row.lineIndex + 1).padStart(lineNumberWidth, ' ');
           gutterChunks.push(fg(isCurrentLine ? palette.accent : palette.dim)(`${lineNumberText} `));
-          gutterChunks.push(fg(palette.accent)(isCurrentLine && focused ? '▏' : ' '));
+          pushGutterMarker(row.lineIndex, isCurrentLine);
         } else {
           gutterChunks.push(fg(palette.dim)(' '.repeat(lineNumberWidth + 2)));
         }
@@ -1122,7 +1137,7 @@ function $buildRootView(
       const isCurrentLine = lineNumber === currentLineIndex;
       const lineNumberText = String(lineNumber + 1).padStart(lineNumberWidth, ' ');
       gutterChunks.push(fg(isCurrentLine ? palette.accent : palette.dim)(`${lineNumberText} `));
-      gutterChunks.push(fg(palette.accent)(isCurrentLine && focused ? '▏' : ' '));
+      pushGutterMarker(lineNumber, isCurrentLine);
       let windowText = text;
       if (scrollLeft > 0 || text.length > viewportWidth) { // O(1) test; a needless slice is harmless
         let startGrapheme = EditorCoordinates.Class.graphemeAtDisplayColumn(text, scrollLeft);

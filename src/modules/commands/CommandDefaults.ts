@@ -40,7 +40,7 @@ function $registerDefaultCommands(
       category: 'File',
       when: hasDocument,
       run: () => {
-        getEditor().save();
+        context.workspace.saveActiveFile();
       },
     },
     {

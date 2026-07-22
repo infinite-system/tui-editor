@@ -89,3 +89,36 @@ length of an off-screen line to display one viewport.
 **Status:** provisional
 
 **Last refined:** 2026-07-21
+
+### The editor gutter reflects HEAD changes
+
+**Invariant:** If a normal editor buffer has a git HEAD comparison, then each logical line's first
+visual row shows its added, modified, or nearby-deletion status and the markers converge after
+buffer edits, saves, active-document changes, and git reconciliation.
+
+**Scope:** The normal editor in `RootView.renderEditor`, `Workspace.activeHeadText`, and
+`GutterDiff.statusByLine`. Excludes the empty editor and `DiffView`, which already renders a diff.
+
+**Mechanism:** `Workspace.refreshActiveHeadText` loads the active path through the existing
+`gitFileText('HEAD', path)` seam and rejects stale completions. `GutterDiff.statusByLine` projects
+`DiffAlignment.align` rows into a cached buffer-line map. `RootView.renderEditor` paints that map in
+the existing one-cell gutter marker slot with the theme's `added`, `modified`, and `deleted` colors.
+
+**Generates:** visible working-tree status beside edited lines; one diff algorithm and one git
+watcher path for both the side-by-side diff and gutter decorations.
+
+**Rejected alternatives:** A separate line-diff algorithm or filesystem watcher — either creates a
+second authority that can disagree with `DiffAlignment` or `GitWatcher`.
+
+**Evidence:** `src/modules/diff/GutterDiff.test.ts`; `scripts/smoke-gutter-diff.sh`; live caller path
+`Workspace.gutterDiffByLine` to `RootView.renderEditor`.
+
+**Impossible if true:** a continuation row carrying a duplicate marker; an edited tracked line with
+no modified-colored gutter glyph after settling; a git reconciliation leaving markers based on the
+previous HEAD; the normal gutter diff appearing over `DiffView`.
+
+**Verification:** `bun test src/modules/diff/GutterDiff.test.ts && bash scripts/smoke-gutter-diff.sh`.
+
+**Status:** established
+
+**Last refined:** 2026-07-21

@@ -4,7 +4,7 @@
 //
 // invariant: Workspace and file navigation are separate layers (workspace.invariants.md)
 import { Reactive } from 'ivue';
-import { ref, shallowRef } from 'vue';
+import { computed, ref, shallowRef } from 'vue';
 import { FileTree } from './FileTree';
 import { Editor } from '../editor/Editor';
 import { OpenBufferSet } from './OpenBufferSet';
@@ -22,6 +22,7 @@ import { GitCommands } from '../git/GitCommands';
 import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { EditorWrap } from '../editor/EditorWrap';
 import { Logging } from '../system/Logging';
+import { GutterDiff, type GutterDiffStatus } from '../diff/GutterDiff';
 
 export type Focus = 'files' | 'editor' | 'git';
 
@@ -88,6 +89,50 @@ class $Workspace {
   private async gitFileText(ref: string, filePath: string): Promise<string> {
     const result = await GitCommands.Class.fileAtRef(this.root, ref, filePath);
     return result.code === 0 ? result.stdout : '';
+  }
+
+  // The active file's git HEAD side. Buffer edits never refetch it; the cached blob changes only
+  // when the active document changes, a git reconciliation completes, or the file is saved.
+  get activeHeadText() {
+    return shallowRef('');
+  }
+  private activeHeadTextRequestToken = 0;
+
+  // DiffAlignment is deliberately cached behind computed(): alignment is document-sized work, while
+  // cursor and selection repaints are frequent and must reuse the same map until HEAD/text changes.
+  get gutterDiffByLine() {
+    return computed<Map<number, GutterDiffStatus>>(() => {
+      const editor = this.editor;
+      void editor.document.revision.value;
+      if (this.showingDiff.value || !editor.hasDocument.value) return new Map();
+      return GutterDiff.Class.statusByLine(this.activeHeadText.value, editor.document.text);
+    });
+  }
+
+  // invariant: The editor gutter reflects HEAD changes (src/modules/diff/diff.invariants.md)
+  async refreshActiveHeadText(): Promise<void> {
+    const requestToken = ++this.activeHeadTextRequestToken;
+    const editor = this.editor;
+    if (this.showingDiff.value || !editor.hasDocument.value || !editor.document.path) {
+      this.activeHeadText.value = '';
+      return;
+    }
+
+    const documentPath = editor.document.path;
+    if (Files.Class.confineToRoot(this.root, documentPath) === null) {
+      this.activeHeadText.value = '';
+      return;
+    }
+    const workspaceRelativePath = Files.Class.relative(this.root, documentPath);
+    const headText = await this.gitFileText('HEAD', workspaceRelativePath);
+    if (
+      requestToken === this.activeHeadTextRequestToken &&
+      !this.showingDiff.value &&
+      this.editor.hasDocument.value &&
+      this.editor.document.path === documentPath
+    ) {
+      this.activeHeadText.value = headText;
+    }
   }
   private workingFileText(filePath: string): string {
     const absolute = Files.Class.join(this.root, filePath);
@@ -202,6 +247,7 @@ class $Workspace {
 
   /** Tear down owned resources with effects/handles (the working-tree watcher + open buffers). */
   dispose(): void {
+    this.activeHeadTextRequestToken += 1;
     this.gitWatcher?.dispose();
     this.gitWatcher = null;
     this.buffers.disposeAll();
@@ -557,6 +603,7 @@ class $Workspace {
     this.showingDiff.value = false; // a real file replaces the transient diff view
     this.diffRequest.value = null;
     this.buffers.open(path);
+    void this.refreshActiveHeadText();
   }
 
   /** Activate an already-open tab by index (tab click / cycle). */
@@ -565,6 +612,7 @@ class $Workspace {
     this.diffRequest.value = null;
     this.buffers.activate(index);
     this.focus.value = 'editor';
+    void this.refreshActiveHeadText();
   }
 
   /** Cycle tabs by `delta`, wrapping (Ctrl+Tab / Ctrl+PageUp-Down). */
@@ -574,6 +622,7 @@ class $Workspace {
     this.diffRequest.value = null;
     this.buffers.cycle(delta);
     this.focus.value = 'editor';
+    void this.refreshActiveHeadText();
   }
 
   /** Pending dirty-tab-close confirmation: the tab index awaiting y/N, or -1 when none. */
@@ -590,6 +639,17 @@ class $Workspace {
   closeTab(index: number): void {
     this.buffers.close(index);
     if (this.buffers.count === 0) this.focus.value = 'files';
+    void this.refreshActiveHeadText();
+  }
+
+  /** Save the active file and refresh its HEAD-side cache through the same workspace seam. */
+  saveActiveFile(): boolean {
+    const saved = this.editor.save();
+    if (saved) {
+      this.buffers.syncActiveDirty();
+      void this.refreshActiveHeadText();
+    }
+    return saved;
   }
 
   /** Close tab `index`, prompting first if it has unsaved edits (dirty → modal confirm). */
