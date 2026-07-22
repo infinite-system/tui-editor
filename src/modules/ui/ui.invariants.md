@@ -49,8 +49,8 @@ left open; Find and Replace remain two modes of the same `FindBar`, and reserved
 run before the active overlay consumes input.
 
 **Scope:** `FindBar` in find or replace mode, `QuickOpen`, the command palette in
-`CommandRegistry`, `SettingsPanel`, and `ContextMenu`. The destructive confirmation overlays and
-display-only `Tooltip` are outside this slot.
+`CommandRegistry`, `SettingsPanel`, `ContextMenu`, and the `ShortcutHelp` cheat-sheet. The
+destructive confirmation overlays and display-only `Tooltip` are outside this slot.
 
 **Mechanism:** `OverlayCoordinator.openExclusiveOverlay` closes every registered overlay except the
 requested one before it runs the requested opener. Every live open path in `Bootstrap.ts` and
@@ -70,6 +70,44 @@ replace mode; Ctrl+Q being swallowed by Find, Quick Open, or the command palette
 
 **Verification:** `bun test src/modules/ui/OverlayCoordinator.test.ts
 src/modules/keybindings/__tests__/registry.test.ts && bash scripts/smoke-mode-coherence.sh`
+
+**Status:** established
+
+**Last refined:** 2026-07-22
+
+### The shortcut sheet lists the effective bindings
+
+**Invariant:** If the shortcut cheat-sheet shows a chord for an action, then that chord is the
+registry's post-shadowing effective binding for that action at that moment — every row derives from
+`KeybindingRegistry.effectiveBindings()` at read time, never from a hand-written chord list — and
+the sheet is reachable both by the clickable status-bar `?` affordance and by a bound chord that the
+sheet itself lists.
+
+**Scope:** `ShortcutHelp` (rows and scroll state), the RootView cheat-sheet projection and
+status-bar `?` button, and every layer registered in the `KeybindingRegistry` (canonical floor, mac
+overlay, any future user rebind layer).
+
+**Mechanism:** `ShortcutHelp.rows()` merges `effectiveBindings(context)` across the global, focus,
+and overlay contexts (first-wins per action id) and labels each row with
+`bindingHint(action, context)`; a layer change bumps the registry `revision` ref, so an open sheet
+repaints with re-derived rows. The status-bar `?` is a hit-tested `TextRenderable` whose click, like
+the Shift+F1 chord, opens the sheet through
+`OverlayCoordinator.openExclusiveOverlay('shortcutHelp', …)`.
+
+**Generates:** a shortcuts page that cannot drift from what the keys actually do; discoverability
+for every bound action; rebinds that re-label the sheet with no extra bookkeeping.
+
+**Evidence:** `src/modules/ui/ShortcutHelp.ts`; `src/modules/ui/ShortcutHelp.test.ts` (a
+later-layer rebind re-labels the Quick Open row Ctrl+P → Ctrl+O); `scripts/smoke-shortcut-help.sh`
+(clicking the status-bar `?` opens the sheet showing real binding rows, and the chord the sheet
+shows for Go to File actually opens Quick Open when pressed).
+
+**Impossible if true:** a sheet row advertising a chord that resolves to nothing or to a different
+action; a rebound action still shown with its old chord; a hardcoded chord string in the sheet's
+row source.
+
+**Verification:** `bun test src/modules/ui/ShortcutHelp.test.ts && bash
+scripts/smoke-shortcut-help.sh`
 
 **Status:** established
 

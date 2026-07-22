@@ -19,6 +19,7 @@ export interface CommandContext {
   toggleMarkdownPreview: () => void;
   hasHoveredMarkdownReference: () => boolean;
   openHoveredMarkdownReference: () => void;
+  openShortcutHelp: () => void;
 }
 
 // Manifest first — the capability's surface reads at the top of the file; implementations follow.
@@ -171,6 +172,12 @@ function $registerDefaultCommands(
       title: 'Files: Refresh Tree',
       category: 'Files',
       run: () => context.workspaceSet.active.tree.refresh(),
+    },
+    {
+      id: 'help.shortcuts',
+      title: 'Help: Keyboard Shortcuts',
+      category: 'Help',
+      run: context.openShortcutHelp,
     },
     {
       id: 'app.quit',

@@ -95,6 +95,7 @@ if [ "${FAST:-0}" != "1" ]; then
   step "smoke: git-watch"   bash scripts/smoke-git-watch.sh
   step "smoke: find"        bash scripts/smoke-find.sh
   step "smoke: mode coherence" bash scripts/smoke-mode-coherence.sh
+  step "smoke: shortcut-help" bash scripts/smoke-shortcut-help.sh
   step "smoke: word-delete" bash scripts/smoke-word-delete.sh
   step "smoke: quick-open"  bash scripts/smoke-quickopen.sh
   step "smoke: gutter-diff" bash scripts/smoke-gutter-diff.sh
