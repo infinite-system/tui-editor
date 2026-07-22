@@ -136,6 +136,12 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     () => settings.wordWrap.value,
     () => workspace.editor.revealCursor(),
   );
+  // GitWatcher already reconciles into GitRepository.lastRefreshAt. Reuse that reactive completion
+  // signal to refresh the active HEAD blob; no second filesystem watcher or diff-fetch path exists.
+  app.$watch(
+    () => workspace.git.value?.lastRefreshAt.value ?? null,
+    () => void workspace.refreshActiveHeadText(),
+  );
 
   // Last mouse event seen (for the observability side channel — proves the mouse path is live).
   let lastMouse: { type: string; x: number; y: number; button: number } | null = null;
@@ -607,7 +613,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       if (workspace.editor.hasSelection) workspace.editor.cursor.clearSelection();
       else workspace.focusFiles();
     },
-    'editor.save': () => workspace.editor.save(),
+    'editor.save': () => workspace.saveActiveFile(),
     'editor.selectAll': () => workspace.editor.selectAll(),
     'editor.copy': () => {
       // Publish how many characters landed on the clipboard — the observable proof that copy
