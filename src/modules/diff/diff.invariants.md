@@ -122,3 +122,119 @@ previous HEAD; the normal gutter diff appearing over `DiffView`.
 **Status:** established
 
 **Last refined:** 2026-07-21
+
+### The overview ruler locates every change block
+
+**Invariant:** If a diff has change blocks beyond or inside the visible window, then the diff view
+marks every block's proportional position on the vertical scroll axis without requiring scrolling.
+
+**Scope:** `DiffView.overviewKinds` and `DiffView.synchronizeOverviewRuler` for side-by-side diffs
+mounted by `RootView.syncDiffView`.
+
+**Mechanism:** `DiffView.overviewKinds` projects the existing `DiffAlignmentResult.changeBlocks`
+intervals onto the vertical scrollbar's track rows. It reads the first aligned row kind in each
+overlapping block and uses the same `Palette.added`, `modified`, and `deleted` colors as the gutters.
+
+**Generates:** a one-cell overview ruler beside the scrollbar; visible top-to-bottom change
+distribution; no second diff or scroll authority.
+
+**Rejected alternatives:** Recomputing line differences for the ruler — `DiffAlignment.changeBlocks`
+already is the single change-region authority.
+
+**Evidence:** `src/modules/diff/DiffView.test.ts`; `scripts/smoke-diff-overview.sh`; live mount
+`RootView.syncDiffView` to `DiffView.synchronizeOverviewRuler`.
+
+**Impossible if true:** a separated top, middle, or bottom change block existing with no matching
+colored ruler cell; an unchanged ruler band painted as a change when it overlaps no change block.
+
+**Verification:** `bun test src/modules/diff/DiffView.test.ts && bash scripts/smoke-diff-overview.sh`.
+
+**Status:** established
+
+**Last refined:** 2026-07-21
+
+### The diff pane split stays draggable and persistent
+
+**Invariant:** If a user drags the divider between the previous and current diff panes, then both pane
+widths change live from one bounded ratio and that ratio is reused by the next diff open.
+
+**Scope:** `DiffView.paneSplitter`, `Settings.diffSplitRatio`, and side-by-side diffs mounted by
+`RootView.syncDiffView`.
+
+**Mechanism:** A ratio-mode `SplitterModel` converts captured pointer movement through the live pane
+extent. `DiffView` writes every drag tick to `Settings.diffSplitRatio`, derives both widths from that
+single value, and saves once when the drag ends.
+
+**Generates:** a one-cell visible grab strip; complementary previous/current widths; live resize;
+persisted split geometry across diff instances.
+
+**Evidence:** `src/modules/layout/SplitterModel.test.ts`; `scripts/smoke-diff-overview.sh`; live caller
+`RootView.syncDiffView` attaches the shared `Settings` instance to each `DiffView`.
+
+**Impossible if true:** dragging the divider while the pane widths remain fixed; reopening a diff in
+the same session resets a completed split drag to one half; both pane widths growing independently.
+
+**Verification:** `bash scripts/smoke-diff-overview.sh`.
+
+**Status:** established
+
+**Last refined:** 2026-07-21
+
+### Diff selection reuses editor drag behavior
+
+**Invariant:** If text is selected in either read-only diff pane, then the editor's cursor selection
+model and shared drag-edge behavior extend the underlying pane text while the aligned diff scrolls.
+
+**Scope:** `SelectionDragBehavior`, `DiffView.createSelectionDragBehavior`, the active read-only
+`Editor` selection model, and Ctrl+C routing in `Bootstrap` while `Workspace.showingDiff` is true.
+
+**Mechanism:** Both `RootView`'s normal editor and `DiffView` construct `SelectionDragBehavior` with
+their own coordinate/scroll callbacks. Diff hit-testing maps an aligned row to its real side line,
+stores the range in an `Editor.cursor`, paints it through `SelectableText`, and copies through
+`Editor.copySelection`; filler rows never enter the copied document range.
+
+**Generates:** per-pane click-drag selection; vertical and horizontal drag-edge autoscroll; exact
+underlying-text copy; one pointer-rate and lifecycle rule shared with the editor.
+
+**Rejected alternatives:** A native-only diff selection or a second diff-specific selection model —
+either can disagree with the cursor range that Ctrl+C copies after repaint or scrolling.
+
+**Evidence:** `src/modules/ui/SelectionDragBehavior.test.ts`; `scripts/smoke-diff-overview.sh`; live
+callers `RootView` and `DiffView` both construct `SelectionDragBehavior`.
+
+**Impossible if true:** a diff drag highlight disappearing on repaint; a held bottom-edge drag leaving
+the aligned scroll offset unchanged; Ctrl+C copying alignment filler or text outside the model range.
+
+**Verification:** `bun test src/modules/ui/SelectionDragBehavior.test.ts && bash scripts/smoke-diff-overview.sh`.
+
+**Status:** established
+
+**Last refined:** 2026-07-21
+
+### Base and current stay unambiguous
+
+**Invariant:** If a side-by-side diff is visible, then the left pane is named as the HEAD base, the
+right pane is named as the working current file, and Open current is positioned with the right pane
+and opens that current path.
+
+**Scope:** `DiffView.update`, `DiffView.renderHeader`, header-segment hit-testing, and the
+`RootView.syncDiffView` `onOpenFull` callback.
+
+**Mechanism:** Pane title rows carry explicit `Base (HEAD)` and `Current (working)` prefixes.
+`renderHeader` places the existing `openFull` segment at or beyond the current pane start, and the
+existing header hit map dispatches it to `Workspace.openFileInTab(currentVersionPath)`.
+
+**Generates:** distinct base/current labels; a spatially associated Open current affordance; existing
+Previous/Next navigation and change count kept together.
+
+**Evidence:** `scripts/smoke-diff-overview.sh`; live caller path `RootView.syncDiffView` to
+`DiffView.renderHeader` and `Workspace.openFileInTab`.
+
+**Impossible if true:** Open current appearing over the base pane; clicking Open current leaving the
+diff open or opening the base revision; both panes carrying labels that do not distinguish their roles.
+
+**Verification:** `bash scripts/smoke-diff-overview.sh`.
+
+**Status:** established
+
+**Last refined:** 2026-07-21

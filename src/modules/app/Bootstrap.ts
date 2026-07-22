@@ -149,6 +149,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   // Publish model state to the observability side channel (read-only over model state).
   const publish = (): void => {
     const editor = workspace.editor;
+    const diffView = view.activeDiffView();
     StatusChannel.Class.update({
       mouse: lastMouse,
       activeWorkspace: workspace.name.value,
@@ -185,6 +186,10 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       // A diff is shown OVER the editor tabs (transient). Lets a driven contract confirm the diff
       // pane actually mounted, so pane-independence (editor extent survives the swap) is real-verified.
       showingDiff: workspace.showingDiff.value,
+      diffScrollTop: diffView?.alignedRowScrollOffset.value ?? 0,
+      diffSelectionChars: diffView?.selectionCharacterCount() ?? 0,
+      diffSelection: diffView?.selectionRange() ?? null,
+      diffSplitRatio: settings.diffSplitRatio.value,
       settingsOpen: settingsPanel.open.value,
       settingsSelected: settingsPanel.selectedIndex.value,
       sidebarWidth: settings.sidebarWidth.value,
@@ -240,6 +245,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     void editor.viewport.scrollTop.value;
     void editor.viewport.scrollLeft.value;
     void editor.wordWrap.value;
+    void settings.diffSplitRatio.value;
     void workspace.focus.value;
     void workspace.sidebarView.value;
     void workspace.tree.selectedIndex.value;
@@ -395,6 +401,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     theme,
     quit: () => void shutdown(),
     requestRender: () => app.requestRender(),
+    hasOpenDiff: () => workspace.showingDiff.value && view.activeDiffView() !== null,
+    nextDiffChange: () => view.activeDiffView()?.jumpToNextChange(),
+    previousDiffChange: () => view.activeDiffView()?.jumpToPreviousChange(),
   });
 
   // --- input: handlers MUTATE model state only; the frame effect repaints. -----------------
@@ -511,6 +520,8 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'buffer.close': () => workspace.closeActiveTab(),
     'buffer.next': () => workspace.cycleTab(1),
     'buffer.previous': () => workspace.cycleTab(-1),
+    'diff.nextChange': () => view.activeDiffView()?.jumpToNextChange(),
+    'diff.previousChange': () => view.activeDiffView()?.jumpToPreviousChange(),
     'git.togglePanel': () => {
       workspace.toggleGit();
       if (workspace.focus.value === 'git') {
@@ -625,12 +636,15 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'editor.copy': () => {
       // Publish how many characters landed on the clipboard — the observable proof that copy
       // actually copied (the human-QA "cannot copy" bug's verification channel).
-      void workspace.editor.copySelection().then((copiedCharacters) => {
+      const diffView = workspace.showingDiff.value ? view.activeDiffView() : null;
+      const copyPromise = diffView ? diffView.copySelection() : workspace.editor.copySelection();
+      void copyPromise.then((copiedCharacters) => {
         if (copiedCharacters > 0) {
           app.copyNotice.value = `Copied ${copiedCharacters} chars (${Clipboard.Class.lastBackend ?? 'no backend'})`;
         }
         StatusChannel.Class.update({
           lastCopyChars: copiedCharacters,
+          lastCopyHash: Clipboard.Class.lastCopiedTextHash,
           clipboardBackend: Clipboard.Class.lastBackend,
         });
         StatusChannel.Class.flush();

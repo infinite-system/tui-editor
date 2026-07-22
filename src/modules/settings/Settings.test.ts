@@ -49,6 +49,7 @@ describe('Settings', () => {
     expect(settings.theme.value).toBe('dark');
     expect(settings.wordWrap.value).toBe(false);
     expect(settings.sidebarWidth.value).toBe(32);
+    expect(settings.diffSplitRatio.value).toBe(0.5);
     expect(settings.gitSplitRatio.value).toBe(0.5);
   });
 
@@ -108,6 +109,7 @@ describe('Settings', () => {
     settings.load({ userPath: USER_PATH, projectPath: PROJECT_PATH });
     settings.set('theme', 'nord');
     settings.set('sidebarWidth', 48);
+    settings.set('diffSplitRatio', 0.65);
     settings.save();
 
     // The user file now holds the new values.
@@ -115,6 +117,7 @@ describe('Settings', () => {
     expect(written).toBeDefined();
     expect(JSON.parse(written as string).theme).toBe('nord');
     expect(JSON.parse(written as string).sidebarWidth).toBe(48);
+    expect(JSON.parse(written as string).diffSplitRatio).toBe(0.65);
 
     // A fresh store loading the same fake fs reads them back.
     const reloaded = new Settings.Class({
@@ -127,6 +130,7 @@ describe('Settings', () => {
     reloaded.load({ userPath: USER_PATH, projectPath: PROJECT_PATH });
     expect(reloaded.theme.value).toBe('nord');
     expect(reloaded.sidebarWidth.value).toBe(48);
+    expect(reloaded.diffSplitRatio.value).toBe(0.65);
   });
 
   test('a reactive read re-runs when set() changes the value (live-apply)', () => {

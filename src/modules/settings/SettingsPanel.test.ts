@@ -51,6 +51,10 @@ describe('SettingsPanel', () => {
     panel.adjust(1);
     expect(settings.verticalFlingCeiling.value).toBe(before + 20); // stepped, live-applied
     expect(Object.keys(store).length).toBeGreaterThan(0); // save() wrote the user file
+
+    panel.selectedIndex.value = indexOfKey(panel, 'diffSplitRatio');
+    panel.adjust(1);
+    expect(settings.diffSplitRatio.value).toBe(0.55);
   });
 
   test('adjust a BOOLEAN toggles, an ENUM cycles', () => {

@@ -20,8 +20,9 @@ SET="$HOME/.config/fable/settings.json"
 export PATH="$HOME/.bun/bin:$PATH"
 
 # EVERY schema field must be listed here with a real drive below. Keep in sync with Settings' schema; the
-# meta-gate enforces it.
-COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap sidebarWidth gitSplitRatio"
+# meta-gate enforces it. diffSplitRatio's real applied-effect drive lives in smoke-diff-overview.sh:
+# drag the divider, assert pane movement, reopen a second diff, assert the persisted split column.
+COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap sidebarWidth gitSplitRatio diffSplitRatio"
 
 # ---- schema-enumeration META-GATE (cheap; the enforcing check) -------------------------------------
 meta_gate() {

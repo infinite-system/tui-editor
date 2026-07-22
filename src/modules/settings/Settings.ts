@@ -38,6 +38,7 @@ export interface SettingsValues {
   // Splitter geometry.
   sidebarWidth: number;
   gitSplitRatio: number;
+  diffSplitRatio: number;
 }
 
 /** Narrow filesystem seam the store depends on — the whole surface a fake must satisfy. */
@@ -122,6 +123,9 @@ class $Settings {
   get gitSplitRatio(): Ref<number> {
     return ref(0.5);
   }
+  get diffSplitRatio(): Ref<number> {
+    return ref(0.5);
+  }
 
   /** Every field keyed by name — the one place each name maps to its reactive cell. */
   private get fields(): { [Key in keyof SettingsValues]: Ref<SettingsValues[Key]> } {
@@ -139,6 +143,7 @@ class $Settings {
       wordWrap: this.wordWrap,
       sidebarWidth: this.sidebarWidth,
       gitSplitRatio: this.gitSplitRatio,
+      diffSplitRatio: this.diffSplitRatio,
     };
   }
 
@@ -278,6 +283,7 @@ class $Settings {
       wordWrap: false,
       sidebarWidth: 32,
       gitSplitRatio: 0.5,
+      diffSplitRatio: 0.5,
     };
   }
 
@@ -311,6 +317,7 @@ class $Settings {
     if (typeof record.wordWrap === 'boolean') result.wordWrap = record.wordWrap;
     readNumber('sidebarWidth');
     readNumber('gitSplitRatio');
+    readNumber('diffSplitRatio');
     return result;
   }
 }

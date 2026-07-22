@@ -32,6 +32,7 @@ import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
 import { DiffView } from '../diff/DiffView';
 import { SelectableText } from './SelectableText';
+import { SelectionDragBehavior } from './SelectionDragBehavior';
 import { GitRows, type ChangeRow, type FileRow } from '../git/GitRows';
 import { GitLogRows, type CommitLogRow } from '../git/GitLogRows';
 import { ScrollbarGeometry } from './ScrollbarGeometry';
@@ -1730,7 +1731,12 @@ function $buildRootView(
           previousVersionPath: request.previousVersionPath,
           currentVersionPath: request.currentVersionPath,
           parentRenderable: diffContainer, // definite-size host (added below in place of editorArea)
-          onOpenFull: () => workspace.openFileInTab(request.currentVersionPath), // promote to a real tab
+          onOpenFull: () => {
+            // Git diff requests carry workspace-relative paths. Resolve through the existing
+            // confinement seam before promoting the working side to a real editable tab.
+            const currentWorkingPath = Files.Class.confineToRoot(workspace.root, request.currentVersionPath);
+            if (currentWorkingPath) workspace.openFileInTab(currentWorkingPath);
+          },
           onNextChange: () => renderer.requestRender(),
           onPrevChange: () => renderer.requestRender(),
         });
@@ -2135,108 +2141,64 @@ function $buildRootView(
     );
     return { line, column };
   };
-  // Live drag tracking for edge auto-scroll: while a selection drag holds at/past a pane edge,
-  // the frame tick scrolls the viewport and extends the selection to the newly revealed cells.
-  let selectionDrag: { pointerX: number; pointerY: number } | null = null;
+  // One shared drag/autoscroll behavior serves this editor and DiffView. The hosts differ only in
+  // coordinate mapping and scroll storage; pointer lifecycle, edge zones, rate, and re-extension are
+  // identical. invariant: One writer per scroll regime per frame (src/modules/ui/ui.invariants.md)
+  const editorSelectionDragBehavior = new SelectionDragBehavior({
+    viewportRectangle: () => ({
+      leftColumn: codeBody.x,
+      rightColumn: codeBody.x + Math.max(1, editorViewportWidth()) - 1,
+      topRow: codeBody.y,
+      bottomRow: codeBody.y + Math.max(1, editorViewportHeight()) - 1,
+    }),
+    positionAtCell: documentPositionAtCell,
+    horizontalScrollPosition: () => workspace.editor.viewport.scrollLeft.value,
+    horizontalScrollingEnabled: () => !workspace.editor.wordWrap.value,
+    beginSelection: (position) => {
+      workspace.focusEditor();
+      workspace.editor.placeCursor(position.line, position.column);
+      workspace.editor.cursor.setAnchorHere();
+    },
+    extendSelection: (position, pointerDisplayColumn) => {
+      // Direct Cursor.set preserves the pointer's display-column goal while short lines clamp the
+      // landing column; placeCursor would reveal/yank the viewport during a diagonal drag.
+      workspace.editor.cursor.set(position.line, position.column, pointerDisplayColumn);
+    },
+    finishSelection: () => {
+      if (!workspace.editor.cursor.hasSelection) workspace.editor.cursor.clearSelection();
+    },
+    scrollColumns: (columnDelta) => {
+      const topLineIndex = workspace.editor.viewport.scrollTop.value;
+      let widestVisibleLineWidth = 0;
+      for (const line of workspace.editor.document.slice(topLineIndex, editorViewportHeight())) {
+        widestVisibleLineWidth = Math.max(widestVisibleLineWidth, EditorCoordinates.Class.lineWidth(line));
+      }
+      workspace.editor.viewport.scrollByColumns(columnDelta, widestVisibleLineWidth);
+    },
+    scrollRows: scrollEditorVertically,
+    haltCompetingScroll: () => workspace.editor.viewport.haltScrollMomentum(),
+  });
 
   codeBody.onMouseDown = (event) => {
-    const hit = documentPositionAtCell(event.x, event.y);
-    if (process.env.TUI_DEBUG_MOUSE === '1') Logging.Class.info(`mouseDown (${event.x},${event.y}) hit=${JSON.stringify(hit)}`);
-    if (!hit) return;
-    workspace.focusEditor(); // click-to-focus
-    workspace.editor.placeCursor(hit.line, hit.column);
-    workspace.editor.cursor.setAnchorHere(); // anchor at the press; dragging extends from here
-    selectionDrag = { pointerX: event.x, pointerY: event.y };
+    if (process.env.TUI_DEBUG_MOUSE === '1') {
+      Logging.Class.info(`mouseDown (${event.x},${event.y}) hit=${JSON.stringify(documentPositionAtCell(event.x, event.y))}`);
+    }
+    editorSelectionDragBehavior.begin(event.x, event.y);
   };
   codeBody.onMouseDrag = (event) => {
-    const hit = documentPositionAtCell(event.x, event.y);
-    if (process.env.TUI_DEBUG_MOUSE === '1') Logging.Class.info(`mouseDrag (${event.x},${event.y}) hit=${JSON.stringify(hit)}`);
-    if (!hit) return;
-    // The drag version of goal-column: the drag tracks the POINTER's display column. The cursor
-    // clamps to each line's length (selection end = min(pointer, lineLength)), but the GOAL stays
-    // at the pointer, and scrollLeft NEVER follows an intermediate short line's clamp — no
-    // backward yank while sweeping diagonally across mixed-length lines (placeCursor's
-    // auto-hscroll is exactly what must NOT run here).
-    const pointerDisplayColumn =
-      workspace.editor.viewport.scrollLeft.value + (event.x - codeBody.x);
-    workspace.editor.cursor.set(hit.line, hit.column, Math.max(0, pointerDisplayColumn));
-    if (selectionDrag) {
-      selectionDrag.pointerX = event.x;
-      selectionDrag.pointerY = event.y;
+    if (process.env.TUI_DEBUG_MOUSE === '1') {
+      Logging.Class.info(`mouseDrag (${event.x},${event.y}) hit=${JSON.stringify(documentPositionAtCell(event.x, event.y))}`);
     }
+    editorSelectionDragBehavior.drag(event.x, event.y);
   };
-  const endSelectionDrag = (): void => {
-    selectionDrag = null;
-    // A plain click (no drag) leaves anchor == cursor: clear it so no empty selection lingers.
-    if (!workspace.editor.cursor.hasSelection) workspace.editor.cursor.clearSelection();
-  };
-  codeBody.onMouseUp = endSelectionDrag;
-  codeBody.onMouseDragEnd = endSelectionDrag;
+  codeBody.onMouseUp = () => editorSelectionDragBehavior.end();
+  codeBody.onMouseDragEnd = () => editorSelectionDragBehavior.end();
 
-  // Edge auto-scroll: called from the app frame tick with real dt. While the held pointer sits in
-  // the one-cell edge zone (or beyond the pane), scroll that axis — rate grows with overshoot —
-  // and re-extend the selection to the cell now under the pointer. The drag is the ONE scroll
-  // writer while active. Returns whether an auto-scroll is in progress (keeps frames coming).
-  // invariant: One writer per scroll regime per frame (src/modules/ui/ui.invariants.md)
-  let edgeScrollRemainder = { x: 0, y: 0 };
-  function tickDragAutoScroll(dtSeconds: number): boolean {
+  function tickDragAutoScroll(deltaTimeSeconds: number): boolean {
     // This hook already runs after each Yoga layout. Converge every sidebar pane's live geometry here
     // too; returning true for the one changed frame guarantees a repaint, then quiescence resumes.
     const paneViewportGeometryChanged = syncPaneViewportGeometry();
-    if (!selectionDrag || !workspace.editor.hasDocument.value) return paneViewportGeometryChanged;
-    const leftEdge = codeBody.x;
-    const rightEdge = codeBody.x + Math.max(1, editorViewportWidth()) - 1;
-    const topEdge = codeBody.y;
-    const bottomEdge = codeBody.y + Math.max(1, editorViewportHeight()) - 1;
-    const overshootX =
-      selectionDrag.pointerX >= rightEdge
-        ? selectionDrag.pointerX - rightEdge + 1
-        : selectionDrag.pointerX <= leftEdge
-          ? selectionDrag.pointerX - leftEdge - 1
-          : 0;
-    const overshootY =
-      selectionDrag.pointerY >= bottomEdge
-        ? selectionDrag.pointerY - bottomEdge + 1
-        : selectionDrag.pointerY <= topEdge
-          ? selectionDrag.pointerY - topEdge - 1
-          : 0;
-    if (overshootX === 0 && overshootY === 0) {
-      edgeScrollRemainder = { x: 0, y: 0 };
-      return paneViewportGeometryChanged;
-    }
-    // Base 25 cells/sec, growing with how far past the edge the pointer sits (capped).
-    const rate = (overshoot: number): number =>
-      Math.sign(overshoot) * Math.min(120, 25 + 18 * (Math.abs(overshoot) - 1));
-    edgeScrollRemainder.x += overshootX === 0 ? 0 : rate(overshootX) * dtSeconds;
-    edgeScrollRemainder.y += overshootY === 0 ? 0 : rate(overshootY) * dtSeconds;
-    const stepX = Math.trunc(edgeScrollRemainder.x);
-    const stepY = Math.trunc(edgeScrollRemainder.y);
-    edgeScrollRemainder.x -= stepX;
-    edgeScrollRemainder.y -= stepY;
-    if (stepX !== 0 && !workspace.editor.wordWrap.value) {
-      // (wrap mode: horizontal scroll is inert — the X edge never scrolls)
-      const top = workspace.editor.viewport.scrollTop.value;
-      let widestVisible = 0;
-      for (const line of workspace.editor.document.slice(top, editorViewportHeight())) {
-        widestVisible = Math.max(widestVisible, EditorCoordinates.Class.lineWidth(line));
-      }
-      workspace.editor.viewport.scrollByColumns(stepX, widestVisible);
-    }
-    if (stepY !== 0) {
-      scrollEditorVertically(stepY);
-    }
-    // Extend the selection to the cell under the (edge-clamped) pointer in the NEW window.
-    const clampedX = Math.max(leftEdge, Math.min(selectionDrag.pointerX, rightEdge));
-    const clampedY = Math.max(topEdge, Math.min(selectionDrag.pointerY, bottomEdge));
-    const hit = documentPositionAtCell(clampedX, clampedY);
-    if (hit) {
-      // Anchor fixed; goal = the pointer's display column in the ADVANCED window, so short lines
-      // under the sweep never pull the goal (or the window) back.
-      const pointerDisplayColumn =
-        workspace.editor.viewport.scrollLeft.value + (clampedX - codeBody.x);
-      workspace.editor.cursor.set(hit.line, hit.column, Math.max(0, pointerDisplayColumn));
-    }
-    return true;
+    return editorSelectionDragBehavior.tick(deltaTimeSeconds) || paneViewportGeometryChanged;
   }
 
   // Sidebar clicks: focus follows the click (files or git view), and a click on a tree row SELECTS
