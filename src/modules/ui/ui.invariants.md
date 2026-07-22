@@ -289,6 +289,49 @@ move-through does not); grep — `HoverCard.tick` gates on `requestedGeneration`
 
 **Last refined:** 2026-07-22
 
+### An overlay's dismissal clears its cells in the same frame
+
+**Invariant:** Hiding an absolutely-positioned overlay must set its renderables invisible
+SYNCHRONOUSLY, inside the handler that dismisses it — never deferred to a later reactive `update()`.
+The reduction is general: a state change and the projection an observer depends on must be atomic
+with respect to that observer; a deferred hide opens a gap in which the state says "gone" but the
+projection still shows it, and if something reads during the gap the read is stale. This is NOT
+"prefer synchronous over reactive" — it is "close the gap wherever an observer can catch it open."
+
+**Scope:** overlays whose visibility can flip from an ASYNC callback or while the frame loop is idle
+(e.g. `HoverCard.clear()` on keypress/click after the dwell tick loop has stopped). Overlays
+dismissed reactively — palette/find/quick-open/settings, whose `open` ref the paint effect reads —
+are already gap-free and need no synchronous hide; their mutation and its paint land in one tick.
+
+**Mechanism:** OpenTUI composites INCREMENTALLY: it repaints a pane only when that pane's projected
+content truly changes, so hiding an overlay by flag alone leaves its cells stamped until an unrelated
+content change beneath repaints them. `box.requestRender()`, `root.remove(box)`, and
+`renderer.suspend()/resume()` do NOT clear them. Setting `box.visible = false` (and its
+scrollbar/backdrop) directly in the dismiss handler, before the next paint, does. The SHOW path may
+stay reactive precisely because its tick loop is animating and continuously closes the gap — same
+overlay, opposite treatment, one principle.
+
+**Generates:** overlays that vanish the instant they are dismissed, with no stale-cell ghosting;
+and a design rule that tells the next overlay author which dismiss path (sync vs reactive) each case
+needs, rather than cargo-culting one.
+
+**Evidence:** the hover card regressed exactly this way — Escape set `visible=false` but the card
+persisted in the framebuffer (FrameProbe-visible) until an arrow key changed the code beneath;
+hiding the renderables synchronously in `clear()` fixed it, verified by `scripts/smoke-hover.sh`
+(Escape dismisses the card). Cross-checked: the shortcut sheet and palette clear correctly because
+their dismissal already routes through a reactive ref the paint effect reads.
+
+**Impossible if true:** a dismissed overlay whose cells survive into the next observed frame; a
+dismiss handler that only flips a flag and relies on a future reactive paint to hide the renderables.
+
+**Verification:** `bash scripts/smoke-hover.sh` (Escape dismisses the card in the same settle
+window); review — an overlay `clear()`/dismiss that sets only a visibility flag without hiding its
+renderables is a violation.
+
+**Status:** provisional
+
+**Last refined:** 2026-07-22
+
 ### Renderables hold no model state
 
 **Invariant:** If a renderable exists, then it holds only presentation state; it pulls all
