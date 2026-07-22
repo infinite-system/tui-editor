@@ -29,6 +29,7 @@ import { Highlighter, type Role } from '../syntax/Highlighter';
 import { Files } from '../system/Files';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { EditorCoordinates } from '../editor/EditorCoordinates';
+import { TreePaneRenderer } from './TreePaneRenderer';
 import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
 import { DiffView } from '../diff/DiffView';
 import { MarkdownSplitView } from '../markdown/MarkdownSplitView';
@@ -1146,48 +1147,20 @@ function $buildRootView(
   }
 
   function renderTree(): StyledText {
-    // invariant: Renderables hold no model state (ui.invariants.md)
-    // invariant: Only the visible window is rendered (ui.invariants.md)
-    const palette = readPalette();
-    const rows = workspaceSet.active.tree.rows;
-    const selectedIndex = workspaceSet.active.tree.selectedIndex.value;
-    const hoveredIndex = workspaceSet.active.tree.hoveredIndex.value;
-    const height = Math.max(1, (sidebar.height as number) - 2);
+    // The file-tree pane render lives in TreePaneRenderer; RootView supplies palette + geometry and
+    // the model, and mounts the result into sidebarBody. (Behaviour unchanged — same window, same
+    // selection/hover intensities.)
     const innerWidth = sidebarWidth() - 2;
-    const viewportWidth = Math.max(1, innerWidth - scrollbarThicknessCells());
-    // Flyweight: only render the visible window around the selection.
-    const top = treeWindowTop();
-    const visible = rows.slice(top, top + height);
-    const chunks: TextChunk[] = [];
-    visible.forEach((row, visibleIndex) => {
-      const rowIndex = top + visibleIndex;
-      // Selection truth is independent of focus, hover, and viewport position. Focus changes only
-      // its intensity: full while keyboard-active, dim while the editor or another pane owns keys.
-      // invariant: Selection is item-anchored, click-set, keyboard-moved, and stays (src/modules/ui/ui.invariants.md)
-      const selected = rowIndex === selectedIndex;
-      const selectionFocused = workspaceSet.active.focus.value === 'files';
-      const hovered = rowIndex === hoveredIndex;
-      const marker = selected ? '›' : ' ';
-      const indent = '  '.repeat(row.depth);
-      const icon = theme.icon(row.name, row.isDir, row.expanded);
-      const completeLabel = `${marker}${indent}${icon} ${row.name}`;
-      let label = displayColumnWindow(completeLabel, workspaceSet.active.tree.scrollLeft.value, viewportWidth);
-      label = padToDisplayWidth(label, viewportWidth);
-      // Pad to the pane's inner width so the row highlight spans the full row (VS Code-style).
-      label = padToDisplayWidth(label, innerWidth);
-      // Two intensities: selection (stronger) over hover (subtle); bg is the primary signal.
-      const rowBackground = selected
-        ? selectionFocused
-          ? palette.selection
-          : palette.cursorLine
-        : hovered
-          ? palette.cursorLine
-          : null;
-      const styled = fg(selected && selectionFocused ? palette.accent : palette.fg)(label);
-      chunks.push(rowBackground ? bg(rowBackground)(styled) : styled);
-      if (visibleIndex < visible.length - 1) chunks.push(fg(palette.fg)('\n'));
+    return TreePaneRenderer.Class.render({
+      tree: workspaceSet.active.tree,
+      filesFocused: workspaceSet.active.focus.value === 'files',
+      palette: readPalette(),
+      icon: (name, isDirectory, expanded) => theme.icon(name, isDirectory, expanded),
+      height: Math.max(1, (sidebar.height as number) - 2),
+      innerWidth,
+      viewportWidth: Math.max(1, innerWidth - scrollbarThicknessCells()),
+      windowTop: treeWindowTop(),
     });
-    return new StyledText(chunks);
   }
 
   const EMPTY_STATE = [
