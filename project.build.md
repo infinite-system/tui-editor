@@ -34,6 +34,26 @@ harness sets it); idle is fully quiescent — demand-driven rendering, no at-res
 
 Quit: `Ctrl+Q` or `F10` (in a host that intercepts those, `Ctrl+X` then `Ctrl+C`).
 
+## The demo workspace (`/tmp/tui-demo`)
+
+A ready-to-drive checkout lives at `/tmp/tui-demo` — the repo with `node_modules` symlinked and a
+`fixtures/` sample tree carrying deliberate git changes (a modified file, a new untracked file, and a
+staged deletion) so the git panel is populated on open. It tracks the latest green `main`.
+
+Run it from source (recommended — reflects current code, no build step):
+
+```bash
+cd /tmp/tui-demo && PATH="$HOME/.bun/bin:$PATH" bun run src/main.ts .
+```
+
+Or build the standalone binary and run that:
+
+```bash
+cd /tmp/tui-demo && PATH="$HOME/.bun/bin:$PATH" bun run build && ./dist/fable .
+```
+
+The workspace argument is `.` (the demo dir itself). Quit with `Ctrl+Q` or `F10`.
+
 ## Build the standalone binary (distribution)
 
 ```bash
@@ -122,5 +142,10 @@ as done.
   bug is gated by the open-then-scroll contract).
 - **Syntax highlighting missing** → today's binary uses the regex highlighter and needs nothing extra;
   when the tree-sitter layer lands, ship the wasm per the section above.
-- **Many stale `bun run src/main.ts` processes** → headless test sessions can leak instances; reap with
-  `pkill -f 'src/main.ts'` (only when no real instance is running).
+- **Many stale `bun run src/main.ts` processes** → headless test sessions can leak instances. Reap only
+  the leaked `bun` processes by PID — never a bare `pkill -f 'src/main.ts'`, because that pattern also
+  matches the shell running it and kills your own session:
+  ```bash
+  for p in $(pgrep -f 'src/main.ts'); do [ "$(cat /proc/$p/comm 2>/dev/null)" = bun ] && kill "$p"; done
+  ```
+  (only when no real instance is running; the merge-gate now reaps `/tmp/tui-*` orphans itself before running).
