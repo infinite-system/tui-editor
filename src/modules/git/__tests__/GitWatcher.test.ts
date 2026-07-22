@@ -9,7 +9,7 @@ import {
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { GitRepository } from '../GitRepository';
+import { GitRepository, type GitRefreshOptions } from '../GitRepository';
 import { gitCleanEnv } from './gitCleanEnv';
 import { GitWatcher } from '../GitWatcher';
 
@@ -36,6 +36,17 @@ const watchTest = test.skipIf(!FS_WATCH_AVAILABLE);
 
 function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function waitUntil(
+  condition: () => boolean,
+  timeoutMilliseconds = 500,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMilliseconds;
+  while (!condition()) {
+    if (Date.now() >= deadline) throw new Error('Timed out waiting for condition');
+    await wait(5);
+  }
 }
 
 function git(cwd: string, arguments_: string[]): void {
@@ -101,6 +112,64 @@ test('watcher disposal cancels a pending refresh', async () => {
     expect(watcher.active).toBe(false);
   } finally {
     watcher.dispose();
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('reconcile floor refreshes after watcher failure and stops on disposal', async () => {
+  const cwd = makeRepository();
+  const repository = new GitRepository.Class(cwd);
+  await repository.refresh();
+  expect(repository.unstaged.value).toEqual([]);
+
+  let completedRefreshCount = 0;
+  const observingRepository = {
+    async refresh(options: GitRefreshOptions = {}): Promise<void> {
+      await repository.refresh(options);
+      completedRefreshCount++;
+    },
+  } as unknown as GitRepository.Model;
+
+  class TestGitWatcher extends GitWatcher.$Class {
+    failEveryDirectoryWatcher(): void {
+      const watchedDirectories = this.watchedDirectories();
+      if (watchedDirectories.length === 0) {
+        this.onWatcherError(this.cwd);
+        return;
+      }
+      for (const watchedDirectory of watchedDirectories) {
+        this.onWatcherError(watchedDirectory);
+      }
+    }
+  }
+
+  const watcher = new TestGitWatcher(cwd, observingRepository, {
+    debounceMs: 5,
+    reconcileIntervalMilliseconds: 30,
+  });
+  try {
+    watcher.failEveryDirectoryWatcher();
+    expect(watcher.watchedDirectoryCount).toBe(0);
+
+    // Let the immediate error-triggered reconcile finish before changing the repository. With
+    // every filesystem watch closed, only the periodic pull can observe the later change.
+    await waitUntil(() => completedRefreshCount > 0);
+    completedRefreshCount = 0;
+    writeFileSync(join(cwd, 'root.txt'), 'changed without a watcher event\n');
+
+    await waitUntil(() =>
+      completedRefreshCount > 0
+      && repository.unstaged.value.some((record) => record.path === 'root.txt'),
+    );
+    expect(completedRefreshCount).toBeGreaterThan(0);
+
+    watcher.dispose();
+    const refreshCountAfterDisposal = completedRefreshCount;
+    await wait(80);
+    expect(completedRefreshCount).toBe(refreshCountAfterDisposal);
+  } finally {
+    watcher.dispose();
+    repository.dispose();
     rmSync(cwd, { recursive: true, force: true });
   }
 });

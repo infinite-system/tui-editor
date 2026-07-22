@@ -137,26 +137,65 @@ status side channel; editing independence from Git availability.
 ### The watcher has one disposable debounce
 
 **Invariant:** If `GitWatcher` is active and filesystem events storm, then it owns at most one
-pending debounce timer and disposal closes both the timer and watcher before another refresh.
+pending debounce timer and disposal clears every owned timer and watcher before another refresh.
 
 **Scope:** One `GitWatcher` instance from construction through `dispose`.
 
 **Mechanism:** Every event clears the previous timer before scheduling one replacement; disposal
-marks the watcher inert, clears the timer, and closes the `FSWatcher` handle.
+marks the watcher inert, clears the debounce and reconcile timers, and closes every `FSWatcher`
+handle.
 
-**Generates:** One refresh per settled event storm; no watcher or timer retained after workspace
-close.
+**Generates:** One refresh per settled event storm; no watcher, debounce timer, or reconcile timer
+retained after workspace close.
 
-**Evidence:** `src/modules/git/GitWatcher.ts` (`scheduleRefresh`, `flushRefresh`, `dispose`).
+**Evidence:** `src/modules/git/GitWatcher.ts` (`scheduleRefresh`, `flushRefresh`,
+`startReconcileFloor`, `dispose`); `reconcile floor refreshes after watcher failure and stops on
+disposal` in `src/modules/git/__tests__/GitWatcher.test.ts`.
 
-**Impossible if true:** A disposed watcher firing a delayed repository refresh, or one event
-storm accumulating one timer per event.
+**Impossible if true:** A disposed watcher firing a delayed or periodic repository refresh, or one
+event storm accumulating one debounce timer per event.
 
-**Verification:** `bun test src/modules/git -t "watcher disposal cancels a pending refresh"`
+**Verification:** `bun test src/modules/git/__tests__/GitWatcher.test.ts -t "reconcile floor refreshes after watcher failure and stops on disposal"`
 
 **Status:** provisional
 
-**Last refined:** 2026-07-21
+**Last refined:** 2026-07-22
+
+### The git panel converges without watcher notifications
+
+**Invariant:** If `GitWatcher` remains active while filesystem notifications fail or are lost,
+then `GitRepository` refreshes from Git ground truth within one reconcile interval plus the
+debounce interval.
+
+**Scope:** The live `GitWatcher` created by `Workspace.createGitWatcher` for one working directory,
+including watcher setup failure, runtime watcher errors, and silent notification loss.
+
+**Mechanism:** One slow interval calls the same `GitWatcher.scheduleRefresh` debounce used by
+filesystem events. Setup and runtime watcher failures also schedule an immediate refresh, and
+`dispose` clears both timers. The watcher requests the existing `GitRepository.refresh` path in
+background mode, which replaces panel-observed refs only when Git ground truth changed.
+
+**Generates:** Filesystem notifications as the fast path; periodic `git status` reconciliation as
+the eventual-correctness floor; one coalesced repository refresh path; no render wake-up for an
+unchanged periodic result.
+
+**Evidence:** `src/modules/git/GitWatcher.ts` (`startReconcileFloor`, `watchDirectory`,
+`onWatcherError`, `dispose`); `reconcile floor refreshes after watcher failure and stops on disposal`
+in `src/modules/git/__tests__/GitWatcher.test.ts`; `src/modules/git/GitRepository.ts` (`refresh`,
+`fileRecordsMatch`); `an unchanged background refresh preserves quiescent Git refs` in
+`src/modules/git/__tests__/GitRepository.test.ts`; `src/modules/workspace/Workspace.ts`
+(`createGitWatcher`).
+
+**Impossible if true:** A tracked filesystem change remaining absent from `GitRepository` beyond
+one reconcile interval plus debounce solely because watcher setup, delivery, or runtime failed; or
+a disposed watcher continuing periodic refreshes; or unchanged periodic results replacing
+panel-observed refs and waking rendering.
+
+**Verification:** `bun test src/modules/git/__tests__/GitWatcher.test.ts src/modules/git/__tests__/GitRepository.test.ts`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-22
 
 ### The watcher never watches inside an ignored directory
 

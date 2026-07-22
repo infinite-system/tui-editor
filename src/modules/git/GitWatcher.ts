@@ -11,6 +11,7 @@
 //
 // invariant: Filesystem notifications arrive in bursts (src/modules/git/git.invariants.md)
 // invariant: The watcher has one disposable debounce (src/modules/git/git.invariants.md)
+// invariant: The git panel converges without watcher notifications (src/modules/git/git.invariants.md)
 // invariant: The watcher never watches inside an ignored directory (src/modules/git/git.invariants.md)
 import { watch, readdirSync, statSync, type FSWatcher } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -19,6 +20,7 @@ import type { GitRepository } from './GitRepository';
 
 export interface GitWatcherOptions {
   debounceMs?: number;
+  reconcileIntervalMilliseconds?: number;
 }
 
 // Directories always skipped when git cannot answer whether a path is ignored (no repository, or
@@ -29,8 +31,10 @@ const FALLBACK_IGNORED_DIRECTORY_NAMES = new Set(['node_modules', '.git', 'dist'
 class $GitWatcher {
   private readonly directoryWatchers = new Map<string, FSWatcher>();
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconcileTimer: ReturnType<typeof setInterval> | null = null;
   private disposed = false;
   private readonly debounceMs: number;
+  private readonly reconcileIntervalMilliseconds: number;
 
   constructor(
     readonly cwd: string,
@@ -38,11 +42,16 @@ class $GitWatcher {
     options: GitWatcherOptions = {},
   ) {
     this.debounceMs = Math.max(0, options.debounceMs ?? 80);
+    this.reconcileIntervalMilliseconds = Math.max(
+      1,
+      options.reconcileIntervalMilliseconds ?? 5_000,
+    );
     this.start();
+    this.startReconcileFloor();
   }
 
   get active(): boolean {
-    return this.directoryWatchers.size > 0 && !this.disposed;
+    return !this.disposed;
   }
 
   /** How many directories currently hold a watch handle. No entry ever points inside an ignored
@@ -64,6 +73,7 @@ class $GitWatcher {
     } catch {
       // Catastrophic walk failure (unreadable root): fall back to a single non-recursive watch on
       // the root so top-level changes still refresh, rather than watching nothing.
+      this.scheduleRefresh();
       this.watchDirectory(this.cwd);
     }
     return this.active;
@@ -81,6 +91,7 @@ class $GitWatcher {
         .filter((entry) => entry.isDirectory() && entry.name !== '.git')
         .map((entry) => entry.name);
     } catch {
+      this.scheduleRefresh();
       return;
     }
     if (childDirectoryNames.length === 0) return;
@@ -100,8 +111,19 @@ class $GitWatcher {
       this.directoryWatchers.set(directory, watcher);
       return true;
     } catch {
+      this.scheduleRefresh();
       return false;
     }
+  }
+
+  // invariant: The git panel converges without watcher notifications (src/modules/git/git.invariants.md)
+  private startReconcileFloor(): void {
+    if (this.disposed || this.reconcileTimer) return;
+    this.reconcileTimer = setInterval(
+      () => this.scheduleRefresh(),
+      this.reconcileIntervalMilliseconds,
+    );
+    this.reconcileTimer.unref?.();
   }
 
   // invariant: The watcher never watches inside an ignored directory (src/modules/git/git.invariants.md)
@@ -164,19 +186,23 @@ class $GitWatcher {
 
   private flushRefresh(): void {
     this.debounceTimer = null;
-    if (!this.disposed) void this.repository.refresh();
+    if (!this.disposed) void this.repository.refresh({ background: true });
   }
 
-  private onWatcherError(directory: string): void {
+  protected onWatcherError(directory: string): void {
     const watcher = this.directoryWatchers.get(directory);
     watcher?.close();
     this.directoryWatchers.delete(directory);
+    this.scheduleRefresh();
   }
 
+  // invariant: A referenced resource stays alive (project.invariants.md)
   dispose(): void {
     this.disposed = true;
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
     this.debounceTimer = null;
+    if (this.reconcileTimer) clearInterval(this.reconcileTimer);
+    this.reconcileTimer = null;
     for (const watcher of this.directoryWatchers.values()) watcher.close();
     this.directoryWatchers.clear();
   }
