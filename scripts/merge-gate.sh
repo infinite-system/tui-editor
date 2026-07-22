@@ -49,6 +49,14 @@ soft_step() {
 
 # 1) Fast inner gate: tsc + conventions + unwired-capability + settings-applied META.
 step "conventions-gate (tsc + conventions + unwired + settings-meta)" bash scripts/conventions-gate.sh
+# 1b) The INVARIANT CONTRACT LAYER — the lattice itself. --all: every *.invariants.md is structurally
+#     valid (both headings, required fields, non-empty Evidence). --refs: every `// invariant:` code
+#     annotation resolves to a real record (no dangling references) + coverage report. This was RED and
+#     unenforced (the checker existed but rode no gate), so the layer that IS the lattice was
+#     measured-but-not-enforced — my own commits added annotations to records that did not exist. Both
+#     hard-blocking now: a broken/misnamed invariant reference fails the gate.
+step "invariant contracts --all (structure)" node .claude/skills/invariants/scripts/check_invariants.mjs --all
+step "invariant contracts --refs (annotations resolve)" node .claude/skills/invariants/scripts/check_invariants.mjs --all --refs
 # 2) Unit tests.
 step "unit tests (bun test)" bun test
 # 3) Behavioral CONTRACTS — the felt-invariants (momentum-glide, wrap-scroll, idle-quiescence).

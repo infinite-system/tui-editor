@@ -188,6 +188,47 @@ else
 fi
 "$H" kill "$S" >/dev/null 2>&1; rm -rf "$FDIR"
 
+# ---- CONTRACT: pane independence — a diff open/close never corrupts the editor pane (RATCHET) ----
+# ESSENCE (project.invariants "A pane is a self-contained scrollable viewport"): opening a SIBLING pane
+# (the side-by-side diff, mounted by swapping editorArea↔diffContainer in editorColumn) must NOT alter
+# the editor pane's scroll extent. This is the fae9349 regression (shared-container swap corrupted the
+# editor's height so it could not reach its true last line — reverted d01873f, previously UNGATED). The
+# drive: reach the editor's TRUE last line → open a change diff → close it → the editor still reaches
+# the SAME true last line at the SAME max-scroll. If the swap corrupts the editor pane, the after-scroll
+# falls short.
+echo "== CONTRACT pane-independence: open+close a diff, the editor pane still reaches its true last line =="
+PDIR=$(mktemp -d /tmp/tui-bc-pane.XXXXXX)
+S="bc-pane-$$"; SESSIONS="$SESSIONS $S"
+python3 -c "open('$PDIR/doc.txt','w').write(''.join('PLINE-%03d body\n'%i for i in range(120)))"
+# A committed file, then modify an EARLY line so it is a git change while the TRUE last line stays PLINE-119.
+( cd "$PDIR" && env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_OBJECT_DIRECTORY sh -c \
+  'git init -q && git add -A && git -c user.email=a@b.c -c user.name=x commit -qm init' )
+python3 -c "p='$PDIR/doc.txt';L=open(p).read().splitlines();L[5]='PLINE-005 CHANGED';open(p,'w').write('\n'.join(L)+'\n')"
+"$H" launch "$S" 120x40 env TUI_FRAME_DUMP=1 bun run src/main.ts "$PDIR" >/dev/null; "$H" ready "$S" 20 >/dev/null
+PFRAME="$ROOT/artifacts/frame-$S.json"
+pane_last(){ python3 -c "import json;rows=json.load(open('$PFRAME'))['rows'];print('yes' if any('PLINE-119' in r.get('text','') for r in rows) else 'no')"; }
+# open doc.txt (row 0 is .git; Down selects doc.txt), focus the editor, reach the true last line
+for _ in 1 2 3 4; do b="$("$H" field "$S" activeBuffer)"; [ -n "$b" ] && [ "$b" != null ] && break; "$H" send "$S" Down >/dev/null; sleep 0.15; "$H" send "$S" Enter >/dev/null; sleep 0.3; done
+"$H" send "$S" Right >/dev/null
+for _ in $(seq 1 15); do "$H" send "$S" PageDown >/dev/null 2>&1; done; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
+pane_before_top="$("$H" field "$S" editorScrollTop)"; pane_before_last="$(pane_last)"
+# open the change diff (Ctrl+G → git panel; 'o' opens the selected change's diff), then close it
+"$H" send "$S" C-g >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
+"$H" send "$S" o >/dev/null; sleep 0.6; "$H" settle "$S" >/dev/null 2>&1
+pane_diff_open="$("$H" field "$S" showingDiff)"
+"$H" send "$S" Escape >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
+# back in the editor, reach the true last line AGAIN
+"$H" send "$S" Right >/dev/null
+for _ in $(seq 1 15); do "$H" send "$S" PageDown >/dev/null 2>&1; done; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
+pane_after_top="$("$H" field "$S" editorScrollTop)"; pane_after_last="$(pane_last)"
+"$H" kill "$S" >/dev/null 2>&1; rm -rf "$PDIR"
+if [ "$pane_diff_open" = true ] && [ "$pane_before_last" = yes ] && [ "$pane_after_last" = yes ] \
+   && [ "${pane_after_top:-0}" = "${pane_before_top:-1}" ]; then
+  pass "editor reaches its true last line + same extent after a diff open/close (top=$pane_before_top, PLINE-119 rendered)"
+else
+  bad "diff swap corrupted the editor pane (diffOpened=$pane_diff_open before: top=$pane_before_top last=$pane_before_last after: top=$pane_after_top last=$pane_after_last)"
+fi
+
 echo ""
 if [ "$fail" = 0 ]; then echo "behavioral-contracts: ALL-PASS"; else echo "behavioral-contracts: FAILURES"; fi
 exit "$fail"

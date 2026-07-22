@@ -164,6 +164,9 @@ export async function boot(options: BootOptions = {}): Promise<BootedApp> {
       gitSelectedPaths: [...workspace.gitPanel.selectedPaths.value],
       contextMenuOpen: contextMenu.open.value,
       tooltipVisible: tooltip.visible.value,
+      // A diff is shown OVER the editor tabs (transient). Lets a driven contract confirm the diff
+      // pane actually mounted, so pane-independence (editor extent survives the swap) is real-verified.
+      showingDiff: workspace.showingDiff.value,
       settingsOpen: settingsPanel.open.value,
       settingsSelected: settingsPanel.selectedIndex.value,
       sidebarWidth: settings.sidebarWidth.value,

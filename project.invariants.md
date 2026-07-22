@@ -697,6 +697,13 @@ another's box.
 **Generates:** The editor viewport; the split-pane substrate; the side-by-side diff (2 panes + sync);
 future preview/outline-beside-editor layouts.
 
+**Evidence:** `src/modules/ui/RootView.ts` (`syncDiffView` swaps editorArea↔diffContainer by add/remove
+in editorColumn; each pane owns its own container + Viewport); the `pane-independence` driven contract
+in `scripts/behavioral-contracts.sh` — reach the editor's true last line, open a change diff (Ctrl+G →
+`o`), close it, and assert the editor still reaches the SAME true last line at the SAME max-scroll
+(the diff mount does not corrupt the editor pane). Drive-verified: editorScrollTop 85 before and after,
+PLINE-119 rendered both times.
+
 **Impossible if true:** Opening or closing a sibling pane changing another pane's max-scroll or offset;
 a pane that can't reach its true last row because a sibling's mount corrupted its height (the DiffView
 editorArea-swap regression, fae9349 — reverted d01873f); one pane reading another's height for its own
