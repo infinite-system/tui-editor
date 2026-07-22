@@ -25,9 +25,7 @@ import type { App } from '../app/App';
 import type { Theme } from '../theme/Theme';
 import type { CommandRegistry } from '../commands/CommandRegistry';
 import type { Palette } from '../theme/ThemePalettes';
-import { Highlighter, type Role } from '../syntax/Highlighter';
 import { Files } from '../system/Files';
-import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { TreePaneRenderer } from './TreePaneRenderer';
 import { GitPaneRenderer } from './GitPaneRenderer';
@@ -36,6 +34,7 @@ import {
   type TabBarSegment,
   type WorkspaceTabBarSegment,
 } from './TabBarRenderer';
+import { EditorPaneRenderer } from './EditorPaneRenderer';
 import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
 import { DiffView } from '../diff/DiffView';
 import { MarkdownSplitView } from '../markdown/MarkdownSplitView';
@@ -56,20 +55,7 @@ import { SplitterModel } from '../layout/SplitterModel';
 import { Logging } from '../system/Logging';
 import type { TabStrip } from './TabStrip';
 
-function roleColor(role: Role, palette: Palette): string {
-  switch (role) {
-    case 'keyword': return palette.keyword;
-    case 'string': return palette.string;
-    case 'number': return palette.number;
-    case 'comment': return palette.comment;
-    case 'func': return palette.func;
-    case 'type': return palette.type;
-    case 'operator': return palette.operator;
-    case 'added': return palette.added;
-    case 'removed': return palette.deleted;
-    default: return palette.fg;
-  }
-}
+// roleColor moved to EditorPaneRenderer with the editor render that used it.
 
 /**
  * OpenTUI paints a horizontal slider as a full-cell rectangle. Terminal cells are roughly twice as
@@ -1434,136 +1420,19 @@ function $buildRootView(
   // marker) and the code (syntax colors only, NO gutter). Only the visible lines are tokenized
   // (flyweight). Returns null for the empty state.
   function renderEditor(): { gutter: StyledText; code: StyledText } | null {
-    if (workspaceSet.active.showingDiff.value) return null;
-    const editor = workspaceSet.active.editor;
-    if (!editor.hasDocument.value) return null;
-    const palette = readPalette();
-    const language = LanguageRegistry.Class.forPath(editor.document.path);
-    const height = editorViewportHeight();
-    const top = editor.viewport.scrollTop.value;
-    const visibleLines = editor.document.slice(top, height);
-    const lineNumberWidth = String(editor.document.lineCount).length + 1;
-    const currentLineIndex = editor.cursor.line.value;
-    const focused = workspaceSet.active.focus.value === 'editor';
-    const gutterDiffByLine = workspaceSet.active.gutterDiffByLine.value;
-    const gutterChunks: TextChunk[] = [];
-    const codeChunks: TextChunk[] = [];
-    // invariant: The editor gutter reflects HEAD changes (src/modules/diff/diff.invariants.md)
-    const pushGutterMarker = (lineIndex: number, isCurrentLine: boolean): void => {
-      const gutterDiffStatus = gutterDiffByLine.get(lineIndex);
-      if (gutterDiffStatus === 'added') {
-        gutterChunks.push(fg(palette.added)('▎'));
-      } else if (gutterDiffStatus === 'modified') {
-        gutterChunks.push(fg(palette.modified)('▎'));
-      } else if (gutterDiffStatus === 'deleted') {
-        gutterChunks.push(fg(palette.deleted)('▁'));
-      } else {
-        gutterChunks.push(fg(palette.accent)(isCurrentLine && focused ? '▏' : ' '));
-      }
-    };
-    const sourceFindEngine = findBar.engineFor(`source:${editor.document.path}`);
-    const pushCodeChunks = (
-      windowText: string,
-      lineIndex: number,
-      windowStartGrapheme = 0,
-    ): void => {
-      const lineMatches = sourceFindEngine?.matches.value.filter((match) => match.line === lineIndex) ?? [];
-      const windowGraphemeCount = EditorCoordinates.Class.graphemeCount(windowText);
-      const boundaries = new Set<number>([0, windowGraphemeCount]);
-      for (const match of lineMatches) {
-        boundaries.add(Math.max(0, Math.min(windowGraphemeCount, match.startColumn - windowStartGrapheme)));
-        boundaries.add(Math.max(0, Math.min(windowGraphemeCount, match.endColumn - windowStartGrapheme)));
-      }
-      const orderedBoundaries = [...boundaries].sort((first, second) => first - second);
-      for (let boundaryIndex = 0; boundaryIndex < orderedBoundaries.length - 1; boundaryIndex += 1) {
-        const segmentStart = orderedBoundaries[boundaryIndex]!;
-        const segmentEnd = orderedBoundaries[boundaryIndex + 1]!;
-        if (segmentEnd <= segmentStart) continue;
-        const segmentText = windowText.slice(
-          EditorCoordinates.Class.graphemeToU16(windowText, segmentStart),
-          EditorCoordinates.Class.graphemeToU16(windowText, segmentEnd),
-        );
-        const findHighlighted = lineMatches.some(
-          (match) =>
-            match.startColumn < windowStartGrapheme + segmentEnd &&
-            match.endColumn > windowStartGrapheme + segmentStart,
-        );
-        if (editor.document.binary.value || language === 'plain') {
-          const textChunk = fg(palette.fg)(segmentText);
-          codeChunks.push(findHighlighted ? bg(palette.cursorLine)(textChunk) : textChunk);
-        } else {
-          for (const span of Highlighter.Class.highlightLine(segmentText, language)) {
-            const syntaxChunk = fg(roleColor(span.role, palette))(span.text);
-            codeChunks.push(findHighlighted ? bg(palette.cursorLine)(syntaxChunk) : syntaxChunk);
-          }
-        }
-      }
-    };
-    if (editor.wordWrap.value) {
-      // WRAP MODE: iterate VISUAL rows from the pure mapping layer — a long line contributes
-      // multiple rows; the gutter numbers only a line's FIRST visual row (continuation rows are
-      // blank, VS Code-style); each row's code is the segment's grapheme-safe slice. The window
-      // walk is O(window) — the file is never materialized.
-      // invariant: Word wrap is a pure view mapping (src/modules/editor/editor.invariants.md)
-      // `top` is a VISUAL-row offset in wrap mode (shares the momentum engine + visual scrollbar), so
-      // the window can start MID-LINE — a tall last line's lower segments are reachable.
-      wrapRowsWindow = EditorWrap.Class.visualRowsFromOffset(editor.document, top, editor.wrapWidth(), height);
-      wrapRowsWindow.forEach((row, rowIndex) => {
-        const isCurrentLine = row.lineIndex === currentLineIndex;
-        if (row.firstOfLine) {
-          const lineNumberText = String(row.lineIndex + 1).padStart(lineNumberWidth, ' ');
-          gutterChunks.push(fg(isCurrentLine ? palette.accent : palette.dim)(`${lineNumberText} `));
-          pushGutterMarker(row.lineIndex, isCurrentLine);
-        } else {
-          gutterChunks.push(fg(palette.dim)(' '.repeat(lineNumberWidth + 2)));
-        }
-        const lineText = editor.document.line(row.lineIndex);
-        pushCodeChunks(
-          lineText.slice(
-            EditorCoordinates.Class.graphemeToU16(lineText, row.segment.startGrapheme),
-            EditorCoordinates.Class.graphemeToU16(lineText, row.segment.endGrapheme),
-          ),
-          row.lineIndex,
-          row.segment.startGrapheme,
-        );
-        if (rowIndex < wrapRowsWindow.length - 1) {
-          gutterChunks.push(fg(palette.fg)('\n'));
-          codeChunks.push(fg(palette.fg)('\n'));
-        }
-      });
-      return { gutter: new StyledText(gutterChunks), code: new StyledText(codeChunks) };
-    }
-    wrapRowsWindow = [];
-    // COLUMN virtualization (the horizontal twin of the line flyweight): each visible line is
-    // sliced to the visible display-column window BEFORE tokenizing, so per-frame cost tracks
-    // visible columns — never total line length (50k-char lines render at normal speed).
-    // Trade-off: tokens start at the slice, so left-context-sensitive highlighting can differ at
-    // the boundary (documented in the contract).
-    // invariant: Cost tracks the actively observed set (project.invariants.md)
-    const scrollLeft = editor.viewport.scrollLeft.value;
-    const viewportWidth = editorViewportWidth();
-    visibleLines.forEach((text, visibleIndex) => {
-      const lineNumber = top + visibleIndex;
-      const isCurrentLine = lineNumber === currentLineIndex;
-      const lineNumberText = String(lineNumber + 1).padStart(lineNumberWidth, ' ');
-      gutterChunks.push(fg(isCurrentLine ? palette.accent : palette.dim)(`${lineNumberText} `));
-      pushGutterMarker(lineNumber, isCurrentLine);
-      let windowText = text;
-      let windowStartGrapheme = 0;
-      if (scrollLeft > 0 || text.length > viewportWidth) { // O(1) test; a needless slice is harmless
-        let startGrapheme = EditorCoordinates.Class.graphemeAtDisplayColumn(text, scrollLeft);
-        if (EditorCoordinates.Class.displayColumn(text, startGrapheme) < scrollLeft) startGrapheme += 1; // never split a straddling wide glyph
-        const endGrapheme = EditorCoordinates.Class.graphemeAtDisplayColumn(text, scrollLeft + viewportWidth) + 1;
-        windowStartGrapheme = startGrapheme;
-        windowText = text.slice(EditorCoordinates.Class.graphemeToU16(text, startGrapheme), EditorCoordinates.Class.graphemeToU16(text, endGrapheme));
-      }
-      pushCodeChunks(windowText, lineNumber, windowStartGrapheme);
-      if (visibleIndex < visibleLines.length - 1) {
-        gutterChunks.push(fg(palette.fg)('\n'));
-        codeChunks.push(fg(palette.fg)('\n'));
-      }
+    // Delegates to EditorPaneRenderer; RootView stores the returned wrap-row window (the caret block,
+    // applySelection, and the hit-test read it). null (diff shown / no document) leaves it untouched,
+    // exactly as before. Behaviour identical.
+    const result = EditorPaneRenderer.Class.render({
+      workspace: workspaceSet.active,
+      palette: readPalette(),
+      viewportHeight: editorViewportHeight(),
+      viewportWidth: editorViewportWidth(),
+      findEngineFor: (documentPath) => findBar.engineFor(`source:${documentPath}`),
     });
-    return { gutter: new StyledText(gutterChunks), code: new StyledText(codeChunks) };
+    if (!result) return null;
+    wrapRowsWindow = result.wrapRowsWindow;
+    return { gutter: result.gutter, code: result.code };
   }
 
   // Drive OpenTUI's native selection on the code renderable from the model selection, mapped into
