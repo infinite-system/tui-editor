@@ -23,6 +23,18 @@ describe('resolution precedence', () => {
     expect(registry.resolve(chord('k'), 'editor', 0).action).toBe('second');
   });
 
+  test('input-overlay opening chords resolve from every input-overlay context', () => {
+    const registry = registryWithDefaults();
+    const inputOverlayContexts = ['find', 'quickopen', 'palette', 'settings', 'menu'];
+    for (const inputOverlayContext of inputOverlayContexts) {
+      expect(registry.resolve(chord('f', { ctrl: true }), inputOverlayContext, 0).action).toBe('find.open');
+      expect(registry.resolve(chord('h', { ctrl: true }), inputOverlayContext, 0).action).toBe('find.replace');
+      expect(registry.resolve(chord('p', { ctrl: true }), inputOverlayContext, 0).action).toBe('quickopen.open');
+      expect(registry.resolve(chord('f1'), inputOverlayContext, 0).action).toBe('palette.open');
+      expect(registry.resolve(chord(',', { ctrl: true }), inputOverlayContext, 0).action).toBe('settings.toggle');
+    }
+  });
+
   test('context bindings apply only in their context; global applies everywhere', () => {
     const registry = registryWithDefaults();
     expect(registry.resolve(chord('o'), 'git', 0).action).toBe('git.openFile');
@@ -44,6 +56,20 @@ describe('resolution precedence', () => {
     expect(resolution.action).toBeNull();
     expect(resolution.chordPending).toBe(true);
     registry.cancelChord();
+  });
+});
+
+describe('reserved global bindings', () => {
+  test('quit resolves without a context and does not disturb chord state', () => {
+    const registry = registryWithDefaults();
+    registry.registerGuard('editorHasSelection', () => false);
+    expect(registry.resolve(chord('x', { ctrl: true }), 'editor', 0).chordPending).toBe(true);
+
+    expect(registry.resolveReservedGlobal(chord('q', { ctrl: true }))).toBe('app.quit');
+    expect(registry.resolveReservedGlobal(chord('f10'))).toBe('app.quit');
+    expect(registry.resolveReservedGlobal(chord('p', { ctrl: true }))).toBeNull();
+
+    expect(registry.resolve(chord('c', { ctrl: true }), 'editor', 100).action).toBe('app.quit');
   });
 });
 

@@ -18,7 +18,10 @@ set -uo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/.." && pwd)"
 H="$DIR/tui-harness.sh"
-SET="$HOME/.config/fable/settings.json"
+# tui-harness.sh launches every app with this worktree-local HOME. Write the contract settings to
+# that SAME isolated path; writing the caller's real $HOME makes the drive depend on stale harness
+# state and can silently run the wrap contract with wordWrap=false.
+SET="$ROOT/artifacts/home/.config/fable/settings.json"
 export PATH="$HOME/.bun/bin:$PATH"
 fail=0
 SESSIONS=""
@@ -26,6 +29,7 @@ pass() { echo "  PASS  $1"; }
 bad()  { echo "  FAIL  $1"; fail=1; }
 
 # Neutral scroll settings so the assertions are deterministic (one row per notch, no fast modifier).
+mkdir -p "$(dirname "$SET")"
 python3 -c "import json,os;p=os.path.expanduser('$SET');d=json.load(open(p)) if os.path.exists(p) else {};d.update({'linesPerNotch':1,'wordWrap':False,'fastScrollModifier':'none','horizontalScrollModifier':'alt'});json.dump(d,open(p,'w'),indent=2)"
 
 LONG=$(mktemp -d /tmp/tui-bc-long.XXXXXX); python3 -c "open('$LONG/l.txt','w').write(''.join('line %04d content\n'%i for i in range(800)))"

@@ -42,6 +42,39 @@ a FrameProbe check that rendered-row count stays bounded while wheel-scrolling a
 
 ## Chosen invariants
 
+### Input overlays share one modal slot
+
+**Invariant:** If an input-capturing overlay opens, then it is the only input-capturing overlay
+left open; Find and Replace remain two modes of the same `FindBar`, and reserved global chords still
+run before the active overlay consumes input.
+
+**Scope:** `FindBar` in find or replace mode, `QuickOpen`, the command palette in
+`CommandRegistry`, `SettingsPanel`, and `ContextMenu`. The destructive confirmation overlays and
+display-only `Tooltip` are outside this slot.
+
+**Mechanism:** `OverlayCoordinator.openExclusiveOverlay` closes every registered overlay except the
+requested one before it runs the requested opener. Every live open path in `Bootstrap.ts` and
+`RootView.ts` goes through that coordinator. `Bootstrap.keyTick` resolves reserved global bindings
+before overlay routing, and `FindBar.openFor` changes `mode` without closing the shared Find bar.
+
+**Generates:** one active input context; one-keystroke switching between overlays; no masked stale
+overlay that reappears when a newer overlay closes; the always-available quit escape hatch.
+
+**Evidence:** `src/modules/ui/OverlayCoordinator.ts`; `src/modules/app/Bootstrap.ts` overlay action
+handlers; `src/modules/ui/RootView.ts` context-menu and workspace-folder open paths;
+`src/modules/ui/OverlayCoordinator.test.ts`; `scripts/smoke-mode-coherence.sh`.
+
+**Impossible if true:** Find and Quick Open both reporting open; closing Settings revealing a stale
+command palette beneath it; Ctrl+F then Ctrl+H creating two bars instead of changing one bar to
+replace mode; Ctrl+Q being swallowed by Find, Quick Open, or the command palette.
+
+**Verification:** `bun test src/modules/ui/OverlayCoordinator.test.ts
+src/modules/keybindings/__tests__/registry.test.ts && bash scripts/smoke-mode-coherence.sh`
+
+**Status:** established
+
+**Last refined:** 2026-07-22
+
 ### One writer per scroll regime per frame
 
 **Invariant:** If more than one authority can change a pane's scroll offset (mouse wheel, keyboard
@@ -75,8 +108,8 @@ scroll-to's offset, not a blend.
 
 **Invariant:** If a context menu is open, then every pointer and keyboard event belongs to the menu
 alone: a click either hits a menu row (running that item) or dismisses the menu — it NEVER also
-reaches, activates, or edits anything beneath; a keystroke either drives the menu (Up/Down/Enter/
-Escape via the registry's `menu` context) or closes it and is consumed. Running an item closes the
+reaches, activates, or edits anything beneath; a keystroke drives the menu, switches the shared
+modal slot to another input overlay, or closes the menu and is consumed. Running an item closes the
 menu BEFORE the action executes.
 
 **Scope:** `ContextMenu` (the model), the backdrop + menu overlay in `RootView`, and the modal key
@@ -87,26 +120,30 @@ box (zIndex 130). OpenTUI stamps every rendered renderable into its hit grid in 
 (zIndex ascending, later stamps win), so while the menu is open every pointer cell resolves to the
 menu or the backdrop — the panes beneath are unreachable by construction, not by per-handler
 guards. The backdrop's only behavior is `close()`. Keys: `Bootstrap.onKey` short-circuits to the
-registry's `menu` context, dispatches only `menu.*` actions, and closes-and-consumes anything
-else. `ContextMenu.runAt` closes first, then invokes the opener-supplied handler.
+registry's `menu` context, dispatches `menu.*` actions or a global input-overlay opener through
+`OverlayCoordinator`, and closes-and-consumes anything else. Reserved global chords run before this
+branch. `ContextMenu.runAt` closes first, then invokes the opener-supplied handler.
 
 **Generates:** reusable menus that are safe over any pane; collective git actions without
 misclick hazards; keyboard parity for every menu.
 
 **Evidence:** unit tests (`ContextMenu.test.ts` state machine) + live tmux: right-click menu over
 the git panel; a click on the editor area closed the menu with buffer revision AND cursor
-unchanged; a menu-item click ran only the collective action.
+unchanged; a menu-item click ran only the collective action. `scripts/smoke-mode-coherence.sh`
+opens the buffer-tab menu over the command palette, then switches menu to palette with one F1 chord.
 
 **Impossible if true:** a click that both closes the menu and acts on what is beneath it; a
 keystroke that types into the editor or moves a pane selection while a menu is open; an item
-action that executes while the menu is still open.
+action that executes while the menu is still open; switching from the menu to another input overlay
+requiring the opening chord twice.
 
-**Verification:** `bun test` ContextMenu tests; tmux — open the menu, click elsewhere, assert the
-menu is gone AND `bufferRevision`/`cursor`/`treeSelected` unchanged in status.json.
+**Verification:** `bun test` ContextMenu tests; `bash scripts/smoke-mode-coherence.sh`; tmux — open
+the menu, click elsewhere, assert the menu is gone AND `bufferRevision`/`cursor`/`treeSelected`
+unchanged in status.json.
 
 **Status:** established
 
-**Last refined:** 2026-07-21
+**Last refined:** 2026-07-22
 
 ### A tooltip never intercepts input
 

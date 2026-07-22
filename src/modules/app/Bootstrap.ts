@@ -17,6 +17,7 @@ import { CommandDefaults } from '../commands/CommandDefaults';
 import { RootView } from '../ui/RootView';
 import { TabStrip } from '../ui/TabStrip';
 import { ContextMenu } from '../ui/ContextMenu';
+import { OverlayCoordinator } from '../ui/OverlayCoordinator';
 import { Tooltip } from '../ui/Tooltip';
 import { Settings } from '../settings/Settings';
 import { SettingsPanel } from '../settings/SettingsPanel';
@@ -106,6 +107,13 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   const settingsPanel = new SettingsPanel.Class(settings);
   const findBar = new FindBar.Class();
   const quickOpen = new QuickOpen.Class();
+  const overlayCoordinator = new OverlayCoordinator.Class({
+    findBar: () => findBar.close(),
+    quickOpen: () => quickOpen.close(),
+    commandPalette: () => commands.closePalette(),
+    settingsPanel: () => settingsPanel.close(),
+    contextMenu: () => contextMenu.close(),
+  });
 
   const view = RootView.Class.buildRootView(
     renderer,
@@ -120,6 +128,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     settingsPanel,
     findBar,
     quickOpen,
+    overlayCoordinator,
   );
 
   // Reveal the find bar's current match in the editor (the ONE writer of the editor selection): select
@@ -174,6 +183,13 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   const publish = (): void => {
     const editor = workspaceSet.active.editor;
     const diffView = view.activeDiffView();
+    const openInputOverlays = [
+      ...(findBar.open.value ? ['findBar'] : []),
+      ...(quickOpen.open.value ? ['quickOpen'] : []),
+      ...(commands.open.value ? ['commandPalette'] : []),
+      ...(settingsPanel.open.value ? ['settingsPanel'] : []),
+      ...(contextMenu.open.value ? ['contextMenu'] : []),
+    ];
     StatusChannel.Class.update({
       mouse: lastMouse,
       activeWorkspace: workspaceSet.active.name.value,
@@ -196,6 +212,13 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       selection: editor.cursor.selectionRange(),
       openBuffers: editor.hasDocument.value ? [editor.document.path] : [],
       overlay: commands.open.value ? 'palette' : null,
+      inputOverlay: openInputOverlays[0] ?? null,
+      inputOverlayCount: openInputOverlays.length,
+      openInputOverlays,
+      findOpen: findBar.open.value,
+      findMode: findBar.mode.value,
+      quickOpenOpen: quickOpen.open.value,
+      paletteOpen: commands.open.value,
       paletteQuery: commands.open.value ? commands.query.value : '',
       paletteMatches: commands.open.value ? commands.filtered.length : 0,
       focus: workspaceSet.active.focus.value,
@@ -436,7 +459,8 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   CommandDefaults.Class.registerDefaultCommands(commands, {
     workspaceSet,
     theme,
-    openWorkspaceFolder: () => quickOpen.showWorkspacePath(),
+    openWorkspaceFolder: () =>
+      overlayCoordinator.openExclusiveOverlay('quickOpen', () => quickOpen.showWorkspacePath()),
     quit: () => void shutdown(),
     requestRender: () => app.requestRender(),
     hasOpenDiff: () => workspaceSet.active.showingDiff.value && view.activeDiffView() !== null,
@@ -527,20 +551,27 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'app.quit': () => void shutdown(),
     'find.open': () => {
       if (!workspaceSet.active.editor.hasDocument.value) return;
-      findBar.openFor(workspaceSet.active.editor.document, 'find');
+      overlayCoordinator.openExclusiveOverlay('findBar', () =>
+        findBar.openFor(workspaceSet.active.editor.document, 'find'),
+      );
       revealFindMatch();
     },
     'find.replace': () => {
       if (!workspaceSet.active.editor.hasDocument.value) return;
-      findBar.openFor(workspaceSet.active.editor.document, 'replace');
+      overlayCoordinator.openExclusiveOverlay('findBar', () =>
+        findBar.openFor(workspaceSet.active.editor.document, 'replace'),
+      );
       revealFindMatch();
     },
-    'quickopen.open': () => void quickOpen.show(workspaceSet.active.root), // Ctrl+P: fuzzy go-to-file over rg --files
-    'workspace.openFolder': () => quickOpen.showWorkspacePath(),
+    'quickopen.open': () =>
+      overlayCoordinator.openExclusiveOverlay('quickOpen', () => void quickOpen.show(workspaceSet.active.root)),
+    'workspace.openFolder': () =>
+      overlayCoordinator.openExclusiveOverlay('quickOpen', () => quickOpen.showWorkspacePath()),
     'workspace.close': () => workspaceSet.closeActive(),
     'workspace.next': () => workspaceSet.cycle(1),
     'workspace.previous': () => workspaceSet.cycle(-1),
-    'palette.open': () => commands.openPalette(),
+    'palette.open': () =>
+      overlayCoordinator.openExclusiveOverlay('commandPalette', () => commands.openPalette()),
     'palette.close': () => commands.closePalette(),
     'palette.run': () => commands.runSelected(),
     'palette.previous': () => commands.moveSelection(-1),
@@ -553,7 +584,10 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       revealFindMatch();
     },
     'focus.toggle': () => workspaceSet.active.toggleFocus(),
-    'settings.toggle': () => settingsPanel.toggle(),
+    'settings.toggle': () => {
+      if (settingsPanel.open.value) settingsPanel.close();
+      else overlayCoordinator.openExclusiveOverlay('settingsPanel', () => settingsPanel.toggle());
+    },
     'settings.close': () => settingsPanel.close(),
     'settings.up': () => settingsPanel.moveSelection(-1),
     'settings.down': () => settingsPanel.moveSelection(1),
@@ -703,6 +737,15 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'menu.close': () => contextMenu.close(),
   };
 
+  const inputOverlayOpeningActionIdentifiers = new Set([
+    'find.open',
+    'find.replace',
+    'quickopen.open',
+    'workspace.openFolder',
+    'palette.open',
+    'settings.toggle',
+  ]);
+
   const keyTick = (key: KeyEvent): void => {
     tooltip.clear(); // any keypress hides the tooltip (display-only affordance)
     // RESERVED GLOBAL CHORDS (quit) are escape hatches that must fire from ANY mode — checked BEFORE
@@ -746,7 +789,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
         Date.now(),
       );
       if (menuResolution.action?.startsWith('menu.')) actionHandlers[menuResolution.action]?.(key);
-      else contextMenu.close();
+      else if (menuResolution.action && inputOverlayOpeningActionIdentifiers.has(menuResolution.action)) {
+        actionHandlers[menuResolution.action]?.(key);
+      } else contextMenu.close();
       return;
     }
 
@@ -760,9 +805,14 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
             ? 'find'
             : workspaceSet.active.focus.value;
 
+    // Ctrl+H is the ASCII Backspace control byte (0x08); OpenTUI correctly decodes that legacy byte
+    // as {name:'backspace', ctrl:false}. A physical Backspace is DEL (0x7f), so the byte sequences are
+    // distinguishable. Normalize raw 0x08 back to the intent-addressed Ctrl+H chord before registry
+    // resolution; the action remains DATA (`find.replace`), and ordinary Backspace remains editing.
+    const rawControlH = key.name === 'backspace' && key.sequence === '\u0008';
     const normalizedChordEvent = {
-      name: key.name,
-      ctrl: key.ctrl,
+      name: rawControlH ? 'h' : key.name,
+      ctrl: rawControlH ? true : key.ctrl,
       shift: key.shift,
       option: key.option || key.meta,
       super: key.super,
