@@ -2707,6 +2707,19 @@ function $buildRootView(
     if (process.env.TUI_DEBUG_MOUSE === '1') {
       Logging.Class.info(`mouseDown (${event.x},${event.y}) hit=${JSON.stringify(documentPositionAtCell(event.x, event.y))}`);
     }
+    // Ctrl/Cmd+click on a symbol = go to definition (VS Code style). OpenTUI exposes terminal
+    // Meta/Super mouse modifiers through the SGR alt bit, so ctrl OR alt covers Ctrl-click and
+    // terminal Cmd/Meta-click without a second path (same rule as the Markdown reference click).
+    // The event is consumed here — it never doubles as a selection begin.
+    // invariant: A definition gesture jumps to the declaration (src/modules/lsp/lsp.invariants.md)
+    if (event.button === 0 && (event.modifiers.ctrl || event.modifiers.alt)) {
+      const definitionPosition = documentPositionAtCell(event.x, event.y);
+      if (definitionPosition) {
+        workspaceSet.active.focusEditor();
+        void workspaceSet.active.goToDefinition(definitionPosition);
+        return;
+      }
+    }
     editorSelectionDragBehavior.begin(event.x, event.y);
   };
   codeBody.onMouseDrag = (event) => {

@@ -22,6 +22,14 @@ import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { EditorWrap } from '../editor/EditorWrap';
 import { Logging } from '../system/Logging';
 import { GutterDiff, type GutterDiffStatus } from '../diff/GutterDiff';
+import {
+  LanguageClient,
+  type LanguageLocation,
+  type TextDocumentModel,
+  type TextPosition,
+} from '../lsp/LanguageClient';
+import { fileURLToPath } from 'node:url';
+import { resolve as resolvePath } from 'node:path';
 
 export type Focus = 'files' | 'editor' | 'git';
 
@@ -66,10 +74,115 @@ class $Workspace {
       createBuffer: (path) => {
         const editor = this.createEditor();
         editor.openFile(path);
+        // Every live buffer (fresh open AND flyweight rehydration) registers with the language
+        // client here — one choke point. Client construction is cheap; the server subprocess
+        // starts only for supported files.
+        // invariant: LSP activation follows semantic demand (src/modules/lsp/lsp.invariants.md)
+        if (editor.hasDocument.value) this.ensureLanguageClient().openDocument(editor.document);
         return editor;
       },
-      disposeBuffer: (buffer) => (buffer as Editor.Instance).dispose(),
+      disposeBuffer: (buffer) => {
+        const editor = buffer as Editor.Instance;
+        // Mirror of the openDocument above: dehydration/close/disposeAll all release the
+        // server-side document through this one seam.
+        if (editor.hasDocument.value && editor.document.path) {
+          this.languageClientInstance?.closeDocument(editor.document);
+        }
+        editor.dispose();
+      },
     });
+  }
+
+  // --- language intelligence (one client per workspace root) --------------------------------
+  // The client is created lazily on the first buffer open; the LSP subprocess itself starts only
+  // when a SUPPORTED document opens or a semantic request runs (activation follows demand).
+  private languageClientInstance: LanguageClient.Model | null = null;
+  protected createLanguageClient(): LanguageClient.Model {
+    return new LanguageClient.Class({ rootPath: this.root });
+  }
+  private ensureLanguageClient(): LanguageClient.Model {
+    if (!this.languageClientInstance) this.languageClientInstance = this.createLanguageClient();
+    return this.languageClientInstance;
+  }
+
+  /** Push the active buffer's current text to the language server (revision-idempotent full-text
+   *  didChange). Driven by the document-revision watch in Bootstrap; no-op before any client
+   *  exists or while a transient diff is shown. */
+  syncActiveDocumentWithLanguageServer(): void {
+    if (this.showingDiff.value) return;
+    const editor = this.buffers.activeBuffer as Editor.Instance | null;
+    if (!editor || !editor.hasDocument.value || !editor.document.path) return;
+    this.languageClientInstance?.syncDocument(editor.document);
+  }
+
+  /**
+   * VS-Code-style go-to-definition: resolve the symbol at `position` (Ctrl/Cmd+click) or at the
+   * cursor (F12) through the language client, then open the target file as a tab and land the
+   * cursor on the declaration. Resolves false — never throws — when no definition is available
+   * (no document, unsupported file, server missing, or the server finds nothing).
+   *
+   * invariant: A definition gesture jumps to the declaration (src/modules/lsp/lsp.invariants.md)
+   */
+  async goToDefinition(position?: TextPosition): Promise<boolean> {
+    if (this.showingDiff.value) return false;
+    const editor = this.buffers.activeBuffer as Editor.Instance | null;
+    if (!editor || !editor.hasDocument.value || !editor.document.path) return false;
+    const client = this.ensureLanguageClient();
+    if (!client.supportsDocument(editor.document)) return false;
+    const requestPosition = position ?? {
+      line: editor.cursor.line.value,
+      column: editor.cursor.col.value,
+    };
+    const location = await client.definition(editor.document, requestPosition);
+    if (!location) return false;
+    const resolvedLocation = await this.rehopThroughImportSpecifier(
+      client,
+      editor.document,
+      location,
+    );
+    return this.jumpToLocation(resolvedLocation);
+  }
+
+  /** The real server resolves a use site to the IMPORT SPECIFIER while the target file is not
+   *  open in the server (and to the original declaration when it is — both observed against
+   *  typescript-language-server). One re-request from the import specifier reaches the original
+   *  declaration, matching VS Code. */
+  private async rehopThroughImportSpecifier(
+    client: LanguageClient.Model,
+    document: TextDocumentModel,
+    location: LanguageLocation,
+  ): Promise<LanguageLocation> {
+    let landedPath: string;
+    try {
+      landedPath = fileURLToPath(location.uri);
+    } catch {
+      return location;
+    }
+    if (landedPath !== resolvePath(document.path)) return location;
+    if (!/^\s*import\b/.test(document.line(location.range.start.line))) return location;
+    const rehoppedLocation = await client.definition(document, location.range.start);
+    if (!rehoppedLocation) return location;
+    const rehoppedToSameSpot =
+      rehoppedLocation.uri === location.uri &&
+      rehoppedLocation.range.start.line === location.range.start.line &&
+      rehoppedLocation.range.start.column === location.range.start.column;
+    return rehoppedToSameSpot ? location : rehoppedLocation;
+  }
+
+  /** Open the located file through the existing tab path and reveal the declaration. */
+  private jumpToLocation(location: LanguageLocation): boolean {
+    let targetPath: string;
+    try {
+      targetPath = fileURLToPath(location.uri);
+    } catch {
+      return false;
+    }
+    if (!Files.Class.exists(targetPath) || Files.Class.isDir(targetPath)) return false;
+    this.openFileInTab(targetPath);
+    this.focus.value = 'editor';
+    this.editor.placeCursor(location.range.start.line, location.range.start.column);
+    this.editor.revealCursor();
+    return true;
   }
 
   /** True while a git diff is displayed over the tabs (transient view). */
@@ -280,6 +393,11 @@ class $Workspace {
   suspendOwnedResources(): void {
     this.gitWatcher?.dispose();
     this.gitWatcher = null;
+    // A suspended (background) workspace holds no language-server subprocess; resuming recreates
+    // the client lazily through the buffer seams / the next semantic request.
+    // invariant: Client disposal releases the server (src/modules/lsp/lsp.invariants.md)
+    void this.languageClientInstance?.dispose();
+    this.languageClientInstance = null;
     this.buffers.deactivate();
   }
 
@@ -293,11 +411,15 @@ class $Workspace {
     }
   }
 
-  /** Tear down owned resources with effects/handles (the working-tree watcher + open buffers). */
+  /** Tear down owned resources with effects/handles (the working-tree watcher, the language
+   *  client's subprocess, and the open buffers). */
   dispose(): void {
     this.activeHeadTextRequestToken += 1;
     this.gitWatcher?.dispose();
     this.gitWatcher = null;
+    // invariant: Client disposal releases the server (src/modules/lsp/lsp.invariants.md)
+    void this.languageClientInstance?.dispose();
+    this.languageClientInstance = null;
     this.buffers.disposeAll();
   }
 

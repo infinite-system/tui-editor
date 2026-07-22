@@ -50,6 +50,8 @@ export const canonicalBindings: Keybinding[] = [
   // Markdown preview actions share the visible tab-bar button / hovered link affordance.
   { chord: { key: 'v', ctrl: true, shift: true }, action: 'markdown.togglePreview', context: 'editor' },
   { chord: { key: 'return', ctrl: true }, action: 'markdown.openHoveredReference', context: 'editor' },
+  // Go to Definition (VS Code parity: F12; the pointer path is Ctrl/Cmd+click on the symbol).
+  { chord: { key: 'f12' }, action: 'go.definition', context: 'editor' },
 
   // --- palette (captures input while open) ---
   { chord: { key: 'escape' }, action: 'palette.close', context: 'palette' },
