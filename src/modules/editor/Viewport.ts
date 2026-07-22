@@ -5,7 +5,7 @@
 // invariant: Cost tracks the actively observed set (project.invariants.md)
 import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
-import { Momentum, AT_REST, type ScrollMomentum } from '../ui/Momentum';
+import { Momentum, AT_REST, type ScrollMomentum } from '../system/Momentum';
 
 class $Viewport {
   get scrollTop() {

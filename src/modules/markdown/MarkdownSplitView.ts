@@ -14,7 +14,7 @@ import type { FindBar, FindBarTarget } from '../search/FindBar';
 import type { FindInBufferMatch } from '../search/FindInBuffer';
 import type { Settings } from '../settings/Settings';
 import type { Theme } from '../theme/Theme';
-import { Momentum, AT_REST, VERTICAL_MOMENTUM, type ScrollMomentum } from '../ui/Momentum';
+import { Momentum, AT_REST, VERTICAL_MOMENTUM, type ScrollMomentum } from '../system/Momentum';
 import { SelectionDragBehavior } from '../ui/SelectionDragBehavior';
 import { MarkdownPreview } from './MarkdownPreview';
 import type { MarkdownSource } from './MarkdownDocument';

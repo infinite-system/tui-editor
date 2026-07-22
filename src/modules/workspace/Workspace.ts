@@ -13,7 +13,7 @@ import { GitWatcher } from '../git/GitWatcher';
 import { CommitLog } from '../git/CommitLog';
 import { CommitExpansion } from '../git/CommitExpansion';
 import { GitPanel } from './GitPanel';
-import { Momentum, VERTICAL_MOMENTUM, type MomentumOptions } from '../ui/Momentum';
+import { Momentum, VERTICAL_MOMENTUM, type MomentumOptions } from '../system/Momentum';
 import type { Settings } from '../settings/Settings';
 import { GitRows } from '../git/GitRows';
 import { GitLogRows, type CommitLogRow } from '../git/GitLogRows';

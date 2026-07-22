@@ -4,7 +4,7 @@
 // changes → a commit's files → a file's diff, with `back()` unwinding it.
 import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
-import { AT_REST, type ScrollMomentum } from '../ui/Momentum';
+import { AT_REST, type ScrollMomentum } from '../system/Momentum';
 
 /** Which region of the git panel has keyboard focus. */
 export type GitRegion = 'changes' | 'commit' | 'log';
