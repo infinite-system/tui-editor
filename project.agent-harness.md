@@ -290,10 +290,14 @@ Dependency rule (conventions-gate): `agent/` imports ui seams and system seams; 
 - **Tier M:** session persistence (serialize/replay the transcript); multi-session tabs in
   PanelHost; AgentTools v1 (openFile, getSelection, queryDiagnostics); diffs from edit-shaped
   tools rendered via the git panel's side-by-side machinery; context injection (selection/open
-  file front matter).
+  file front matter); presentation tools (`highlightRange`, `revealLine` over a reactive
+  Decorations model + ScrollPhysics camera) — recorded in the transcript, hence replayable
+  tours.
 - **Tier L:** fleet dashboard (conductor's workers as visible sessions, StatusChannel badges on
   finish/ask); frame-probe and run-smoke tools (the agent verifies its own UI work);
-  gate-conditioned approvals; headless sessions from cron/hooks sharing AgentPolicy.
+  gate-conditioned approvals; headless sessions from cron/hooks sharing AgentPolicy; live
+  presence (agent cursor, ghost diffs, follow mode; interrupt beside the live diff) — the same
+  transcript projection pointed at now, costing the agent nothing (one-way data flow).
 
 ## Boundary (what this is NOT)
 

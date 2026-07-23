@@ -134,7 +134,38 @@ verify; the membrane governs; evidence flows up. That division of labor is not a
 AI — it is the correct factoring of software work, and it was discovered here by building an
 editor and refusing, at every step, to let anything hold together by vigilance.
 
-## 7. The Emacs inversion — shipping the ability to grow
+## 7. Attention is data too — performed evidence and live presence
+
+The transcript inversion has a presentational corollary: once the agent's activity is events,
+its ATTENTION can be projected with the same machinery — and better than any baked-in renderer,
+because in ivue a highlight is just state in the graph.
+
+- **Decorations + camera.** A highlight is a reactive range with an intensity the theme maps to
+  cells; animation is a ref driven by the spring math the editor already owns (ScrollPhysics,
+  Momentum). `revealLine(n, smooth)` glides the viewport; a pulse decays over 600 ms and repaints
+  only the cells it touches; a spotlight is the same model with an inverted mask (dim everything
+  else). A `reducedMotion` setting flattens it all to instant — one ref read.
+- **Performed evidence.** With `highlightRange`/`revealLine` as instrument tools, "here's what I
+  changed" becomes a choreographed TOUR — step through the diffs, each step scrolling,
+  spotlighting, citing its invariant record. And because presentation tools are transcript
+  events, the tour is RECORDED and REPLAYABLE: reopen yesterday's session and re-run the
+  walkthrough. Code review as a saved performance.
+- **Live presence.** Point the same projection at NOW instead of after: the agent gets a cursor.
+  Reads open tabs, edits materialize as ghost diffs in a second color, tools spin in the gutter
+  at the site of the work — Google-Docs presence semantics where the collaborator is the agent.
+  **Follow mode** glides the camera wherever the agent's attention is; toggled off it degrades to
+  ambient badges. At fleet scale the Tier L dashboard becomes a map of live activity — five
+  workers, five colors, asks pulsing where they parked.
+- **Spectating is free for the agent.** One-way data flow already guarantees it: events fold into
+  refs, painting is the observer's cost, the agent never waits on a frame.
+- **Presence is the membrane's missing half.** Policy governs what the agent MAY do; presence
+  shows what it IS doing — so intervention happens mid-flight (`session.interrupt()` is a method,
+  so pause/redirect is a button beside a live diff), not post-mortem. Oversight becomes ambient,
+  which is the only form that scales with agent speed.
+- **The unification:** live presence, replayed tours, and the audit trail are the SAME data at
+  three timestamps — now, curated, forever. One transcript, three readings.
+
+## 8. The Emacs inversion — shipping the ability to grow
 
 The last realization: Invar ships WITH its own source, law, and skills — because the product's
 final form is self-extension. This is the Emacs thesis (the editor users extend from inside, in
@@ -165,7 +196,7 @@ and is now conversation; extensions were lawless and are now gated.
 - **The most gated tool of all:** self-modification. Replacing the running binary requires
   gate-green; nothing auto-pushes anywhere — the house rule, generalized to every user.
 
-## 8. The name of the thing
+## 9. The name of the thing
 
 An editor hosts your attention. An IDE hosts your tools. This hosts **a governed collaboration**:
 human intent, agent labor, contract law, and mechanical verification, sharing one object graph —
