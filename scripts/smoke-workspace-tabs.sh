@@ -88,6 +88,32 @@ sleep 0.8
 check_equal "$(field workspaceCount)" "2" "second workspace was added"
 check_equal "$(field activeWorkspaceRoot)" "$SECOND_ROOT" "new workspace is active"
 check_frame_contains "$SECOND_NAME" "second workspace tab paints"
+
+# The active workspace tab's second line (branch/worktree detail) must stay LEGIBLE on the active
+# tab's background: palette.dim collides with palette.selection (grey-on-grey dark / grey-on-light),
+# hiding the branch. Assert the active tab's detail chars use the SAME fg as its name (theme-agnostic:
+# both should be the readable active fg, not dim).
+active_branch_legible() {
+  SECOND_NAME_ENV="$SECOND_NAME" "$BUN" -e '
+const frame=JSON.parse(require("fs").readFileSync(process.argv[1]));
+const rows=frame.rows, name=process.env.SECOND_NAME_ENV;
+let nameRow=-1, col=-1;
+for (let i=0;i<rows.length;i+=1){const c=rows[i].text.indexOf(name); if(c>=0){nameRow=i;col=c;break;}}
+if(nameRow<0){console.log("NOFIND");process.exit(0);}
+const nameFg=(rows[nameRow].fg||[])[col];
+const detail=rows[nameRow+1]; if(!detail){console.log("NODETAIL");process.exit(0);}
+const t1=detail.text, fg1=detail.fg||[];
+let j=col; while(j<t1.length && t1[j]===" ") j+=1;
+const branchFg=(j<t1.length && t1[j]!==" ")?fg1[j]:null;
+console.log((branchFg!=null && branchFg===nameFg)?"READABLE":("DIM:"+branchFg+"!="+nameFg));
+' "$FRAME_PATH"
+}
+if [ "$(active_branch_legible)" = "READABLE" ]; then
+  echo "  PASS  active workspace tab branch line is legible (detail fg matches name fg, not dim-on-selection)"
+else
+  echo "  FAIL  active workspace tab branch line NOT legible ($(active_branch_legible)) — dim-on-selection collision"
+  FAILURES=1
+fi
 check_frame_contains "SECOND_TREE_ONLY.txt" "file tree follows the second root"
 
 echo "== second-root git panel follows the active workspace =="
