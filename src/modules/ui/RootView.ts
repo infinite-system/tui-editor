@@ -538,7 +538,10 @@ function $buildRootView(
     editorArea.borderColor = sourcePaneFocused ? palette.borderActive : palette.border;
     editorArea.title = workspaceSet.active.editor.hasDocument.value ? workspaceSet.active.editor.title : 'Editor';
     editorArea.titleColor = sourcePaneFocused ? palette.accent : palette.dim;
-    tabBar.content = tabBarController.renderBuffer();
+    // The diff view has no editor buffer tabs — blank the buffer tab strip while a diff is showing
+    // (keep its row so the diff panes don't jump when toggling in/out of a diff).
+    const diffShowing = workspaceSet.active.showingDiff.value;
+    tabBar.content = diffShowing ? '' : tabBarController.renderBuffer();
     workspaceTabBar.content = tabBarController.renderWorkspace();
     workspaceTabBar.fg = palette.fg;
 

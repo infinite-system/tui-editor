@@ -624,12 +624,28 @@ class $DiffView {
             : gutterChunk,
       );
 
+      // Unified-diff prefix in the first code column: '+' added, '-' removed, ' ' otherwise. A
+      // modified row shows '-' on the previous (old) side and '+' on the current (new) side. One cell
+      // is reserved for it so every row's code aligns.
+      const diffPrefix = isFillerRow
+        ? ' '
+        : alignedRow.kind === 'added'
+          ? '+'
+          : alignedRow.kind === 'deleted'
+            ? '-'
+            : alignedRow.kind === 'modified'
+              ? side === 'previous' ? '-' : '+'
+              : ' ';
+      const prefixChunk = fg(rowMarkerColor ?? palette.dim)(diffPrefix);
+      codeChunks.push(rowBackgroundColor ? bg(rowBackgroundColor)(prefixChunk) : prefixChunk);
+      const codeContentWidth = Math.max(1, codeViewportWidth - 1);
+
       if (isFillerRow) {
-        const fillerChunk = dim(fg(palette.dim)(' '.repeat(codeViewportWidth)));
+        const fillerChunk = dim(fg(palette.dim)(' '.repeat(codeContentWidth)));
         codeChunks.push(rowBackgroundColor ? bg(rowBackgroundColor)(fillerChunk) : fillerChunk);
       } else {
         const sourceLine = this.lineForSide(side, lineNumber);
-        const visibleLineWindow = this.sliceLineWindowDetails(sourceLine, codeViewportWidth);
+        const visibleLineWindow = this.sliceLineWindowDetails(sourceLine, codeContentWidth);
         const visibleLine = visibleLineWindow.text;
         const lineChunks = this.highlightLine(
           visibleLine,
@@ -641,7 +657,7 @@ class $DiffView {
           visibleLineWindow.startGrapheme,
         );
         codeChunks.push(...lineChunks);
-        const remainingColumns = Math.max(0, codeViewportWidth - EditorCoordinates.Class.lineWidth(visibleLine));
+        const remainingColumns = Math.max(0, codeContentWidth - EditorCoordinates.Class.lineWidth(visibleLine));
         if (remainingColumns > 0) {
           const paddingChunk = fg(palette.fg)(' '.repeat(remainingColumns));
           codeChunks.push(rowBackgroundColor ? bg(rowBackgroundColor)(paddingChunk) : paddingChunk);
@@ -952,7 +968,10 @@ class $DiffView {
     const lineNumber = this.nearestLineNumber(side, alignedRowIndex);
     if (lineNumber === null) return null;
     const sourceLine = this.lineForSide(side, lineNumber);
-    const displayColumn = this.horizontalScrollOffset.value + Math.max(0, screenColumn - codeRenderable.x);
+    // The first code cell is the unified-diff prefix (+/-/space), so the code content starts one cell
+    // right of the renderable — subtract that prefix column when mapping the pointer to a source column.
+    const displayColumn =
+      this.horizontalScrollOffset.value + Math.max(0, screenColumn - codeRenderable.x - 1);
     return {
       line: lineNumber - 1,
       column: EditorCoordinates.Class.graphemeAtDisplayColumn(sourceLine, displayColumn),
@@ -1083,10 +1102,13 @@ class $DiffView {
           selectionRange.end.col,
         ) - this.horizontalScrollOffset.value
       : viewportWidth;
+    // Shift the highlight right by the unified-diff prefix column so it lands over the code, not the
+    // +/- marker (mirrors the -1 the pointer hit-test applies).
+    const diffPrefixColumns = 1;
     codeRenderable.setSelectionRange(
-      Math.max(0, Math.min(startDisplayColumn, viewportWidth)),
+      diffPrefixColumns + Math.max(0, Math.min(startDisplayColumn, viewportWidth - diffPrefixColumns)),
       firstSelectedVisibleRow.visibleRowIndex,
-      Math.max(0, Math.min(endDisplayColumn, viewportWidth)),
+      diffPrefixColumns + Math.max(0, Math.min(endDisplayColumn, viewportWidth - diffPrefixColumns)),
       lastSelectedVisibleRow.visibleRowIndex,
     );
   }
