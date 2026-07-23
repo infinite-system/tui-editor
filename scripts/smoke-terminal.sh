@@ -50,7 +50,9 @@ echo "== the shell sees a tty + stty size matches the converged pane geometry ==
 "$H" send "$S" -l "stty size" >/dev/null
 "$H" send "$S" Enter >/dev/null
 sleep 0.6; "$H" settle "$S" >/dev/null 2>&1
-if "$H" capture "$S" | grep -qE "(^| )${rows0} ${cols0}( |\$)"; then
+# The panel body is inside a bordered box, so the stty line can sit flush against the border
+# ("│10 118"); a box-drawing char is a non-digit, so bound on non-digits, not spaces.
+if "$H" capture "$S" | grep -qE "(^|[^0-9])${rows0} ${cols0}([^0-9]|\$)"; then
   echo "  PASS  stty size == ${rows0} ${cols0} (child tty reflects the laid-out pane)"
 else
   echo "  FAIL  stty size did not match ${rows0} ${cols0}"; "$H" capture "$S" | grep -E '[0-9]+ [0-9]+' | tail -3; fail=1
@@ -69,27 +71,24 @@ else
 fi
 
 echo "== drive a SPLIT resize (drag the panel divider up) -> shell reflows =="
-# The panel divider is the row directly ABOVE the panel box's top border (the border carries the
-# 'Terminal' title). Find that border row from the capture, drag the divider up 6 rows to GROW the panel.
-term_line="$("$H" capture "$S" | grep -n 'Terminal' | head -1 | cut -d: -f1)"
-if [ -n "$term_line" ]; then
-  divider_y=$(( term_line - 2 ))          # 0-based screen y of the divider (border row-1, then to 0-based)
-  target_y=$(( divider_y - 6 ))
-  "$H" drag "$S" 20 "$divider_y" 20 "$target_y" >/dev/null
-  "$H" settle "$S" >/dev/null 2>&1
-  rows1="$(f terminalRows)"
-  gt "split drag grew terminal rows" "$rows1" "$rows0"
-  cols1="$(f terminalColumns)"
-  "$H" send "$S" -l "stty size" >/dev/null
-  "$H" send "$S" Enter >/dev/null
-  sleep 0.6; "$H" settle "$S" >/dev/null 2>&1
-  if "$H" capture "$S" | grep -qE "(^| )${rows1} ${cols1}( |\$)"; then
-    echo "  PASS  shell reflowed after split resize (stty size == ${rows1} ${cols1})"
-  else
-    echo "  FAIL  shell did not reflow to ${rows1} ${cols1}"; "$H" capture "$S" | grep -E '[0-9]+ [0-9]+' | tail -3; fail=1
-  fi
+# The panel sits at the bottom: [ ...main... | divider(1 row) | panelBox(termRows+2) | statusBar(1) ].
+# So the divider's 0-based screen row = height - 1(status) - (termRows+2) - 1(divider) = height-termRows-4.
+# Drag it UP 6 rows to GROW the panel; the frame loop reconverges cols/rows and the ioctl reflows the child.
+height="$(f height)"
+divider_y=$(( height - rows0 - 4 ))
+target_y=$(( divider_y - 6 ))
+"$H" drag "$S" 20 "$divider_y" 20 "$target_y" >/dev/null
+"$H" settle "$S" >/dev/null 2>&1
+rows1="$(f terminalRows)"
+gt "split drag grew terminal rows" "$rows1" "$rows0"
+cols1="$(f terminalColumns)"
+"$H" send "$S" -l "stty size" >/dev/null
+"$H" send "$S" Enter >/dev/null
+sleep 0.6; "$H" settle "$S" >/dev/null 2>&1
+if "$H" capture "$S" | grep -qE "(^|[^0-9])${rows1} ${cols1}([^0-9]|\$)"; then
+  echo "  PASS  shell reflowed after split resize (stty size == ${rows1} ${cols1})"
 else
-  echo "  FAIL  could not locate the panel divider (no 'Terminal' border row)"; fail=1
+  echo "  FAIL  shell did not reflow to ${rows1} ${cols1}"; "$H" capture "$S" | grep -E '[0-9]+ [0-9]+' | tail -3; fail=1
 fi
 
 echo "== idle quiescence with the terminal open (demand-driven; frame delta == 0 at rest) =="

@@ -326,6 +326,7 @@ function $buildRootView(
   let panelDragActive = false;
   panelDivider.onMouseDown = (event) => {
     (panelDivider as unknown as { _ctx?: { setCapturedRenderable?: (renderable: unknown) => void } })._ctx?.setCapturedRenderable?.(panelDivider);
+    panelHost.focus(); // grabbing the panel's resize handle focuses the panel (VS Code parity)
     panelSplitter.size.value = panelHeightRows;
     panelSplitter.beginDrag(-event.y);
     panelDragActive = true;
@@ -375,7 +376,9 @@ function $buildRootView(
     const boxY = panelBox.y as number;
     const boxWidth = panelBox.width as number;
     const boxHeight = panelBox.height as number;
-    return x >= boxX && x < boxX + boxWidth && y >= boxY && y < boxY + boxHeight;
+    // Include the resize divider (the row directly above the box) as panel chrome — grabbing it to
+    // resize must NOT blur the terminal (else the resize deselects the shell you were driving).
+    return x >= boxX && x < boxX + boxWidth && y >= boxY - 1 && y < boxY + boxHeight;
   };
 
   if (settings.workspaceTabPosition.value === 'left') {
