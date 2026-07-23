@@ -11,23 +11,43 @@ import { Static } from 'ivue/extras';
 import type { AgentBackend } from './AgentBackend';
 import { EchoAgentBackend } from './EchoAgentBackend';
 import { CliStreamBackend } from './CliStreamBackend';
+import { CodexStreamBackend } from './CodexStreamBackend';
 import { AgentSession } from './AgentSession';
 import { AgentPaneContent } from './AgentPaneContent';
+import type { AgentProvider } from '../settings/Settings';
 
 export interface AgentCreateOptions {
   /** Inject a specific backend (tests pass a MockAgentBackend; a host may pass any implementation). */
   backend?: AgentBackend;
-  /** The workspace root — the cwd real Claude runs in, so it operates in the user's project. */
+  /** The workspace root — the cwd the real agent CLI runs in, so it operates in the user's project. */
   cwd?: string;
+  /** Which engine to use ('auto' picks the first CLI on PATH, Claude preferred). */
+  provider?: AgentProvider;
+  /** Run the agent without permission prompts (provider-neutral; each backend maps it to its flag). */
+  skipPermissions?: boolean;
+  /** Model override; empty uses the provider default. */
+  model?: string;
 }
 
-/** Pick the default backend by auto-detection: real Claude (`claude` on PATH) when available, the local
- *  echo otherwise. `INVAR_AGENT_BACKEND=echo` forces the echo (keeps the driving smoke hermetic —
- *  no subprocess, no billing). Overridable Static seam. */
+/** Pick the backend by provider setting + CLI availability. `auto` (or a requested CLI that's missing)
+ *  prefers Claude, then Codex, then the local echo. `INVAR_AGENT_BACKEND=echo` forces the echo (keeps
+ *  the driving smoke hermetic — no subprocess, no billing). Overridable Static seam. */
 function $createBackend(options: AgentCreateOptions): AgentBackend {
   if (process.env.INVAR_AGENT_BACKEND === 'echo') return new EchoAgentBackend.Class();
+  const provider: AgentProvider = options.provider ?? 'auto';
+  const skipPermissions = options.skipPermissions ?? true;
+  const model = options.model || undefined;
   const claudePath = Bun.which('claude');
-  if (claudePath) return new CliStreamBackend.Class({ claudePath, cwd: options.cwd });
+  const codexPath = Bun.which('codex');
+  const buildClaude = (path: string): AgentBackend =>
+    new CliStreamBackend.Class({ claudePath: path, cwd: options.cwd, skipPermissions, model });
+  const buildCodex = (path: string): AgentBackend =>
+    new CodexStreamBackend.Class({ codexPath: path, cwd: options.cwd, skipPermissions, model });
+  if (provider === 'claude' && claudePath) return buildClaude(claudePath);
+  if (provider === 'codex' && codexPath) return buildCodex(codexPath);
+  // auto, or the requested CLI is missing: prefer Claude, then Codex, then echo.
+  if (claudePath) return buildClaude(claudePath);
+  if (codexPath) return buildCodex(codexPath);
   return new EchoAgentBackend.Class();
 }
 

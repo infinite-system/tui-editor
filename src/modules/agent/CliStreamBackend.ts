@@ -12,11 +12,25 @@ import type { AgentBackend } from './AgentBackend';
 import type { AgentEvent } from './AgentEvents';
 import { ClaudeStreamMapping } from './ClaudeStreamMapping';
 
+/** Turn an auth-shaped stderr tail into a friendly, actionable hint — or null if it isn't auth-related. */
+function authHintFor(stderr: string): string | null {
+  const lower = stderr.toLowerCase();
+  if (/not logged in|unauthenticated|no api key|authentication|login|oauth|credential|invalid.*key|401|unauthorized/.test(lower)) {
+    return 'Claude is not authenticated. Run `claude login` in a terminal (or set ANTHROPIC_API_KEY), then send again.';
+  }
+  return null;
+}
+
 export interface CliStreamOptions {
   /** Absolute path to the `claude` binary (resolved by the factory via Bun.which). */
   claudePath: string;
   /** Working directory for the agent (the workspace root), so Claude operates in the user's project. */
   cwd?: string;
+  /** Run without permission prompts (`--dangerously-skip-permissions`) — headless `-p` cannot surface
+   *  approval prompts, so tools are denied unless this is on. Provider-neutral `agentSkipPermissions`. */
+  skipPermissions?: boolean;
+  /** Model override (`--model`); empty/undefined uses Claude's default. */
+  model?: string;
 }
 
 class $CliStreamBackend implements AgentBackend {
@@ -26,6 +40,8 @@ class $CliStreamBackend implements AgentBackend {
   private sawResult = false;
   private interrupting = false;
   private disposed = false;
+  /** Tail of the child's stderr, so a non-zero exit can surface a useful reason (e.g. not logged in). */
+  private stderrTail = '';
 
   constructor(private readonly options: CliStreamOptions) {}
 
@@ -33,7 +49,10 @@ class $CliStreamBackend implements AgentBackend {
     if (this.disposed || this.child) return; // one turn at a time (AgentSession also guards this)
     this.sawResult = false;
     this.interrupting = false;
+    this.stderrTail = '';
     const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
+    if (this.options.skipPermissions) args.push('--dangerously-skip-permissions');
+    if (this.options.model) args.push('--model', this.options.model);
     if (this.sessionId) args.push('--resume', this.sessionId); // continue the conversation
     let child: ReturnType<typeof Bun.spawn>;
     try {
@@ -53,6 +72,7 @@ class $CliStreamBackend implements AgentBackend {
   }
 
   private async pump(child: ReturnType<typeof Bun.spawn>): Promise<void> {
+    const drainStderr = this.drainStderr(child); // concurrent, so a blocked stderr can't stall stdout
     const decoder = new TextDecoder();
     let buffer = '';
     try {
@@ -69,11 +89,31 @@ class $CliStreamBackend implements AgentBackend {
       this.emit({ kind: 'error', message: String(error) });
     }
     const exitCode = await child.exited;
+    await drainStderr;
     this.child = null;
     // If the stream carried its own `result` event we already ended; otherwise synthesize an end so the
-    // session never hangs on a crashed/killed subprocess.
+    // session never hangs on a crashed/killed subprocess. A non-zero exit with no result surfaces the
+    // stderr reason (turned into a friendly hint for the common "not logged in" case).
     if (!this.sawResult && !this.disposed) {
-      this.emit({ kind: 'session-end', reason: this.interrupting ? 'interrupted' : exitCode === 0 ? 'completed' : 'error' });
+      const interrupted = this.interrupting;
+      if (!interrupted && exitCode !== 0) {
+        const hint = authHintFor(this.stderrTail);
+        this.emit({ kind: 'error', message: hint ?? (this.stderrTail.trim().slice(-400) || 'claude exited with an error') });
+      }
+      this.emit({ kind: 'session-end', reason: interrupted ? 'interrupted' : exitCode === 0 ? 'completed' : 'error' });
+    }
+  }
+
+  /** Drain the child's stderr into a bounded tail — never emitted verbatim unless the turn fails. */
+  private async drainStderr(child: ReturnType<typeof Bun.spawn>): Promise<void> {
+    if (!child.stderr) return;
+    const decoder = new TextDecoder();
+    try {
+      for await (const chunk of child.stderr as AsyncIterable<Uint8Array>) {
+        this.stderrTail = (this.stderrTail + decoder.decode(chunk, { stream: true })).slice(-2000);
+      }
+    } catch {
+      /* stderr closed — ignore */
     }
   }
 

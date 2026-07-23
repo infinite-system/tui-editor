@@ -95,9 +95,13 @@ with zero change to `AgentSession` or the pane. Parallel to the terminal's `Term
 `claude` is on PATH, `EchoAgentBackend` otherwise, `EchoAgentBackend` forced by
 `INVAR_AGENT_BACKEND=echo`; tests/hosts swap it via `create({ backend })`.
 
-**Generates:** hermetic tests (Mock), an offline fallback (Echo), and the real subscription-billed
-agent (CliStream driving `claude -p --output-format stream-json`) — all behind one seam, so
-AgentSession/the pane never change when the backend does.
+**Generates:** hermetic tests (Mock), an offline fallback (Echo), and real subscription-billed agents
+— `CliStreamBackend` (Claude, `claude -p --output-format stream-json`) and `CodexStreamBackend` (Codex,
+`codex exec --json`) — all behind one seam, so AgentSession/the pane never change when the backend
+does. Provider selection + the neutral `agentSkipPermissions`/`agentModel` intent live in AgentFactory;
+each backend translates the neutral options to its own CLI flags (skip-permissions →
+`--dangerously-skip-permissions` for Claude, `--dangerously-bypass-approvals-and-sandbox` for Codex).
+Adding a third engine is one new backend + mapping + one `AgentProvider` enum value.
 
 **Impossible if true:** `AgentSession` branching on backend type; a second entry path for events that
 bypasses `onEvent`.

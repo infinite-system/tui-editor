@@ -28,7 +28,10 @@ export PATH="$HOME/.bun/bin:$PATH"
 # smoke-hover.sh (forced to tsgo), since this smoke deliberately never spawns a language server.
 # lspFileSizeLimitKb is driven at the end of THIS file (the ONE drive here that spawns tsgo): a file
 # over the limit is size-suppressed (LSP off), a file within it attaches (diagnostics arrive).
-COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap showActivityBar workspaceTabPosition typescriptServer lspFileSizeLimitKb sidebarWidth gitSplitRatio diffSplitRatio markdownSplitRatio"
+# agentProvider / agentSkipPermissions / agentModel change how the agent SUBPROCESS is spawned (CLI +
+# flags), which is behaviorally verified by the agent backend unit/drive tests, not by a frame probe —
+# so they are covered here for the schema meta-gate without a frame-based applied-effect drive.
+COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap showActivityBar workspaceTabPosition typescriptServer lspFileSizeLimitKb agentProvider agentSkipPermissions agentModel sidebarWidth gitSplitRatio diffSplitRatio markdownSplitRatio"
 
 # ---- schema-enumeration META-GATE (cheap; the enforcing check) -------------------------------------
 meta_gate() {

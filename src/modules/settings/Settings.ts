@@ -29,6 +29,12 @@ export type WorkspaceTabPosition = 'top' | 'left';
  *  only appear under `typescript-language-server` until LanguageClient gains pull-diagnostics. */
 export type TypeScriptServer = 'tsgo' | 'typescript-language-server';
 
+/** Which engine backs the native agent pane. `auto` picks the first CLI available on PATH (Claude
+ *  preferred); `claude` drives `claude -p --output-format stream-json`; `codex` drives
+ *  `codex exec --json`. Provider-neutral: the setting expresses intent, each backend translates to its
+ *  own CLI dialect. When neither CLI resolves, the pane falls back to the local echo backend. */
+export type AgentProvider = 'auto' | 'claude' | 'codex';
+
 /** The full set of settable values — one field per reactive getter on the store. */
 export interface SettingsValues {
   // Scroll physics.
@@ -50,6 +56,10 @@ export interface SettingsValues {
   // Language intelligence.
   typescriptServer: TypeScriptServer;
   lspFileSizeLimitKb: number;
+  // AI agent pane (provider-neutral).
+  agentProvider: AgentProvider;
+  agentSkipPermissions: boolean;
+  agentModel: string;
   // Splitter geometry.
   sidebarWidth: number;
   gitSplitRatio: number;
@@ -102,6 +112,11 @@ const ALLOWED_TYPESCRIPT_SERVERS: ReadonlySet<TypeScriptServer> = new Set<TypeSc
   'tsgo',
   'typescript-language-server',
 ]);
+const ALLOWED_AGENT_PROVIDERS: ReadonlySet<AgentProvider> = new Set<AgentProvider>([
+  'auto',
+  'claude',
+  'codex',
+]);
 
 class $Settings {
   constructor(readonly options: SettingsOptions = {}) {}
@@ -153,6 +168,15 @@ class $Settings {
   get lspFileSizeLimitKb(): Ref<number> {
     return ref(2048);
   }
+  get agentProvider(): Ref<AgentProvider> {
+    return ref<AgentProvider>('auto');
+  }
+  get agentSkipPermissions(): Ref<boolean> {
+    return ref(true);
+  }
+  get agentModel(): Ref<string> {
+    return ref('');
+  }
   get sidebarWidth(): Ref<number> {
     return ref(32);
   }
@@ -184,6 +208,9 @@ class $Settings {
       workspaceTabPosition: this.workspaceTabPosition,
       typescriptServer: this.typescriptServer,
       lspFileSizeLimitKb: this.lspFileSizeLimitKb,
+      agentProvider: this.agentProvider,
+      agentSkipPermissions: this.agentSkipPermissions,
+      agentModel: this.agentModel,
       sidebarWidth: this.sidebarWidth,
       gitSplitRatio: this.gitSplitRatio,
       diffSplitRatio: this.diffSplitRatio,
@@ -329,6 +356,9 @@ class $Settings {
       workspaceTabPosition: 'top',
       typescriptServer: 'tsgo',
       lspFileSizeLimitKb: 2048,
+      agentProvider: 'auto',
+      agentSkipPermissions: true,
+      agentModel: '',
       sidebarWidth: 32,
       gitSplitRatio: 0.5,
       diffSplitRatio: 0.5,
@@ -377,6 +407,14 @@ class $Settings {
     ) {
       result.typescriptServer = record.typescriptServer as TypeScriptServer;
     }
+    if (
+      typeof record.agentProvider === 'string' &&
+      ALLOWED_AGENT_PROVIDERS.has(record.agentProvider as AgentProvider)
+    ) {
+      result.agentProvider = record.agentProvider as AgentProvider;
+    }
+    if (typeof record.agentSkipPermissions === 'boolean') result.agentSkipPermissions = record.agentSkipPermissions;
+    if (typeof record.agentModel === 'string') result.agentModel = record.agentModel;
     readNumber('lspFileSizeLimitKb');
     readNumber('sidebarWidth');
     readNumber('gitSplitRatio');
