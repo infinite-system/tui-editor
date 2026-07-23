@@ -60,6 +60,7 @@ export interface SettingsValues {
   agentProvider: AgentProvider;
   agentSkipPermissions: boolean;
   agentModel: string;
+  agentAudioNarration: boolean;
   // Splitter geometry.
   sidebarWidth: number;
   gitSplitRatio: number;
@@ -177,6 +178,9 @@ class $Settings {
   get agentModel(): Ref<string> {
     return ref('');
   }
+  get agentAudioNarration(): Ref<boolean> {
+    return ref(false);
+  }
   get sidebarWidth(): Ref<number> {
     return ref(32);
   }
@@ -211,6 +215,7 @@ class $Settings {
       agentProvider: this.agentProvider,
       agentSkipPermissions: this.agentSkipPermissions,
       agentModel: this.agentModel,
+      agentAudioNarration: this.agentAudioNarration,
       sidebarWidth: this.sidebarWidth,
       gitSplitRatio: this.gitSplitRatio,
       diffSplitRatio: this.diffSplitRatio,
@@ -359,6 +364,7 @@ class $Settings {
       agentProvider: 'auto',
       agentSkipPermissions: true,
       agentModel: '',
+      agentAudioNarration: false,
       sidebarWidth: 32,
       gitSplitRatio: 0.5,
       diffSplitRatio: 0.5,
@@ -415,6 +421,7 @@ class $Settings {
     }
     if (typeof record.agentSkipPermissions === 'boolean') result.agentSkipPermissions = record.agentSkipPermissions;
     if (typeof record.agentModel === 'string') result.agentModel = record.agentModel;
+    if (typeof record.agentAudioNarration === 'boolean') result.agentAudioNarration = record.agentAudioNarration;
     readNumber('lspFileSizeLimitKb');
     readNumber('sidebarWidth');
     readNumber('gitSplitRatio');

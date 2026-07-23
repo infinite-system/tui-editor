@@ -31,7 +31,9 @@ export PATH="$HOME/.bun/bin:$PATH"
 # agentProvider / agentSkipPermissions / agentModel change how the agent SUBPROCESS is spawned (CLI +
 # flags), which is behaviorally verified by the agent backend unit/drive tests, not by a frame probe —
 # so they are covered here for the schema meta-gate without a frame-based applied-effect drive.
-COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap showActivityBar workspaceTabPosition typescriptServer lspFileSizeLimitKb agentProvider agentSkipPermissions agentModel sidebarWidth gitSplitRatio diffSplitRatio markdownSplitRatio"
+# agentAudioNarration's applied effect (speaks completed turns when ON, silent when OFF) is DRIVEN in
+# scripts/smoke-audio-narration.sh through the mock TTS backend — covered here for the schema meta-gate.
+COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap showActivityBar workspaceTabPosition typescriptServer lspFileSizeLimitKb agentProvider agentSkipPermissions agentModel agentAudioNarration sidebarWidth gitSplitRatio diffSplitRatio markdownSplitRatio"
 
 # ---- schema-enumeration META-GATE (cheap; the enforcing check) -------------------------------------
 meta_gate() {

@@ -40,6 +40,9 @@ import { TerminalSession } from './TerminalSession';
 import { PanelHost } from '../ui/PanelHost';
 import { TerminalFactory } from '../terminal/TerminalFactory';
 import { AgentFactory } from '../agent/AgentFactory';
+import { AgentPaneContent } from '../agent/AgentPaneContent';
+import { TtsFactory } from '../narration/TtsFactory';
+import { NarrationProjection } from '../narration/NarrationProjection';
 import { dirname, join } from 'node:path';
 
 export interface BootOptions {
@@ -229,20 +232,33 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   // first toggle (idle cost zero). Tier S wires the local EchoAgentBackend; CliStreamBackend swaps in
   // later behind the one backend seam with no change here.
   let agentRegistered = false;
+  // The audio narration projection over the agent transcript (the third projection: text→pane,
+  // visual→decorations, audio→speech). Created alongside the agent pane so it subscribes to the SAME
+  // AgentSession; null until the agent pane is ensured. Barge-in + dispose route through it.
+  let narration: NarrationProjection.Instance | null = null;
   const ensureAgent = (): void => {
     if (agentRegistered) return;
     agentRegistered = true;
     // Real Claude (when `claude` is on PATH) runs in the workspace root so it operates in the project.
-    panelHost.register(
-      AgentFactory.Class.create({
-        cwd: workspaceSet.active.root,
-        provider: settings.agentProvider.value,
-        skipPermissions: settings.agentSkipPermissions.value,
-        model: settings.agentModel.value,
-      }),
-    );
+    const agentPane = AgentFactory.Class.create({
+      cwd: workspaceSet.active.root,
+      provider: settings.agentProvider.value,
+      skipPermissions: settings.agentSkipPermissions.value,
+      model: settings.agentModel.value,
+    });
+    panelHost.register(agentPane);
+    if (agentPane instanceof AgentPaneContent.Class) {
+      narration = new NarrationProjection.Class(
+        agentPane.agentSession,
+        settings.agentAudioNarration,
+        TtsFactory.Class.createBackend(),
+      );
+    }
   };
-  app.onDispose(() => panelHost.dispose());
+  app.onDispose(() => {
+    narration?.dispose();
+    panelHost.dispose();
+  });
 
   // Toggle the bottom panel between one cell and two side-by-side cells — the AGENT pane on the LEFT,
   // the terminal on the RIGHT — and back. Both are ensured (lazily registered) first, then the panel
@@ -440,6 +456,13 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       panelCellColumns: panelHost.cellSpans(view.panelViewportColumns()).map((span) => span.columns),
       // Active buffer is an image the editor renders as half-block cells (drives smoke-image-preview).
       activeFileIsImage: workspaceSet.active.activeFileIsImage,
+      // Audio narration (third projection): the toggle, how many assistant turns have been spoken, and
+      // the last spoken text — the driving smoke reads these to prove it speaks completed turns when ON
+      // and NOTHING when off, all through the silent mock backend (no audio in CI).
+      narrationEnabled: settings.agentAudioNarration.value,
+      narrationSpokenCount: narration?.spokenCount.value ?? 0,
+      narrationLastSpoken: narration?.lastSpoken.value ?? '',
+      narrationBargeInCount: narration?.bargeInCount.value ?? 0,
     });
   };
 
@@ -1095,6 +1118,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
 
   const keyTick = (key: KeyEvent): void => {
     tooltip.clear(); // any keypress hides the tooltip (display-only affordance)
+    narration?.bargeIn(); // any keystroke barges in on narration audio (interruptibility applied to speech)
     // Escape always closes the hover card; any other key closes it too UNLESS the pointer is engaged
     // with it (over the card / dragging a selection) — so a sticky card lets Ctrl+C copy its selection.
     if (key.name === 'escape') view.dismissHover();

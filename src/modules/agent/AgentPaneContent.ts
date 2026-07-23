@@ -36,6 +36,12 @@ class $AgentPaneContent implements PaneContent {
     this.revision = computed(() => this.session.renderRevision.value + this.composer.value.length);
   }
 
+  /** Read-only access to the underlying session — so an additional PROJECTION of the same transcript
+   *  (e.g. audio narration) can subscribe to the one source of truth without a second history. */
+  get agentSession(): AgentSession.Instance {
+    return this.session;
+  }
+
   get title(): string {
     return this.session.busy ? 'Claude (working…)' : 'Claude';
   }

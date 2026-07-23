@@ -52,6 +52,7 @@ const SETTING_DESCRIPTORS: readonly SettingDescriptor[] = [
   { key: 'lspFileSizeLimitKb', label: 'LSP file size limit (KB, 0 = no limit)', spec: { kind: 'number', step: 512, minimum: 0, maximum: 51200, decimals: 0 } },
   { key: 'agentProvider', label: 'Agent engine', spec: { kind: 'enum', options: AGENT_PROVIDER_OPTIONS } },
   { key: 'agentSkipPermissions', label: 'Agent runs without permission prompts', spec: { kind: 'boolean' } },
+  { key: 'agentAudioNarration', label: 'Speak agent replies aloud (needs a TTS engine)', spec: { kind: 'boolean' } },
   { key: 'sidebarWidth', label: 'Sidebar width', spec: { kind: 'number', step: 1, minimum: 16, maximum: 80, decimals: 0 } },
   { key: 'gitSplitRatio', label: 'Git changes/log split', spec: { kind: 'number', step: 0.05, minimum: 0.1, maximum: 0.9, decimals: 2 } },
   { key: 'diffSplitRatio', label: 'Diff previous/current split', spec: { kind: 'number', step: 0.05, minimum: 0.15, maximum: 0.85, decimals: 2 } },
