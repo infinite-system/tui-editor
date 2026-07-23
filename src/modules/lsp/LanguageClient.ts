@@ -58,6 +58,9 @@ export interface LanguageClientOptions {
   transportFactory?: (process: LspProcessLike) => LspTransport.Model;
   maxDiagnosticsPerDocument?: number;
   maxReferencesPerRequest?: number;
+  /** Late-read of the `typescriptServer` setting, threaded to the default TypeScript provider so the
+   *  chosen server (or 'auto') is honoured when a document activates. */
+  preferredTypeScriptServer?: () => string;
 }
 
 interface OpenDocument {
@@ -100,6 +103,7 @@ class $LanguageClient {
     | null;
   private readonly maxDiagnosticsPerDocument: number;
   private readonly maxReferencesPerRequest: number;
+  private readonly preferredTypeScriptServer: (() => string) | undefined;
   private readonly documents = new Map<string, OpenDocument>();
   private readonly diagnosticBatches = new Map<string, DiagnosticBatch>();
   private process: LspProcessLike | null = null;
@@ -113,6 +117,8 @@ class $LanguageClient {
 
   constructor(options: LanguageClientOptions = {}) {
     this.rootPath = options.rootPath ?? this.defaultRootPath();
+    // Set BEFORE createProviders() — the default TypeScript provider reads it at construction.
+    this.preferredTypeScriptServer = options.preferredTypeScriptServer;
     this.providers = options.providers ? [...options.providers] : this.createProviders();
     this.processFactory = options.processFactory ?? null;
     this.transportFactory = options.transportFactory ?? null;
@@ -148,7 +154,7 @@ class $LanguageClient {
   }
 
   protected createProviders(): readonly LanguageProvider[] {
-    return [new TypeScriptProvider.Class()];
+    return [new TypeScriptProvider.Class({ preferredServer: this.preferredTypeScriptServer })];
   }
 
   protected createProcess(): LspProcessLike {

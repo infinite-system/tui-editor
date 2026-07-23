@@ -21,6 +21,21 @@ interface ServerCandidate {
   args: readonly string[];
 }
 
+/** The two supported TypeScript servers keyed by `typescriptServer` setting value. `tsgo` is the
+ *  native `@typescript/native-preview` build — invoked with BOTH double-dash flags (`--lsp --stdio`). */
+const SERVER_CANDIDATES: Record<string, ServerCandidate> = {
+  tsgo: { command: 'tsgo', args: ['--lsp', '--stdio'] },
+  'typescript-language-server': { command: 'typescript-language-server', args: ['--stdio'] },
+};
+
+/** Default preference order — tsgo primary, typescript-language-server fallback. */
+const DEFAULT_ORDER: readonly string[] = ['tsgo', 'typescript-language-server'];
+
+export interface TypeScriptProviderOptions {
+  /** Late-read of the `typescriptServer` setting — the server to prefer ('tsgo' by default). */
+  preferredServer?: () => string;
+}
+
 class $TypeScriptProvider implements LanguageProvider {
   readonly id = 'typescript';
   readonly capabilities: LanguageCapabilities = {
@@ -30,20 +45,28 @@ class $TypeScriptProvider implements LanguageProvider {
     references: true,
   };
 
+  constructor(private readonly options: TypeScriptProviderOptions = {}) {}
+
   supportsPath(path: string): boolean {
     return TYPESCRIPT_EXTENSIONS.has(Files.Class.extname(path).toLowerCase());
   }
 
   async resolve(rootPath: string): Promise<LanguageServerCommand | null> {
-    const candidates: readonly ServerCandidate[] = [
-      { command: 'vtsls', args: ['--stdio'] },
-      { command: 'typescript-language-server', args: ['--stdio'] },
-    ];
-    for (const candidate of candidates) {
+    for (const server of this.candidateOrder()) {
+      const candidate = SERVER_CANDIDATES[server];
+      if (!candidate) continue;
       const command = this.findExecutable(candidate.command, rootPath);
       if (command) return { command, args: candidate.args };
     }
     return null;
+  }
+
+  /** Resolution order: the chosen server FIRST, then the other supported server as a graceful fallback
+   *  (so a chosen-but-uninstalled server never disables LSP). Defaults to tsgo-primary when unset. */
+  protected candidateOrder(): readonly string[] {
+    const preferred = this.options.preferredServer?.() ?? 'tsgo';
+    if (!SERVER_CANDIDATES[preferred]) return DEFAULT_ORDER;
+    return [preferred, ...DEFAULT_ORDER.filter((server) => server !== preferred)];
   }
 
   protected findExecutable(command: string, rootPath: string): string | null {

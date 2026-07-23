@@ -99,7 +99,12 @@ class $Workspace {
   // when a SUPPORTED document opens or a semantic request runs (activation follows demand).
   private languageClientInstance: LanguageClient.Model | null = null;
   protected createLanguageClient(): LanguageClient.Model {
-    return new LanguageClient.Class({ rootPath: this.root });
+    // Late-read the TypeScript-server choice so a settings change (or an attach that lands after this
+    // client is created) is honoured when a document activates the server.
+    return new LanguageClient.Class({
+      rootPath: this.root,
+      preferredTypeScriptServer: () => this.settingsSource?.typescriptServer.value ?? 'auto',
+    });
   }
   private ensureLanguageClient(): LanguageClient.Model {
     if (!this.languageClientInstance) this.languageClientInstance = this.createLanguageClient();

@@ -24,7 +24,9 @@ export PATH="$HOME/.bun/bin:$PATH"
 # EVERY schema field must be listed here with a real drive below. Keep in sync with Settings' schema; the
 # meta-gate enforces it. diffSplitRatio and markdownSplitRatio are driven by their real split-pane
 # smokes: drag the divider, assert pane movement, then assert the persisted ratio is reused.
-COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap workspaceTabPosition sidebarWidth gitSplitRatio diffSplitRatio markdownSplitRatio"
+# typescriptServer's applied effect is WHICH language server starts — driven end-to-end in
+# smoke-hover.sh (forced to tsgo), since this smoke deliberately never spawns a language server.
+COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap workspaceTabPosition typescriptServer sidebarWidth gitSplitRatio diffSplitRatio markdownSplitRatio"
 
 # ---- schema-enumeration META-GATE (cheap; the enforcing check) -------------------------------------
 meta_gate() {

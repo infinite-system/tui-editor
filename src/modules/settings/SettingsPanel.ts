@@ -12,6 +12,7 @@ import {
   type ScrollModifier,
   type GlyphMode,
   type WorkspaceTabPosition,
+  type TypeScriptServer,
 } from './Settings';
 
 /** How one setting is edited: numbers step, booleans toggle, enums cycle through a fixed option list. */
@@ -29,6 +30,7 @@ export interface SettingDescriptor {
 const SCROLL_MODIFIER_OPTIONS: readonly ScrollModifier[] = ['none', 'alt', 'shift', 'ctrl'];
 const GLYPH_MODE_OPTIONS: readonly GlyphMode[] = ['auto', 'nerd', 'unicode', 'ascii'];
 const WORKSPACE_TAB_POSITION_OPTIONS: readonly WorkspaceTabPosition[] = ['top', 'left'];
+const TYPESCRIPT_SERVER_OPTIONS: readonly TypeScriptServer[] = ['tsgo', 'typescript-language-server'];
 
 // The editable settings, in display order. Grouped loosely: scroll physics, modifiers, appearance.
 const SETTING_DESCRIPTORS: readonly SettingDescriptor[] = [
@@ -44,6 +46,7 @@ const SETTING_DESCRIPTORS: readonly SettingDescriptor[] = [
   { key: 'theme', label: 'Theme', spec: { kind: 'enum', options: ['dark', 'light'] } },
   { key: 'wordWrap', label: 'Word wrap', spec: { kind: 'boolean' } },
   { key: 'workspaceTabPosition', label: 'Workspace tabs', spec: { kind: 'enum', options: WORKSPACE_TAB_POSITION_OPTIONS } },
+  { key: 'typescriptServer', label: 'TypeScript server', spec: { kind: 'enum', options: TYPESCRIPT_SERVER_OPTIONS } },
   { key: 'sidebarWidth', label: 'Sidebar width', spec: { kind: 'number', step: 1, minimum: 16, maximum: 80, decimals: 0 } },
   { key: 'gitSplitRatio', label: 'Git changes/log split', spec: { kind: 'number', step: 0.05, minimum: 0.1, maximum: 0.9, decimals: 2 } },
   { key: 'diffSplitRatio', label: 'Diff previous/current split', spec: { kind: 'number', step: 0.05, minimum: 0.15, maximum: 0.85, decimals: 2 } },
