@@ -8,7 +8,7 @@
 #      and "42") is projected in the framebuffer.
 # GUARDED SKIP: when typescript-language-server/typescript are not installed the smoke skips cleanly.
 #
-# invariant: A hover card reflects the language server's type at the pointed symbol (src/modules/ui/ui.invariants.md)
+# invariant: A hover card reflects the language server type at the pointed symbol (src/modules/ui/ui.invariants.md)
 set -uo pipefail
 SCRIPT_DIRECTORY="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIRECTORY/.." && pwd)"

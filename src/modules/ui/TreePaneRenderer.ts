@@ -9,7 +9,7 @@
 //
 // invariant: Renderables hold no model state (src/modules/ui/ui.invariants.md)
 // invariant: Only the visible window is rendered (src/modules/ui/ui.invariants.md)
-// invariant: Selection is item-anchored, click-set, keyboard-moved, and stays (src/modules/ui/ui.invariants.md)
+// invariant: Selection is item-anchored click-set keyboard-moved and stays (src/modules/ui/ui.invariants.md)
 import { StyledText, fg, bg, type TextChunk } from '@opentui/core';
 import { Static } from 'ivue/extras';
 import { EditorCoordinates } from '../editor/EditorCoordinates';

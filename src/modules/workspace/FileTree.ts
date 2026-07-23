@@ -28,7 +28,7 @@ class $FileTree {
     return ref(0);
   }
   // The currently highlighted row index in the flattened view.
-  // invariant: Selection is item-anchored, click-set, keyboard-moved, and stays (src/modules/ui/ui.invariants.md)
+  // invariant: Selection is item-anchored click-set keyboard-moved and stays (src/modules/ui/ui.invariants.md)
   get selectedIndex() {
     return ref(0);
   }
