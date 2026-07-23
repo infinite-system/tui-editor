@@ -252,3 +252,38 @@ is the single `setSize` edge, asserted not to run inside the frame effect.
 **Status:** provisional
 
 **Last refined:** 2026-07-21
+
+### A structural line edit is one atomic undo step that keeps the cursor on the moved line
+
+**Invariant:** Moving the cursor's line up or down (swap with the neighbour) and duplicating it are each
+a SINGLE undoable edit: one `captureBefore` snapshot precedes the mutation, so one `performUndo` reverts
+the whole operation and restores the cursor. The cursor stays on the MOVED line (its content follows the
+edit), same column clamped to that line. A move is a no-op at the top/bottom edge (no snapshot recorded,
+so undo is not polluted with an empty step). The ops mutate only the document model — no render path.
+
+**Scope:** `Editor.moveLineUp` / `moveLineDown` / `duplicateLine`; `TextDocument.setLine` / `insertLine`;
+the snapshot-based undo (`UndoStore`, kind `'other'` which never coalesces with a typing run).
+
+**Mechanism:** each method guards read-only / no-document and the edge case, calls `captureBefore('other')`
+(snapshots document + cursor onto the undo stack), then swaps lines via `setLine` (move) or inserts a copy
+via `insertLine` (duplicate), and `placeCursor`s onto the moved/copied line at the clamped column.
+`performUndo` restores the snapshot in one step. `'other'` kind means the step is never merged into an
+adjacent insert/delete run.
+
+**Generates:** VS Code-style Move Line Up/Down + Duplicate Line where one Ctrl+Z undoes the whole move;
+the cursor tracking the line so repeated moves walk it up/down; edges that simply stop.
+
+**Evidence:** `src/modules/editor/Editor.moveLine.test.ts` (move up/down reorders the lines and the cursor
+follows; edge no-op leaves the doc and undo stack untouched; duplicate inserts the copy below with the
+cursor on it; a single `performUndo` reverts each op exactly); `scripts/smoke-move-line.sh` drives the
+commands in the real app and asserts the document reordered + cursor followed + one undo restored.
+
+**Impossible if true:** a move/dup that needs two undos to revert; a move that leaves the cursor on the
+old line index; a top/bottom-edge move that records an empty undo step or wraps around; a line edit that
+touches a renderable.
+
+**Verification:** `bun test src/modules/editor/Editor.moveLine.test.ts && bash scripts/smoke-move-line.sh`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23

@@ -167,6 +167,13 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 'pagedown' }, action: 'editor.pageDown', context: 'editor' },
   { chord: { key: 'home' }, action: 'editor.lineStart', context: 'editor' },
   { chord: { key: 'end' }, action: 'editor.lineEnd', context: 'editor' },
+  // --- editor: structural line edits (move / duplicate) ---
+  // Alt+Shift+↑/↓ move the line (VS Code uses Alt+↑/↓, but those are editor.jumpUp/Down here — mac
+  // overlay too — so shift disambiguates); Ctrl+Shift+D duplicates (VS Code's Shift+Alt+↓ collides with
+  // move-down, so the mnemonic D is used instead).
+  { chord: { key: 'up', alt: true, shift: true }, action: 'editor.moveLineUp', context: 'editor' },
+  { chord: { key: 'down', alt: true, shift: true }, action: 'editor.moveLineDown', context: 'editor' },
+  { chord: { key: 'd', ctrl: true, shift: true }, action: 'editor.duplicateLine', context: 'editor' },
   // --- editor: warp movement ---
   { chord: { key: 'up', ctrl: true }, action: 'editor.jumpUp', context: 'editor' },
   { chord: { key: 'down', ctrl: true }, action: 'editor.jumpDown', context: 'editor' },

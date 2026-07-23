@@ -343,6 +343,56 @@ class $Editor {
     this.scrollLineIntoView(deletionStart.line);
   }
 
+  // --- structural line edits (move / duplicate) -----------------------------
+  // Each is ONE atomic undo step: captureBefore snapshots the whole document + cursor once, then the
+  // mutation runs; performUndo restores that snapshot, so a single undo reverts the move/dup. Kind
+  // 'other' never coalesces with a neighbouring edit, so a move is never merged into a typing run.
+  // v1 SCOPE: these act on the CURSOR line only. Moving a multi-line SELECTION block as a unit (the VS
+  // Code behaviour) is a flagged follow-up; a selection is dropped and the cursor line moves.
+  // invariant: A structural line edit is one atomic undo step that keeps the cursor on the moved line (src/modules/editor/editor.invariants.md)
+
+  /** Swap the cursor's line with the one above, keeping the cursor on the moved line. No-op at the top. */
+  moveLineUp(): void {
+    if (this.readOnly.value || !this.hasDocument.value) return;
+    const line = this.cursor.line.value;
+    if (line <= 0) return; // top edge: nothing above to swap with
+    this.captureBefore('other');
+    const above = this.document.line(line - 1);
+    const moved = this.document.line(line);
+    this.document.setLine(line - 1, moved);
+    this.document.setLine(line, above);
+    this.placeCursor(line - 1, EditorCoordinates.Class.clampCol(moved, this.cursor.col.value));
+    this.cursor.clearSelection();
+    this.scrollLineIntoView(line - 1);
+  }
+
+  /** Swap the cursor's line with the one below, keeping the cursor on the moved line. No-op at the bottom. */
+  moveLineDown(): void {
+    if (this.readOnly.value || !this.hasDocument.value) return;
+    const line = this.cursor.line.value;
+    if (line >= this.document.lineCount - 1) return; // bottom edge: nothing below to swap with
+    this.captureBefore('other');
+    const below = this.document.line(line + 1);
+    const moved = this.document.line(line);
+    this.document.setLine(line + 1, moved);
+    this.document.setLine(line, below);
+    this.placeCursor(line + 1, EditorCoordinates.Class.clampCol(moved, this.cursor.col.value));
+    this.cursor.clearSelection();
+    this.scrollLineIntoView(line + 1);
+  }
+
+  /** Copy the cursor's line and insert the copy directly below; the cursor follows onto the copy. */
+  duplicateLine(): void {
+    if (this.readOnly.value || !this.hasDocument.value) return;
+    this.captureBefore('other');
+    const line = this.cursor.line.value;
+    const text = this.document.line(line);
+    this.document.insertLine(line + 1, text);
+    this.placeCursor(line + 1, EditorCoordinates.Class.clampCol(text, this.cursor.col.value));
+    this.cursor.clearSelection();
+    this.scrollLineIntoView(line + 1);
+  }
+
   // --- clipboard ------------------------------------------------------------
 
   /** Copy the selection to the clipboard; returns the number of characters copied (0 = nothing). */

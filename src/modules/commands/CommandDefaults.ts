@@ -101,6 +101,27 @@ function $registerDefaultCommands(
       run: () => getEditor().deletePreviousWord(),
     },
     {
+      id: 'edit.moveLineUp',
+      title: 'Edit: Move Line Up',
+      category: 'Edit',
+      when: hasDocument,
+      run: () => getEditor().moveLineUp(),
+    },
+    {
+      id: 'edit.moveLineDown',
+      title: 'Edit: Move Line Down',
+      category: 'Edit',
+      when: hasDocument,
+      run: () => getEditor().moveLineDown(),
+    },
+    {
+      id: 'edit.duplicateLine',
+      title: 'Edit: Duplicate Line',
+      category: 'Edit',
+      when: hasDocument,
+      run: () => getEditor().duplicateLine(),
+    },
+    {
       id: 'view.focusFiles',
       title: 'View: Focus File Explorer',
       category: 'View',
