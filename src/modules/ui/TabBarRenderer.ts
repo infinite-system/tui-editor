@@ -397,14 +397,27 @@ function $renderBufferTabBar(context: BufferTabBarRenderContext): BufferTabBarRe
   const chunks: TextChunk[] = [];
   let column = 0;
   let endIndex = startIndex;
+  const separatorWidth = EditorCoordinates.Class.lineWidth(context.separatorGlyph);
   for (let index = startIndex; index < measured.length; index += 1) {
     const entry = measured[index];
-    if (!entry || column + entry.width > tabsAreaWidth) break;
+    // A 1-cell gap sets the FIRST tab off the splitter; between tabs a powerline separator divides
+    // them. Both are accounted for in the fit check so a tab never half-renders past the edge.
+    const isFirstRendered = index === startIndex;
+    const leadWidth = isFirstRendered ? 1 : separatorWidth;
+    if (!entry || column + leadWidth + entry.width > tabsAreaWidth) break;
+    if (isFirstRendered) {
+      chunks.push(fg(palette.fg)(' '));
+    } else {
+      chunks.push(fg(palette.border)(context.separatorGlyph));
+    }
+    column += leadWidth;
     const isActive = entry.tab.active;
     const isTabHover = hover?.kind === 'tab' && hover.index === index;
     const isCloseHover = hover?.kind === 'close' && hover.index === index;
     const rowBackground = isActive ? palette.selection : isTabHover ? palette.cursorLine : null;
-    const labelColor = isActive ? palette.fg : palette.dim;
+    // The FIRST buffer tab (index 0) takes a distinct accent tint when idle so it reads as the anchor
+    // tab; the active tab always wins with the bright fg.
+    const labelColor = isActive ? palette.fg : index === 0 ? palette.accent : palette.dim;
     const paint = (text: string, color: string) =>
       rowBackground ? bg(rowBackground)(fg(color)(text)) : fg(color)(text);
     const start = column;
