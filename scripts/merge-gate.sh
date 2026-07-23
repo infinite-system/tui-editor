@@ -93,6 +93,9 @@ if [ "${FAST:-0}" != "1" ]; then
   step "smoke: scrollbars"  bash scripts/smoke-scrollbars.sh
   step "smoke: wrap"        bash scripts/smoke-wrap.sh
   step "smoke: git-watch"   bash scripts/smoke-git-watch.sh
+  # Current-line git blame (GitLens parity): a committed line shows its author in the status bar; a
+  # non-git document shows none. Scratch repo + non-git dir; async blame is cached per file.
+  step "smoke: git-blame"   bash scripts/smoke-git-blame.sh
   step "smoke: find"        bash scripts/smoke-find.sh
   step "smoke: mode coherence" bash scripts/smoke-mode-coherence.sh
   step "smoke: shortcut-help" bash scripts/smoke-shortcut-help.sh

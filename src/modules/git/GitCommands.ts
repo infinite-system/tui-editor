@@ -138,6 +138,17 @@ class $GitCommands {
     return this.run(cwd, ['branch', '--show-current']);
   }
 
+  /**
+   * Line-by-line authorship for a file in `--porcelain` form (stable, machine-readable): one header
+   * `<sha> <origLine> <finalLine> [numLines]` per hunk, each commit's author/summary metadata sent once
+   * on its first appearance, then a tab-prefixed content line. A non-tracked / non-repo path exits
+   * nonzero — the caller treats that as "no blame". `-w` ignores whitespace-only changes so a reindent
+   * does not steal authorship.
+   */
+  static blamePorcelain(cwd: string, filePath: string): Promise<GitCommandResult> {
+    return this.run(cwd, ['blame', '--porcelain', '-w', '--', filePath]);
+  }
+
   static stage(cwd: string, paths: string[]): Promise<GitCommandResult> {
     if (paths.length === 0) return Promise.resolve({ code: 0, stdout: '', stderr: '' });
     return this.run(cwd, ['add', '--', ...paths]);

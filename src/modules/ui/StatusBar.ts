@@ -19,6 +19,8 @@ import type { Tooltip } from './Tooltip';
 import type { Theme } from '../theme/Theme';
 import type { SettingsPanel } from '../settings/SettingsPanel';
 import type { PanelHost } from './PanelHost';
+import { GitBlame } from '../git/GitBlame';
+import { RelativeTime } from '../git/RelativeTime';
 
 export interface StatusBarDeps {
   renderer: CliRenderer;
@@ -240,6 +242,23 @@ class $StatusBar {
     else overlayCoordinator.openExclusiveOverlay('settingsPanel', () => settingsPanel.toggle());
   }
 
+  /** The ` <author> · <relative date> · <summary>` blame part for the cursor line, or '' when the
+   *  document is not git-tracked / not yet blamed. Summary is truncated so the bar stays compact. */
+  private currentLineBlamePart(): string {
+    const { workspaceSet } = this.deps;
+    const editor = workspaceSet.active.editor;
+    const blame = GitBlame.Class.lineBlame({
+      repoRoot: workspaceSet.active.root,
+      isRepo: workspaceSet.active.git.value !== null,
+      documentPath: editor.document.path,
+      lineNumber: editor.cursor.line.value,
+    });
+    if (!blame) return '';
+    const when = blame.uncommitted ? 'uncommitted' : RelativeTime.Class.format(blame.authorTimeMs, Date.now());
+    const summary = blame.summary.length > 40 ? `${blame.summary.slice(0, 39)}…` : blame.summary;
+    return summary ? `${blame.author} · ${when} · ${summary}` : `${blame.author} · ${when}`;
+  }
+
   private renderStatus(markdownPreviewFocused: boolean): string {
     const { workspaceSet, app } = this.deps;
     const editor = workspaceSet.active.editor;
@@ -248,6 +267,11 @@ class $StatusBar {
       parts.push(editor.title);
       parts.push(`Ln ${editor.cursor.line.value + 1}, Col ${editor.cursor.col.value + 1}`);
       parts.push(`${editor.document.lineCount} lines`);
+      // Current-line git blame (GitLens parity): who last touched the CURSOR line. A pure cache lookup
+      // per cursor move; the underlying git spawn happens once per file and repaints when it lands. No
+      // blame part for a non-git or unsaved document.
+      const blamePart = this.currentLineBlamePart();
+      if (blamePart) parts.push(blamePart);
     }
     // Focus indicator only for the NON-default panes; editing the source is the implicit state, so no
     // ever-present '[Editor Source]' label (it read as noise — it never told you anything new).

@@ -307,3 +307,89 @@ repo only).
 **Status:** provisional
 
 **Last refined:** 2026-07-21
+
+### Current-line blame is a cached lookup, not a per-move git spawn
+
+**Invariant:** Blaming a file is a git subprocess, but moving the cursor is a pure map lookup. `GitBlame`
+blames a tracked file ONCE and caches the per-line authorship map keyed on the file's on-disk mtime; a
+cursor move on an already-blamed file spawns nothing. A save (mtime change) invalidates the entry and
+re-blames; a repeated non-tracked result is cached (empty map) so it never re-spawns every frame.
+
+**Scope:** `GitBlame` (`lineBlame`, the module cache + in-flight guard + reactive revision), `GitCommands.blamePorcelain`, `Files.mtimeMs`.
+
+**Mechanism:** `lineBlame` reads `Files.mtimeMs(path)`; a cache hit (same mtime) returns
+`lines.get(cursorLine + 1)` with no spawn. A miss kicks a one-shot async `loadBlame` (guarded by an
+in-flight set), which runs `git blame --porcelain` through the `Processes` seam, parses it, stores the
+map under that mtime, and bumps a reactive `revision` the status bar reads — so blame appears without a
+keystroke, and an idle session (no cursor move, no save) spawns nothing and stays quiescent.
+
+**Generates:** GitLens-style current-line authorship with zero per-move cost; one git spawn per file
+version, amortized across every line.
+
+**Evidence:** `src/modules/git/GitBlame.test.ts` (the porcelain parser: metadata reused across a
+commit's hunks, 1-based line map); `scripts/smoke-git-blame.sh` (cursor on a committed line shows its
+author in the status bar; the git spawn happens once and later moves are instant).
+
+**Impossible if true:** a git subprocess per cursor move; a stale blame surviving a save; a non-git file
+re-spawning `git blame` every frame.
+
+**Verification:** `bun test src/modules/git/GitBlame.test.ts && bash scripts/smoke-git-blame.sh`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23
+
+### An unblamable file degrades to no blame, never an error
+
+**Invariant:** A document that cannot be blamed — no git repository, an untracked file, or an unsaved
+buffer with no path on disk — shows NO blame part and never raises an error. `git blame` exiting nonzero
+is data (an empty cached map), not an exception.
+
+**Scope:** `GitBlame.lineBlame`/`loadBlame`, and the `StatusBar` blame part that omits itself on a null
+result.
+
+**Mechanism:** `lineBlame` returns null when `isRepo` is false, the path is empty, or the file is not on
+disk (`mtimeMs === 0`). `loadBlame` caches an empty map on a nonzero git exit or any thrown error, so
+the negative result is remembered. `StatusBar.currentLineBlamePart` returns `''` for a null blame and
+pushes no part.
+
+**Generates:** a status bar identical to today's for non-git and scratch files; a feature that is purely
+additive where git applies and invisible where it does not.
+
+**Evidence:** `src/modules/git/GitBlame.test.ts` (empty/non-blame output → empty map, no throw);
+`scripts/smoke-git-blame.sh` (a file outside any repo shows no blame part).
+
+**Impossible if true:** a blame part on a non-git document; an unsaved buffer triggering a blame error;
+a thrown exception from a failed `git blame`.
+
+**Verification:** `bun test src/modules/git/GitBlame.test.ts && bash scripts/smoke-git-blame.sh`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23
+
+### A relative time reads in the largest fitting unit
+
+**Invariant:** `RelativeTime.format` renders an age in exactly one coarse unit — the largest that fits
+(just now → minutes → hours → days → weeks → months → years) — with correct singular/plural, and a
+future/equal instant reads "just now" (clock skew never yields a negative age). It is pure: the caller
+supplies `nowMs`, so there is no ambient clock and the output is deterministic.
+
+**Scope:** `RelativeTime.format` (pure), its one caller `StatusBar.currentLineBlamePart`.
+
+**Mechanism:** `format(fromMs, nowMs)` computes `nowMs - fromMs` and returns the first bucket it fits,
+rounding to a whole count of that unit (minimum 1) and pluralizing on `!== 1`. A negative elapsed falls
+into the sub-45s bucket → "just now".
+
+**Generates:** a compact, human relative date for the blame part; deterministic, unit-testable output.
+
+**Evidence:** `src/modules/git/RelativeTime.test.ts` (every bucket boundary, singular vs plural, and the
+clock-skew "just now" case).
+
+**Impossible if true:** a relative time in mixed units ("1 day 3 hours"); a negative age; "1 minutes".
+
+**Verification:** `bun test src/modules/git/RelativeTime.test.ts`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23
