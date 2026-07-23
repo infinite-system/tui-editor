@@ -112,6 +112,25 @@ function $registerDefaultCommands(
       when: hasDocument,
       run: () => context.workspaceSet.active.focusEditor(),
     },
+    // Activity-bar view switchers, palette-discoverable (same single writer as the bar + its chords).
+    {
+      id: 'view.showFiles',
+      title: 'View: Show Explorer',
+      category: 'View',
+      run: () => context.workspaceSet.active.showSidebarView('files'),
+    },
+    {
+      id: 'view.showSourceControl',
+      title: 'View: Show Source Control',
+      category: 'View',
+      run: () => context.workspaceSet.active.showSidebarView('git'),
+    },
+    {
+      id: 'view.showExtensions',
+      title: 'View: Show Extensions',
+      category: 'View',
+      run: () => context.workspaceSet.active.showSidebarView('extensions'),
+    },
     {
       id: 'view.toggleTheme',
       title: 'View: Toggle Light/Dark Theme',

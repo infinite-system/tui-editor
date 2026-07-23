@@ -42,6 +42,48 @@ a FrameProbe check that rendered-row count stays bounded while wheel-scrolling a
 
 ## Chosen invariants
 
+### The active activity item determines the sidebar content
+
+**Invariant:** If the activity bar shows an item as ACTIVE (its left accent bar `▎` is drawn), then
+the sidebar renders exactly that item's view, and switching the active item — by clicking its button
+OR pressing its shortcut (Ctrl+Shift+E Explorer / Ctrl+Shift+G Source Control / Ctrl+Shift+X
+Extensions) — switches the sidebar content to the same view, per workspace. Exactly one item is
+active at a time.
+
+**Scope:** `ActivityBar` (the far-left view-switcher pane), `Workspace.sidebarView` +
+`Workspace.showSidebarView` (the per-workspace active view and its single writer), and the sidebar
+content branch in `RootView.update` (`renderTree` / `renderGitPanel` / the extensions placeholder).
+
+**Mechanism:** the active view is a SINGLE ref, `Workspace.sidebarView` — one ref holds one value, so
+"exactly one active" is true by representation, not by bookkeeping. Both input paths (the bar's
+`onMouseDown` and the `view.show*` keybinding/palette actions) funnel through the one writer
+`Workspace.showSidebarView(view)`; nothing else sets the accent independently. `RootView.update`
+reads that same ref to pick BOTH the sidebar title/content AND (via `ActivityBar.update`) which item
+draws the accent, so the highlight and the rendered pane are derived from one value in one frame and
+cannot diverge. The activity bar owns no active-view state of its own.
+
+**Generates:** a clickable, self-explaining view switcher (button + name/shortcut tooltip + palette
+entry) that satisfies the product north star's visible-affordance rule; per-workspace view memory;
+keyboard parity that can never disagree with what the bar shows.
+
+**Evidence:** `src/modules/ui/ActivityBar.ts` (projects `sidebarView`, routes clicks through
+`showSidebarView`); `src/modules/workspace/Workspace.ts` (`sidebarView` single ref +
+`showSidebarView` single writer); `src/modules/ui/RootView.ts` (title/content + `activityBar.update`
+from the one ref); `src/modules/keybindings/keybindings.defaults.ts` + `src/modules/app/Bootstrap.ts`
+(`view.show*` actions call the same writer); `scripts/smoke-activitybar.sh`.
+
+**Impossible if true:** the bar highlighting one view while the sidebar shows another; two items
+active at once; a click or chord that moves the accent without switching the rendered sidebar content
+(or the reverse); an activity view reachable only by keyboard with no clickable button.
+
+**Verification:** `bash scripts/smoke-activitybar.sh` — click each button and assert the sidebar
+content switches (rendered cells) AND the accent moves to the clicked item; press each chord and
+assert the same switch; confirm a glyph renders in the default (no-Nerd-Font) fallback tier.
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23
+
 ### Input overlays share one modal slot
 
 **Invariant:** If an input-capturing overlay opens, then it is the only input-capturing overlay

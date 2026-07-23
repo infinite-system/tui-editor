@@ -18,6 +18,18 @@ export const canonicalBindings: Keybinding[] = [
   { steps: [{ key: 'x', ctrl: true }, { key: 'c', ctrl: true }], action: 'app.quit' },
   { chord: { key: 'p', ctrl: true }, action: 'quickopen.open' }, // VS Code: Ctrl+P = go-to-file
   { chord: { key: 'p', ctrl: true, shift: true }, action: 'palette.open' }, // Ctrl+Shift+P = command palette
+  // Activity-bar view switchers (VS Code parity: Ctrl+Shift+E Explorer / Ctrl+Shift+G Source Control /
+  // Ctrl+Shift+X Extensions). Global — they switch the active workspace's sidebar view from anywhere.
+  // The PRIMARY affordance is the clickable activity-bar button + its tooltip; these are accelerators.
+  // Placed HERE, ahead of `git.togglePanel` (Ctrl+G, shift don't-care) and the editor `Ctrl+E`/`Ctrl+X`
+  // bindings, so the resolver's first-in-array + shift-specificity rule routes the SHIFTED chord to the
+  // view switch while the UN-shifted chords (plain Ctrl+G/Ctrl+E) keep their existing meaning. On a
+  // legacy terminal that drops the shift bit on a control key the chord degrades to the plain Ctrl+key
+  // (button + palette remain the affordance); Ctrl+Shift+X additionally yields to the guarded editor
+  // cut while the editor holds a selection — an accepted, documented accelerator caveat.
+  { chord: { key: 'e', ctrl: true, shift: true }, action: 'view.showFiles' },
+  { chord: { key: 'g', ctrl: true, shift: true }, action: 'view.showSourceControl' },
+  { chord: { key: 'x', ctrl: true, shift: true }, action: 'view.showExtensions' },
   // Find and Replace are global overlay-switch actions: from any current input overlay, one chord
   // replaces the shared modal slot. They still no-op in Bootstrap when no document is open.
   { chord: { key: 'f', ctrl: true }, action: 'find.open' },

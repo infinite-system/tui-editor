@@ -34,6 +34,10 @@ import { resolve as resolvePath } from 'node:path';
 
 export type Focus = 'files' | 'editor' | 'git';
 
+/** Which panel the activity bar shows in the sidebar for this workspace. 'extensions' is a
+ *  placeholder view for now. Persisted per workspace (it is model state on the Workspace). */
+export type SidebarView = 'files' | 'git' | 'extensions';
+
 /** One diagnostic's span on a single line: grapheme columns [startColumn, endColumn) and its severity
  *  (1 = error, 2 = warning, 3 = info, 4 = hint). A multi-line diagnostic yields one mark per line. */
 export interface DiagnosticLineMark {
@@ -445,9 +449,10 @@ class $Workspace {
     return ref<Focus>('files');
   }
   // WHICH panel the sidebar shows — decoupled from keyboard focus, so opening a diff from the git
-  // panel keeps the panel visible while the editor takes focus (VS Code behavior).
+  // panel keeps the panel visible while the editor takes focus (VS Code behavior). ONE ref holds ONE
+  // value, so "exactly one activity item is active per workspace" is true by representation.
   get sidebarView() {
-    return ref<'files' | 'git'>('files');
+    return ref<SidebarView>('files');
   }
   get name() {
     return ref('');
@@ -547,6 +552,26 @@ class $Workspace {
   focusGit(): void {
     this.focus.value = 'git';
   }
+  /**
+   * Switch the sidebar to an activity-bar view (a bar click OR the Ctrl+Shift+E/G/X chord). This is
+   * the SINGLE writer the activity bar and its keybindings both call, so the active view is one
+   * decision per workspace. Focus follows the view for the interactive panels (files/git) so their
+   * keyboard navigation is live immediately; the extensions placeholder is display-only, so it leaves
+   * keyboard focus where it is. Switching TO git kicks the same non-blocking refresh Ctrl+G does.
+   *
+   * invariant: The active activity item determines the sidebar content (src/modules/ui/ui.invariants.md)
+   */
+  showSidebarView(view: SidebarView): void {
+    this.sidebarView.value = view;
+    if (view === 'files') {
+      this.focus.value = 'files';
+    } else if (view === 'git') {
+      this.focus.value = 'git';
+      void this.git.value?.refresh();
+      void this.commitLog.value?.ensureRange(0, 50);
+    }
+  }
+
   /** Cycle the sidebar between the files tree and the git panel (Ctrl+G style toggle). */
   toggleGit(): void {
     const entering = this.focus.value !== 'git';

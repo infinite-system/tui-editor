@@ -251,6 +251,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       paletteQuery: commands.open.value ? commands.query.value : '',
       paletteMatches: commands.open.value ? commands.filtered.length : 0,
       focus: workspaceSet.active.focus.value,
+      // The activity bar's active view (files/git/extensions) — the authoritative channel a driven
+      // contract reads to assert a click/chord switched the sidebar (paired with FrameProbe for the accent).
+      sidebarView: workspaceSet.active.sidebarView.value,
       treeRows: workspaceSet.active.tree.rows.length,
       treeSelected: workspaceSet.active.tree.selectedIndex.value,
       treeScrollTop: workspaceSet.active.tree.scrollTop.value,
@@ -672,6 +675,10 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
         void workspaceSet.active.commitLog.value?.ensureRange(0, 50);
       }
     },
+    // Activity-bar view switchers (Ctrl+Shift+E/G/X) — the SAME single writer the bar's clicks call.
+    'view.showFiles': () => workspaceSet.active.showSidebarView('files'),
+    'view.showSourceControl': () => workspaceSet.active.showSidebarView('git'),
+    'view.showExtensions': () => workspaceSet.active.showSidebarView('extensions'),
     'git.up': () => {
       normalizeChangesIndex();
       if (workspaceSet.active.gitPanel.region.value === 'changes') moveChanges(-1);

@@ -29,6 +29,7 @@ import { StatusBar } from './StatusBar';
 import { TabBar } from './TabBar';
 import { ScrollGesture, type WheelModifiers } from './ScrollGesture';
 import { Sidebar } from './Sidebar';
+import { ActivityBar } from './ActivityBar';
 import { EditorPane } from './EditorPane';
 import { EditorContentMount } from './EditorContentMount';
 import { ScrollbarSync } from './ScrollbarSync';
@@ -247,6 +248,19 @@ function $buildRootView(
   // OpenTUI fires BOTH drag-end AND up on release, so guard the persist with an active-drag flag —
   // otherwise the release saves twice (still a per-drag write, but the invariant is exactly one).
 
+  // SHARED-FILE CHANGE (activity bar, Task 7): the VS-Code activity bar is a self-contained pane
+  // controller. RootView constructs it, mounts its 4-col `bar` at the FAR LEFT of the main row (before
+  // the sidebar), and calls activityBar.update() each frame. It owns no active-view state — clicks +
+  // its keybindings switch the per-workspace Workspace.sidebarView through Workspace.showSidebarView.
+  const activityBar = new ActivityBar.Class({
+    renderer,
+    workspaceSet,
+    theme,
+    tooltip,
+    keybindings,
+  });
+
+  mainRow.add(activityBar.bar);
   mainRow.add(sidebar);
   mainRow.add(sidebarDivider);
   mainRow.add(editorColumn);
@@ -354,6 +368,16 @@ function $buildRootView(
     '   ↑/↓  navigate files      Enter  open / expand',
     '   Tab  switch pane         Ctrl+P command palette',
     '   Ctrl+Q or F10  quit   (VS Code: Ctrl+X then Ctrl+C)',
+    '',
+  ].join('\n');
+
+  // The Extensions activity view is a placeholder for now (the pane switches, the content is a
+  // coming-soon note). The bar item + its Ctrl+Shift+X chord are live; the marketplace is future work.
+  const EXTENSIONS_PLACEHOLDER = [
+    '',
+    '   Extensions',
+    '',
+    '   Coming soon.',
     '',
   ].join('\n');
 
@@ -523,15 +547,22 @@ function $buildRootView(
     synchronizeWorkspaceTabMount();
     editorContentMount.sync();
     column.backgroundColor = palette.bg;
-    const gitView = workspaceSet.active.sidebarView.value === 'git';
+    const sidebarViewValue = workspaceSet.active.sidebarView.value;
+    const gitView = sidebarViewValue === 'git';
+    const extensionsView = sidebarViewValue === 'extensions';
+    // The activity bar reflects sidebarView (active-item accent) + the git badge each frame.
+    activityBar.update(palette);
     sidebar.width = sidebarWidth(); // live width from the draggable splitter (persisted to settings)
     sidebar.backgroundColor = palette.panel;
-    sidebar.borderColor = workspaceSet.active.focus.value === 'files' || gitView ? palette.borderActive : palette.border;
+    // Files/git are focusable panels (bright border when their focus owns them); extensions is a
+    // display-only placeholder, so it stays dim.
+    const sidebarViewFocused = workspaceSet.active.focus.value === 'files' || gitView;
+    sidebar.borderColor = sidebarViewFocused ? palette.borderActive : palette.border;
     // Divider: brighten while hovered or dragging so it reads as a grab handle.
     sidebarDivider.backgroundColor =
       paneSplitters.sidebarDividerActive() ? palette.accent : palette.border;
-    sidebar.titleColor = workspaceSet.active.focus.value === 'files' || gitView ? palette.accent : palette.dim;
-    sidebar.title = gitView ? 'Git' : 'Files';
+    sidebar.titleColor = sidebarViewFocused ? palette.accent : palette.dim;
+    sidebar.title = gitView ? 'Git' : extensionsView ? 'Extensions' : 'Files';
     editorArea.backgroundColor = palette.bg;
     const sourcePaneFocused = workspaceSet.active.focus.value === 'editor' &&
       !(editorContentMount.markdownSplitView?.previewFocused ?? false);
@@ -545,7 +576,7 @@ function $buildRootView(
     workspaceTabBar.content = tabBarController.renderWorkspace();
     workspaceTabBar.fg = palette.fg;
 
-    sidebarBody.content = gitView ? renderGitPanel() : renderTree();
+    sidebarBody.content = gitView ? renderGitPanel() : extensionsView ? EXTENSIONS_PLACEHOLDER : renderTree();
     sidebarBody.fg = palette.fg;
     const rendered = editorController.renderEditor();
     if (rendered) {

@@ -26,6 +26,18 @@ export interface CheckboxIconSet {
   checked: string;
 }
 
+/** Activity-bar view-switcher glyphs — one CENTERED single-cell glyph per view, plus the VS-Code
+ *  left accent bar drawn beside the ACTIVE item. Every glyph is exactly one cell so the 4-wide
+ *  button columns align across tiers. Dual-tier by construction: `nerd` = detailed codicons,
+ *  `unicode`/`ascii` = the portable fallback so identity survives where no Nerd Font is installed. */
+export interface ActivityIconSet {
+  files: string;
+  sourceControl: string;
+  extensions: string;
+  /** The active-item left accent bar (VS Code's `▎`), degrading to `|` without box-drawing glyphs. */
+  accentBar: string;
+}
+
 const NERD: IconSet = {
   ext: {
     ts: '', tsx: '', js: '', jsx: '',
@@ -81,6 +93,15 @@ const CHECKBOX_ICONS: Record<GlyphLevel, CheckboxIconSet> = {
   ascii: { unchecked: ' ', checked: 'x' },
 };
 
+// Activity-bar glyph ladder. nerd = codicons (files / git branch / puzzle piece); unicode =
+// single-cell portable symbols; ascii = the letter fallback (F/G/X) so a no-nerd-font terminal
+// still reads an identity. The accent bar degrades `▎` → `|`. Each glyph is exactly one cell.
+const ACTIVITY_ICONS: Record<GlyphLevel, ActivityIconSet> = {
+  nerd: { files: '\u{f07b}', sourceControl: '\u{f126}', extensions: '\u{f12e}', accentBar: '▎' }, // fa folder / code-fork / puzzle-piece
+  unicode: { files: '▤', sourceControl: '⎇', extensions: '⊞', accentBar: '▎' },
+  ascii: { files: 'F', sourceControl: 'G', extensions: 'X', accentBar: '|' },
+};
+
 function $iconSetFor(level: GlyphLevel): IconSet {
   return SETS[level];
 }
@@ -91,6 +112,10 @@ function $actionIconsFor(level: GlyphLevel): ActionIconSet {
 
 function $checkboxIconsFor(level: GlyphLevel): CheckboxIconSet {
   return CHECKBOX_ICONS[level];
+}
+
+function $activityIconsFor(level: GlyphLevel): ActivityIconSet {
+  return ACTIVITY_ICONS[level];
 }
 
 /** Resolve an icon for a filename against a set (extension keyed, with folder/file default). */
@@ -107,6 +132,7 @@ class $ThemeIcons {
   static iconSetFor = $iconSetFor;
   static actionIconsFor = $actionIconsFor;
   static checkboxIconsFor = $checkboxIconsFor;
+  static activityIconsFor = $activityIconsFor;
   static iconFor = $iconFor;
 }
 
