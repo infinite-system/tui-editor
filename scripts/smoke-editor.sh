@@ -93,6 +93,26 @@ chkne "selection range published" "$(f selection)"
 "$H" send "$S" Escape >/dev/null
 chk "selection cleared after Escape" "$(f hasSelection)" "false"
 
+echo "== undo back to the saved content reads UNCHANGED (dirty clears — flag AND the rendered ● dot) =="
+# The buffer is dirty from the X typed earlier. Undo every edit back to the on-disk content: dirty
+# must CLEAR — a buffer undone all the way to its saved state is not modified (it used to stay dirty
+# forever after the first edit). We assert BOTH the internal flag AND the RENDERED tab dot, because the
+# user's symptom is the visible ● (the field could clear while the dot stays). FrameProbe remaps the ●
+# glyph into its opaque plane, so we assert the dot CELL is non-space (dirty) vs a space (clean). The
+# tab row shows " <name> " (leading space); the pane-border legend row shows "─<name>", so the
+# leading-space search picks the tab, not the border.
+dot_state() { BASE="$(basename "$(f activeBuffer)")" FRAME_FILE="$FRAME" "$BUN" -e '
+const f=JSON.parse(require("fs").readFileSync(process.env.FRAME_FILE));const needle=" "+process.env.BASE+" ";
+let out="notab";
+for(const row of f.rows){const t=row.text||"";const i=t.indexOf(needle);if(i>=0){out=(t[i+needle.length]||" ")===" "?"clean":"dot";break;}}
+process.stdout.write(out);'; }
+chk "buffer dirty from the earlier edit (flag)" "$(f dirty)" "true"
+chk "the tab shows the ● dirty dot while dirty" "$(dot_state)" "dot"
+for _ in 1 2 3 4 5; do [ "$(f dirty)" = "false" ] && break; "$H" send "$S" C-z >/dev/null; sleep 0.25; "$H" settle "$S" >/dev/null 2>&1; done
+chk "undo to the saved content cleared the flag" "$(f dirty)" "false"
+chk "undo to the saved content cleared the RENDERED ● dot" "$(dot_state)" "clean"
+"$H" send "$S" -l X >/dev/null; sleep 0.2; "$H" settle "$S" >/dev/null 2>&1   # restore a dirty edit for the later close-tab step
+
 echo "== mouse drag-select persists + Ctrl+C copies (human-QA regression) =="
 # Drag along doc line 1 ("A tiny project..." — a CONTENT line; an empty line cannot hold a
 # horizontal selection). Screen row = editor content top, shifted by the workspace-strip height.
@@ -207,6 +227,17 @@ echo "  info: paletteMatches=$(f paletteMatches)"
 "$H" send "$S" Escape >/dev/null
 chk "palette closed" "$(f overlay)" "null"
 
+echo "== status-bar gear button opens Settings (bottom-right, left of the ? button) =="
+# The gear (⚙) is pinned to the right end of the status bar, one 3-cell button LEFT of the ` ? `
+# button: ? occupies [width-3..width-1], the gear [width-6..width-4]. Click its middle cell.
+gear_x=$(( $(f width) - 5 )); status_y=$(( $(f height) - 1 ))
+chk "settings closed before gear click" "$(f settingsOpen)" "false"
+"$H" click "$S" "$gear_x" "$status_y" >/dev/null
+"$H" settle "$S" >/dev/null 2>&1
+chk "gear click opened Settings" "$(f settingsOpen)" "true"
+"$H" send "$S" Escape >/dev/null
+chk "settings closed after Escape" "$(f settingsOpen)" "false"
+
 echo "== editor buffer tabs (item 10a): open ADDS tabs; flyweight keeps live docs < tab count =="
 # Files are already open from earlier sections; open more clean tabs to exercise dehydration.
 tabs_before="$(f bufferTabCount)"
@@ -235,10 +266,12 @@ fi
 tabs_after_close="$(f bufferTabCount)"
 if [ "${tabs_after_close:-9}" -lt "${tabs_after_open:-0}" ] 2>/dev/null; then echo "  PASS  Ctrl+W closed a tab ($tabs_after_open->$tabs_after_close)"; else echo "  FAIL  Ctrl+W did not close a tab ($tabs_after_open->$tabs_after_close)"; fail=1; fi
 
-echo "== idle quiescence: rendering is demand-driven; the loop STOPS at rest (frame delta == 0) =="
+echo "== idle quiescence: rendering is demand-driven; the loop STOPS at rest (frame delta <= 1: clock only) =="
 # Authoritative signal is the FRAME COUNTER, not CPU (empty frames are cheap, so a CPU check passes
-# even while the loop ticks — the false-green that a pre-fix build shipped). After a settle, the
-# status frame counter must not advance at all over a fully-untouched window.
+# even while the loop ticks — the false-green that a pre-fix build shipped). At rest the ONLY periodic
+# wake is the status-bar minute-clock, which repaints EXACTLY once per minute — so a 5s window sees 0
+# frames between ticks, at most 1 if a minute boundary lands inside it. A busy loop would be ~150
+# (30fps×5s): the <=1 bound cleanly separates the once/min clock from a live loop.
 "$H" send "$S" Escape >/dev/null   # clear any lingering overlay/selection -> true rest
 "$H" settle "$S" >/dev/null 2>&1
 sleep 1
@@ -246,8 +279,8 @@ idle_frame_start="$(f frame)"
 sleep 5   # 5s FULLY untouched — no input, no harness sends
 idle_frame_end="$(f frame)"
 idle_frame_delta=$(( idle_frame_end - idle_frame_start ))
-if [ "$idle_frame_delta" -eq 0 ]; then
-  echo "  PASS  idle frame delta == 0 over 5s untouched (frame stayed $idle_frame_start)"
+if [ "$idle_frame_delta" -le 1 ]; then
+  echo "  PASS  idle frame delta <= 1 over 5s untouched (frame $idle_frame_start -> $idle_frame_end; clock tick at most)"
 else
   echo "  FAIL  idle loop still ticking: frame $idle_frame_start -> $idle_frame_end (+$idle_frame_delta over 5s, ~$((idle_frame_delta / 5))fps) — rendering is NOT demand-driven"
   fail=1
