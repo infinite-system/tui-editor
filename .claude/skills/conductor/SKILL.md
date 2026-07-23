@@ -139,6 +139,15 @@ the DEFAULT; destruction requires explicit, per-instance user authorization.**
 - **Verify, don't assume.** Key on fork-specific evidence only: worktree writes in the last
   cycle, gate-log transitions, new branch/main commits, builder tmux sessions. NEVER treat the
   user's own interactive instances as fork liveness, and never kill them.
+- **Commits are the #1 progress signal — and a `find … -not -path '*/.git/*'` MISSES them.** A
+  worktree-writes scan that excludes `.git/` makes a just-committed agent look idle. Always include
+  branch-commit detection (`git -C <wt> rev-list --count origin/main..HEAD`). And external snapshots
+  (transcript mtime, git status) LAG an in-flight agent — hold "stalled/uncommitted" diagnoses
+  loosely; a suspected-dormancy nudge should ask the agent to SELF-REPORT (authoritative), not assert
+  a stall. The nudge is harmless when wrong.
+- **Arm a Monitor on a long gate's log** whose result must be acted on — the tracked-bg completion
+  re-invoke is unreliable (agents go dormant on finished gates). A Monitor on the named gate log wakes
+  the agent reliably; the loop-check is the floor under it.
 - **Tracked background, never nohup.** Run every gate/long command as a TRACKED background child
   (the harness re-invokes you on completion and keeps you visible in /tasks). `nohup … &` leaves
   you with no live children and the harness drops you from view.

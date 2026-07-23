@@ -326,6 +326,22 @@ Six new operational lessons, every one from real friction this run.
   glyph tier, escape support) the harness's own terminal can't exercise — diagnose defensively from the
   code path, flag that final verification needs the user's real terminal. The harness proves LOGIC, not
   every terminal's protocol quirks.
+- **External snapshots LAG an agent's real state — hold "stalled/uncommitted" diagnoses loosely (2026-07-23).**
+  A loop-check saw the fork's transcript mtime stale (~22 min), wt-tabs "uncommitted", and an old failed gate,
+  and diagnosed "dormant with uncommitted work." Wrong: the fork had committed two-line-tabs (061d583+e098c2c)
+  and kicked a FRESH gate in the window between the snapshot and its self-report. Two blind spots: (a) the
+  worktree-writes `find` EXCLUDES `.git/`, so it MISSES COMMITS — the single most important progress signal —
+  making a just-committed agent look idle; (b) transcript mtime lags an in-flight tool call. Fix: include
+  branch-commit detection (`git -C <wt> rev-list --count origin/main..HEAD`) in the liveness read, not just
+  non-.git file mtimes; and treat suspected dormancy as a prompt to make the agent SELF-REPORT (a cheap nudge)
+  rather than asserting stall from the snapshot — the agent's self-report is authoritative. The nudge does no
+  harm when wrong (the agent just clarifies), but the DIAGNOSIS must be held loosely.
+- **Mitigation for the tracked-gate re-invoke misfire: arm a MONITOR on the gate log (2026-07-23).** The fork's
+  tracked-background-gate completion repeatedly failed to re-invoke it, leaving it dormant on green/red gates
+  until a loop-check nudge (merges lagged one cycle). The fork fixed it itself by arming a Monitor on the gate
+  log file — completion then reliably wakes the agent. Standing rule: for a long gate whose result must be
+  acted on, arm a Monitor on the named gate log rather than trusting the tracked-bg re-invoke; the 10-min
+  loop-check remains the floor under it.
 
 ---
 
