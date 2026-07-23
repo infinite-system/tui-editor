@@ -98,6 +98,7 @@ if [ "${FAST:-0}" != "1" ]; then
   step "smoke: shortcut-help" bash scripts/smoke-shortcut-help.sh
   step "smoke: word-delete" bash scripts/smoke-word-delete.sh
   step "smoke: quick-open"  bash scripts/smoke-quickopen.sh
+  step "smoke: open-project" bash scripts/smoke-openproject.sh
   step "smoke: search-mouse" bash scripts/smoke-search-mouse.sh
   step "smoke: gutter-diff" bash scripts/smoke-gutter-diff.sh
   step "smoke: diff-overview" bash scripts/smoke-diff-overview.sh

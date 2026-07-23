@@ -57,6 +57,19 @@ class $Files {
     return relative(from, to);
   }
 
+  /**
+   * The raw entry names in a directory — one readdir syscall, NO per-entry stat. Returns [] on any
+   * failure (missing directory, permission). This is the cheap, non-blocking primitive the open-project
+   * navigator caps and classifies itself, so it never stats an unbounded number of entries up front.
+   */
+  static listNames(directory: string): string[] {
+    try {
+      return readdirSync(directory);
+    } catch {
+      return [];
+    }
+  }
+
   /** List a directory, directories first then files, both alphabetical. */
   static list(directory: string): DirEntry[] {
     let names: string[];

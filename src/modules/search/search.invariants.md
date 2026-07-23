@@ -49,6 +49,47 @@ modes rendering the selection differently, or differently from the file tree.
 
 **Last refined:** 2026-07-23
 
+### The selected quick-open row is always visible
+
+**Invariant:** In every QuickOpen list (file fuzzy-search and open-project navigator), when the match
+count exceeds the render window the drawn slice is a window that CONTAINS the selected row — the list
+scrolls with the selection rather than always slicing from the top. The selection can never move to a
+row below or above the drawn window; a pointer hit-test on a scrolled list resolves to the match the
+pointed row actually draws (the visible row plus the window's first-visible model index).
+
+**Scope:** `QuickOpenRenderer.render`/`computeWindow` and the `OverlayLayer` quick-open pointer handlers
+(`quickOpenFirstVisible`). Covers both `files` and `workspacePath` modes; independent of glyph width.
+
+**Mechanism:** `QuickOpenRenderer.computeWindow(selectedIndex, total, maxRows)` is a pure function of the
+selection: lists that fit draw from the top; longer lists center the selection and clamp `firstVisible`
+to `[0, total - maxRows]`, so the selected index is always within `[firstVisible, firstVisible + maxRows)`
+and the first/last pages never over-scroll. `render` slices `matches[firstVisible, firstVisible + count)`,
+paints the selection background by MODEL index (`firstVisible + rowIndex`), and returns `firstVisible`.
+`OverlayLayer` stores it as `quickOpenFirstVisible` and maps a pointer row to `firstVisible + row` for
+both hover and click. Being stateless, the window holds no persisted scroll offset — it upholds
+[Renderables hold no model state](../ui/ui.invariants.md#renderables-hold-no-model-state).
+
+**Generates:** arrow-past-the-window keeps the highlight on screen; the highlight never strands below the
+window; clicks on a scrolled list select the right match; the small-list (fits-the-window) path is
+unchanged.
+
+**Evidence:** `src/modules/ui/QuickOpenRenderer.ts` (`computeWindow`, windowed `render`);
+`src/modules/ui/OverlayLayer.ts` (`quickOpenFirstVisible`, the pointer-row mapping);
+`src/modules/ui/QuickOpenRenderer.test.ts` (selection-always-in-window for every index of a 766 list,
+first/last-page clamping); `scripts/smoke-openproject.sh` (arrowing 20 deep keeps the selected folder
+visible with a selection background while the original top row scrolls off, and a click on a scrolled row
+drills the right folder).
+
+**Impossible if true:** the selected quick-open row rendered outside the drawn window; the highlight
+vanishing when the selection passes the render-window height; a click on a scrolled list selecting a
+different match than the pointed row; the renderer persisting a scroll offset between frames.
+
+**Verification:** `bun test src/modules/ui/QuickOpenRenderer.test.ts && bash scripts/smoke-openproject.sh`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23
+
 ### Find bar controls are mouse-clickable buttons
 
 **Invariant:** Every FindBar action — previous match, next match, the case toggle, replace, replace-all,

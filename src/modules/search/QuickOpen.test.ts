@@ -182,6 +182,47 @@ describe('QuickOpen', () => {
     expect(quickOpen.errorMessage.value).toBe('');
   });
 
+  test('workspace-path enumeration caps a huge directory to a fixed ceiling', () => {
+    // A pathological parent with 5000 entries — the unbounded synchronous classification that froze the
+    // picker. The hardened default reads names via the listDirectoryNames seam, caps them, then
+    // classifies each; the cap bounds how many entries get classified.
+    const classifiedPaths: string[] = [];
+    const entryNames = Array.from({ length: 5000 }, (_unused, index) => `entry-${index}`);
+    const quickOpen = new QuickOpen.Class({
+      listDirectoryNames: () => entryNames,
+      isDirectory: (path) => {
+        classifiedPaths.push(path);
+        return true; // every entry is a directory, so the only thing trimming the list is the cap
+      },
+    });
+
+    quickOpen.showWorkspacePath('/huge/child'); // parent = /huge
+
+    // Only the first 2000 entries are classified and listed — never the full 5000. (isDirectory is also
+    // used once for the live openable-check on the parent path itself, so count only the entry classifications.)
+    const classifiedEntries = classifiedPaths.filter((path) => path.includes('/entry-'));
+    expect(classifiedEntries.length).toBe(2000);
+    expect(quickOpen.matches.value.length).toBe(2000);
+  });
+
+  test('a single bad entry whose stat throws is skipped, never propagated as a hang or throw', () => {
+    // A broken symlink / vanished race: its classification throws. The navigator must skip it and still
+    // list the good folders — a thrown stat must never escape (that is the freeze/crash path).
+    const quickOpen = new QuickOpen.Class({
+      listDirectoryNames: () => ['good-alpha', 'broken-symlink', 'good-beta'],
+      isDirectory: (path) => {
+        if (path.endsWith('broken-symlink')) throw new Error('ELOOP: broken symlink');
+        return true;
+      },
+    });
+
+    expect(() => quickOpen.showWorkspacePath('/parent/child')).not.toThrow();
+    expect(quickOpen.matches.value.map((match) => match.path)).toEqual([
+      '/parent/good-alpha',
+      '/parent/good-beta',
+    ]);
+  });
+
   test('close clears state and prevents an in-flight enumeration from reopening candidates', async () => {
     let finishEnumeration!: (projectFiles: readonly string[]) => void;
     const enumerateProjectFiles: ProjectFileEnumerator = () =>

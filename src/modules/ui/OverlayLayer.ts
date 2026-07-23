@@ -70,6 +70,9 @@ class $OverlayLayer {
   // hit-rect never disagree (the one-geometry-source rule). Written in update(), read on mouse events.
   private findBarButtonZones: FindBarButtonZone[] = [];
   private quickOpenRowCount = 0;
+  // The model index of the first row the quick-open list currently draws (its scroll window's top), so a
+  // pointer hit-test maps a visible row back to the match it draws. 0 whenever the list is unscrolled.
+  private quickOpenFirstVisible = 0;
 
   constructor(private readonly deps: OverlayLayerDeps) {
     const { renderer, shortcutHelp, contextMenu, quickOpen } = deps;
@@ -157,19 +160,22 @@ class $OverlayLayer {
     this.contextMenuBox.onMouseOut = () => contextMenu.hover(-1);
     this.contextMenuBox.onMouseDown = (event) => contextMenu.runAt(contextMenuItemAt(event.y));
 
-    // Quick-open results: hover highlights a row, click selects+opens it. Row maps 1:1 to a match (the
-    // list has no independent scroll), so the row is the pointer offset from the list's own top.
+    // Quick-open results: hover highlights a row, click selects+opens it. The list scrolls a window over
+    // the matches, so a pointer row is the offset from the list's own top PLUS the window's first-visible
+    // model index — mapping the visible row back to the match it actually draws.
     // invariant: Search results are click-set and highlight-shown (src/modules/search/search.invariants.md)
+    // invariant: The selected quick-open row is always visible (src/modules/search/search.invariants.md)
     const quickOpenRowAt = (screenY: number): number => screenY - this.quickOpenList.y;
+    const quickOpenMatchAt = (row: number): number => this.quickOpenFirstVisible + row;
     this.quickOpenList.onMouseMove = (event) => {
       const row = quickOpenRowAt(event.y);
-      quickOpen.setHoveredIndex(row >= 0 && row < this.quickOpenRowCount ? row : -1);
+      quickOpen.setHoveredIndex(row >= 0 && row < this.quickOpenRowCount ? quickOpenMatchAt(row) : -1);
     };
     this.quickOpenList.onMouseOut = () => quickOpen.setHoveredIndex(-1);
     this.quickOpenList.onMouseDown = (event) => {
       const row = quickOpenRowAt(event.y);
       if (row < 0 || row >= this.quickOpenRowCount) return;
-      quickOpen.setSelectedIndex(row);
+      quickOpen.setSelectedIndex(quickOpenMatchAt(row));
       // Files mode: a click opens the file. Path-navigator mode: a click DRILLS INTO the folder
       // (completes the path + re-lists); Enter opens the current path (activateQuickOpen).
       if (quickOpen.mode.value === 'workspacePath') quickOpen.navigateIntoSelected();
@@ -294,8 +300,10 @@ class $OverlayLayer {
       });
       this.quickOpenList.content = quickOpenResult.text;
       this.quickOpenRowCount = quickOpenResult.rowCount;
+      this.quickOpenFirstVisible = quickOpenResult.firstVisible;
     } else {
       this.quickOpenRowCount = 0;
+      this.quickOpenFirstVisible = 0;
     }
 
     // Confirmation overlay (discard changes / close a dirty tab).

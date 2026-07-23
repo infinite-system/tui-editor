@@ -3,6 +3,7 @@ import { ref, shallowRef } from 'vue';
 import { CommandScoring } from '../commands/CommandScoring';
 import { TextEditing } from '../editor/TextEditing';
 import { Files } from '../system/Files';
+import { Logging } from '../system/Logging';
 import { Processes } from '../system/Processes';
 
 export interface QuickOpenMatch {
@@ -14,13 +15,26 @@ export type ProjectFileEnumerator = (projectRoot: string) => Promise<readonly st
 
 export type SiblingFolderEnumerator = (parentDirectory: string) => readonly string[];
 
+export type DirectoryNameLister = (directory: string) => readonly string[];
+
 export type DirectoryPredicate = (path: string) => boolean;
 
 export interface QuickOpenOptions {
   enumerateProjectFiles?: ProjectFileEnumerator;
+  /** Injects the whole subfolder listing (bypasses the hardened default) — used by navigator tests. */
   enumerateSiblingFolders?: SiblingFolderEnumerator;
+  /** Injects only the raw directory-entry names — the hardened default runs its cap + guard on top. */
+  listDirectoryNames?: DirectoryNameLister;
   isDirectory?: DirectoryPredicate;
 }
+
+/**
+ * Upper bound on directory entries the open-project navigator will classify per listing. A directory can
+ * hold hundreds of thousands of entries; classifying every one synchronously (a stat per entry, some of
+ * which can block on a stale mount) is exactly the unbounded work that froze the picker. Capping bounds
+ * the work to a fixed ceiling regardless of how pathological the directory is.
+ */
+const SIBLING_FOLDER_ENTRY_LIMIT = 2000;
 
 export type QuickOpenMode = 'files' | 'workspacePath';
 
@@ -228,13 +242,47 @@ class $QuickOpen {
     return [];
   }
 
+  /**
+   * List a directory's subfolders for the navigator, HARDENED against the two ways this froze the app:
+   *   - a directory with an unbounded number of entries — capped at SIBLING_FOLDER_ENTRY_LIMIT so the
+   *     synchronous per-entry classification can never run longer than that fixed ceiling; and
+   *   - a single pathological entry (broken symlink, vanished race, permission trap) whose stat throws —
+   *     each classification is wrapped so one bad entry is skipped, never propagated as a hang or throw.
+   * The fully-injected `enumerateSiblingFolders` seam bypasses this (navigator-logic tests); the default
+   * builds on the `listDirectoryNames` + `isDirectory` seams so the cap + guard stay unit-testable.
+   */
   protected enumerateSiblingFolders(parentDirectory: string): readonly string[] {
     if (this.options.enumerateSiblingFolders) {
       return this.options.enumerateSiblingFolders(parentDirectory);
     }
-    return Files.Class.list(parentDirectory)
-      .filter((directoryEntry) => directoryEntry.isDir)
-      .map((directoryEntry) => directoryEntry.path);
+    const entryNames = this.listDirectoryNames(parentDirectory);
+    const cappedEntryNames =
+      entryNames.length > SIBLING_FOLDER_ENTRY_LIMIT
+        ? entryNames.slice(0, SIBLING_FOLDER_ENTRY_LIMIT)
+        : entryNames;
+    if (entryNames.length > SIBLING_FOLDER_ENTRY_LIMIT) {
+      Logging.Class.info(
+        `QuickOpen: ${parentDirectory} has ${entryNames.length} entries; listing the first ${SIBLING_FOLDER_ENTRY_LIMIT}`,
+      );
+    }
+    const subfolderPaths: string[] = [];
+    for (const entryName of cappedEntryNames) {
+      const entryPath = Files.Class.join(parentDirectory, entryName);
+      let entryIsDirectory = false;
+      try {
+        entryIsDirectory = this.isDirectory(entryPath);
+      } catch {
+        // A bad entry (broken symlink, race, permission trap) is skipped, never allowed to throw/hang.
+        entryIsDirectory = false;
+      }
+      if (entryIsDirectory) subfolderPaths.push(entryPath);
+    }
+    return subfolderPaths;
+  }
+
+  protected listDirectoryNames(directory: string): readonly string[] {
+    if (this.options.listDirectoryNames) return this.options.listDirectoryNames(directory);
+    return Files.Class.listNames(directory);
   }
 
   protected isDirectory(path: string): boolean {
