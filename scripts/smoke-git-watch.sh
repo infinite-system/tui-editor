@@ -46,29 +46,31 @@ echo "== reverting the external changes clears them too =="
 cleared="$(wait_for_count -eq 5)"
 if [ "${cleared:-9}" = "0" ]; then echo "  PASS  panel returned to 0 after external revert"; else echo "  FAIL  panel stuck at $cleared after revert"; fail=1; fi
 
-echo "== opening an untracked DIRECTORY row (e.g. node_modules/) must NOT crash (EISDIR guard) =="
+echo "== opening an untracked DIRECTORY row (node_modules symlink) must NOT crash (EISDIR guard) =="
 # The user's exact case: node_modules is a SYMLINK-to-directory (worktree setups symlink it). git lists
-# the symlink as an untracked FILE ('?? node_modules'), which the git panel makes a clickable file row.
-# Opening it read the symlink target (a directory, since exists/read follow symlinks) -> EISDIR -> the
-# throw escaped OpenTUI's mouse dispatch and crashed the app. Target lives OUTSIDE the repo so the
-# symlink is the ONLY untracked entry (row 0).
-SYMLINK_TARGET="$(mktemp -d /tmp/tui-nm-target.XXXXXX)"; printf 'module.exports={};\n' > "$SYMLINK_TARGET/pkg.js"
-ln -s "$SYMLINK_TARGET" "$REPO/node_modules"
-trap '"$H" kill "$S" >/dev/null 2>&1; rm -rf "$REPO" "$SYMLINK_TARGET"' EXIT INT TERM
-dir_count="$(wait_for_count -gt 0 8)"
-if [ "${dir_count:-0}" -ge 1 ] 2>/dev/null; then
-  "$H" send "$S" C-g >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1   # focus the git panel (row 0 = node_modules/)
-  "$H" send "$S" o >/dev/null                                                  # open the change at the selected directory row — the crash trigger
-  sleep 0.6; "$H" settle "$S" >/dev/null 2>&1
-  # Liveness: a crashed app can't answer the side-channel probe. It must still respond AND still see the change.
-  alive="$(f gitChangedCount)"
-  if [ -n "$alive" ] && [ "${alive:-0}" -ge 1 ] 2>/dev/null; then
-    echo "  PASS  opening the untracked-directory row did not crash the app (EISDIR guarded, empty diff)"
+# the symlink as an untracked FILE ('?? node_modules'), the git panel makes it a clickable file row, and
+# opening it read the symlink target (a directory — exists/read follow symlinks) -> EISDIR -> the throw
+# escaped OpenTUI's mouse dispatch and crashed the app. Use a FRESH repo with the symlink PRESENT AT
+# LAUNCH (no GitWatcher-detection timing to depend on): the panel shows it on the first C-g.
+"$H" kill "$S" >/dev/null 2>&1
+DIRREPO="$(mktemp -d /tmp/tui-git-dir.XXXXXX)"; SYMTGT="$(mktemp -d /tmp/tui-nm-target.XXXXXX)"; printf 'module.exports={};\n' > "$SYMTGT/pkg.js"
+( cd "$DIRREPO" && git init -q && printf 'a\n' > f.txt && git add -A && git -c user.email=a@b.c -c user.name=x commit -qm init && ln -s "$SYMTGT" node_modules )
+trap '"$H" kill "$S" >/dev/null 2>&1; "$H" kill "$S2" >/dev/null 2>&1; rm -rf "$REPO" "$DIRREPO" "$SYMTGT"' EXIT INT TERM
+S2="git-dir-$$"
+"$H" launch "$S2" 120x40 bun run src/main.ts "$DIRREPO" >/dev/null
+if "$H" ready "$S2" 20 >/dev/null; then
+  "$H" send "$S2" C-g >/dev/null; sleep 0.5; "$H" settle "$S2" >/dev/null 2>&1   # git panel; the node_modules symlink row is present at boot
+  before="$("$H" field "$S2" gitChangedCount)"
+  "$H" send "$S2" o >/dev/null                                                   # open the change at the selected (directory) row — the crash trigger
+  sleep 0.7; "$H" settle "$S2" >/dev/null 2>&1
+  alive="$("$H" field "$S2" gitChangedCount)"   # a crashed app can't answer the side-channel probe
+  if [ "${before:-0}" -ge 1 ] 2>/dev/null && [ -n "$alive" ] && [ "${alive:-0}" -ge 1 ] 2>/dev/null; then
+    echo "  PASS  opening the untracked node_modules-symlink row did not crash the app (EISDIR guarded)"
   else
-    echo "  FAIL  app died opening a directory row (gitChangedCount='$alive')"; fail=1
+    echo "  FAIL  directory-row open crashed or setup wrong (before='$before' after='$alive')"; fail=1
   fi
 else
-  echo "  FAIL  untracked directory not reflected in the panel (setup)"; fail=1
+  echo "  FAIL  second instance did not boot"; fail=1
 fi
 
 echo "== RESULT: $([ "$fail" = 0 ] && echo ALL-PASS || echo FAILURES) =="
