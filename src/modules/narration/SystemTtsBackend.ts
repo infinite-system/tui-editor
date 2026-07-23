@@ -11,6 +11,7 @@
 //
 // invariant: Narration audio crosses exactly one TTS backend seam (src/modules/narration/narration.invariants.md)
 // invariant: A missing speech engine degrades to silence, never an error (src/modules/narration/narration.invariants.md)
+import { readdirSync } from 'node:fs';
 import type { TtsBackend } from './TtsBackend';
 
 /** A detected engine: how to synthesize `text`, and whether it plays on its own (macOS `say`) or emits
@@ -28,23 +29,42 @@ export interface SystemTtsOptions {
   enginePath?: string;
 }
 
-/** Resolve the first available engine, or null. `espeak-ng --stdout` and `piper --output_file -` emit a
- *  WAV on stdout; macOS `say` plays directly. Piper needs a voice model — taken from INVAR_PIPER_MODEL,
- *  and piper is skipped when that is unset (a model-less piper cannot synthesize). */
-function detectEngine(): DetectedEngine | null {
-  const espeak = Bun.which('espeak-ng') ?? Bun.which('espeak');
-  if (espeak) {
-    return { name: 'espeak-ng', playsDirectly: false, synthCommand: (text) => [espeak, '--stdout', text] };
+/** Resolve piper's voice model: an explicit INVAR_PIPER_MODEL, else the first `*.onnx` in the
+ *  conventional voices dir (`$XDG_DATA_HOME/piper-voices` or `~/.local/share/piper-voices`). Returns null
+ *  when no model is found — a model-less piper cannot synthesize, so it is skipped. */
+function resolvePiperModel(): string | null {
+  const explicit = process.env.INVAR_PIPER_MODEL;
+  if (explicit) return explicit;
+  const dataHome = process.env.XDG_DATA_HOME ?? `${process.env.HOME ?? ''}/.local/share`;
+  const voicesDir = `${dataHome}/piper-voices`;
+  try {
+    const model = readdirSync(voicesDir)
+      .filter((entry) => entry.endsWith('.onnx'))
+      .sort()[0];
+    return model ? `${voicesDir}/${model}` : null;
+  } catch {
+    return null; // dir absent / unreadable → no piper model
   }
+}
+
+/** Resolve the best available engine, or null. Ordered by QUALITY: piper (neural — far less robotic) is
+ *  preferred when its binary AND a voice model are present; espeak-ng (formant synth) is the always-there
+ *  fallback; macOS `say` last. espeak/piper emit a WAV on stdout (piped to a player); `say` plays
+ *  directly. */
+function detectEngine(): DetectedEngine | null {
   const piper = Bun.which('piper');
-  const piperModel = process.env.INVAR_PIPER_MODEL;
+  const piperModel = piper ? resolvePiperModel() : null;
   if (piper && piperModel) {
     return {
       name: 'piper',
       playsDirectly: false,
-      // piper reads the utterance on stdin; we pass text through the queue by writing it to stdin below.
+      // piper reads the utterance on stdin; the queue writes text to stdin below.
       synthCommand: () => [piper, '--model', piperModel, '--output_file', '-'],
     };
+  }
+  const espeak = Bun.which('espeak-ng') ?? Bun.which('espeak');
+  if (espeak) {
+    return { name: 'espeak-ng', playsDirectly: false, synthCommand: (text) => [espeak, '--stdout', text] };
   }
   const say = Bun.which('say');
   if (say) {
@@ -53,13 +73,15 @@ function detectEngine(): DetectedEngine | null {
   return null;
 }
 
-/** The Linux player for a WAV stream on stdin, or null when the engine plays directly / none present. */
+/** The Linux player for a WAV stream on stdin, or null when the engine plays directly / none present.
+ *  Order matters: the engine emits a WAV (RIFF header declaring the sample rate — espeak-ng is 22050 Hz),
+ *  and the player must READ that header off the pipe. `aplay -` parses the WAV header from stdin and
+ *  plays at the correct rate; `pw-play -` does NOT parse a header off a pipe — it assumes its default
+ *  48000 Hz, playing 22050 Hz audio ~2.18× too fast (the "chipmunk" bug). So prefer aplay; pw-play is
+ *  only a last resort (a pw-play-only host would still be fast-pitched — hardening that is a follow-up,
+ *  e.g. play via a temp file, which every player parses correctly). */
 function detectPlayer(): string | null {
-  const pwPlay = Bun.which('pw-play');
-  if (pwPlay) return pwPlay;
-  const aplay = Bun.which('aplay');
-  if (aplay) return aplay;
-  return null;
+  return Bun.which('aplay') ?? Bun.which('pw-play');
 }
 
 type Spawned = { kill(): void; readonly exited: Promise<number> };
