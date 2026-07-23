@@ -37,6 +37,9 @@ export interface StatusBarDeps {
   /** Lazy-inits the terminal + toggles the bottom panel — the SAME closure the panel.toggleTerminal
    *  keybinding runs, so the button and the chord are one action (no divergent toggle paths). */
   toggleTerminal: () => void;
+  /** Lazy-inits the agent pane + shows/activates it in the bottom panel — the SAME closure the
+   *  panel.toggleAgent keybinding runs, so the button and the chord are one action. */
+  toggleAgent: () => void;
 }
 
 class $StatusBar {
@@ -46,10 +49,12 @@ class $StatusBar {
   private readonly shortcutHelpButton: TextRenderable;
   private readonly settingsButton: TextRenderable;
   private readonly terminalButton: TextRenderable;
+  private readonly agentButton: TextRenderable;
   private readonly clock: TextRenderable;
   private hover = false;
   private settingsHover = false;
   private terminalHover = false;
+  private agentHover = false;
   // The clock's single re-armed minute-boundary timer (NOT a per-second interval): the only periodic
   // wake at rest, once/min, so it forces the demand-driven loop to repaint the new minute without
   // turning idle into a busy loop.
@@ -86,6 +91,17 @@ class $StatusBar {
       height: 1,
       selectable: false,
     });
+    // Agent-pane affordance: a hit-tested single-cell glyph, LEFT of the terminal button. Click runs the
+    // SAME toggleAgent closure the panel.toggleAgent chord runs (lazy-init + show/activate the agent pane
+    // in the bottom panel); it lights accent while the agent pane is the visible one — a click-to-open
+    // path that does not depend on a modifier chord the host terminal may swallow.
+    this.agentButton = new TextRenderable(renderer, {
+      id: 'status-agent-button',
+      content: ` ${deps.theme.agentIcon} `,
+      width: 3,
+      height: 1,
+      selectable: false,
+    });
     // Settings (gear) affordance: a hit-tested single-cell glyph pinned to the right end, LEFT of the
     // `?` button. Click toggles the settings panel through the exclusive-overlay coordinator (the same
     // way `?` toggles the cheat-sheet); hover shows a tooltip with the bound open chord.
@@ -105,6 +121,7 @@ class $StatusBar {
     });
     this.bar.add(spacer);
     this.bar.add(this.clock);
+    this.bar.add(this.agentButton);
     this.bar.add(this.terminalButton);
     this.bar.add(this.settingsButton);
     this.bar.add(this.shortcutHelpButton);
@@ -126,6 +143,25 @@ class $StatusBar {
     this.terminalButton.onMouseOut = () => {
       if (this.terminalHover) {
         this.terminalHover = false;
+        renderer.requestRender();
+      }
+      deps.tooltip.clear();
+    };
+    this.agentButton.onMouseDown = () => {
+      deps.toggleAgent();
+      renderer.requestRender();
+    };
+    this.agentButton.onMouseMove = (event) => {
+      if (!this.agentHover) {
+        this.agentHover = true;
+        renderer.requestRender();
+      }
+      const openChordHint = deps.keybindings.bindingHint('panel.toggleAgent', 'global');
+      deps.tooltip.point(`Agent (Claude)${openChordHint ? ` (${openChordHint})` : ''}`, event.x, event.y);
+    };
+    this.agentButton.onMouseOut = () => {
+      if (this.agentHover) {
+        this.agentHover = false;
         renderer.requestRender();
       }
       deps.tooltip.clear();
@@ -240,11 +276,17 @@ class $StatusBar {
     // The `?` help affordance brightens on hover and while its sheet is open.
     this.shortcutHelpButton.fg =
       this.hover || this.deps.shortcutHelp.open.value ? palette.accent : palette.dim;
-    // The terminal affordance: current-tier glyph, accent while HOVERED or while the panel is OPEN
-    // (so it reads as a live open/closed indicator, mirroring the gear/`?` lit-while-active pattern).
+    // The terminal + agent affordances: current-tier glyph, accent while HOVERED or while THAT pane is
+    // the visible one in the shared bottom slot (a live open/active indicator; now scoped by activeId so
+    // the two buttons light independently, mirroring the gear/`?` lit-while-active pattern).
+    const panelVisible = this.deps.panelHost.visible.value;
+    const activeId = this.deps.panelHost.activeId.value;
     this.terminalButton.content = ` ${this.deps.theme.terminalIcon} `;
     this.terminalButton.fg =
-      this.terminalHover || this.deps.panelHost.visible.value ? palette.accent : palette.dim;
+      this.terminalHover || (panelVisible && activeId === 'terminal') ? palette.accent : palette.dim;
+    this.agentButton.content = ` ${this.deps.theme.agentIcon} `;
+    this.agentButton.fg =
+      this.agentHover || (panelVisible && activeId === 'agent') ? palette.accent : palette.dim;
     // The gear affordance mirrors it: current-tier glyph, brightening on hover / while settings is open.
     this.settingsButton.content = ` ${this.deps.theme.settingsIcon} `;
     this.settingsButton.fg =

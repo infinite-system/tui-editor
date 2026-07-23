@@ -126,6 +126,12 @@ const TERMINAL_ICON: Record<GlyphLevel, string> = {
   ascii: '>',
 };
 
+const AGENT_ICON: Record<GlyphLevel, string> = {
+  nerd: '\u{f544}', // fa robot (the native agent pane)
+  unicode: '✦', // matches AgentPaneContent's switcher glyph
+  ascii: 'A',
+};
+
 // Find-bar action glyph ladder. nerd = nerd-font glyphs; unicode = single-cell symbols; ascii = the
 // letter/arrow fallback so a no-nerd-font terminal still reads. Each glyph is exactly one cell.
 const FIND_ICONS: Record<GlyphLevel, FindIconSet> = {
@@ -144,6 +150,10 @@ function $settingsIconFor(level: GlyphLevel): string {
 
 function $terminalIconFor(level: GlyphLevel): string {
   return TERMINAL_ICON[level];
+}
+
+function $agentIconFor(level: GlyphLevel): string {
+  return AGENT_ICON[level];
 }
 
 function $actionIconsFor(level: GlyphLevel): ActionIconSet {
@@ -188,6 +198,7 @@ class $ThemeIcons {
   static iconSetFor = $iconSetFor;
   static settingsIconFor = $settingsIconFor;
   static terminalIconFor = $terminalIconFor;
+  static agentIconFor = $agentIconFor;
   static actionIconsFor = $actionIconsFor;
   static checkboxIconsFor = $checkboxIconsFor;
   static activityIconsFor = $activityIconsFor;

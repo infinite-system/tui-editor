@@ -127,6 +127,7 @@ function $buildRootView(
   overlayCoordinator: OverlayCoordinator.Instance,
   panelHost: PanelHost.Instance,
   toggleTerminal: () => void,
+  toggleAgent: () => void,
   activateQuickOpen: () => void,
   revealFindMatch: () => void,
 ): RootView {
@@ -330,6 +331,7 @@ function $buildRootView(
     settingsPanel,
     panelHost,
     toggleTerminal,
+    toggleAgent,
   });
 
   // --- bottom panel slot (the composable PanelHost region) --------------------------------------

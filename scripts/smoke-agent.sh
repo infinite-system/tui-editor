@@ -38,6 +38,19 @@ if "$H" ready "$S" 20 >/dev/null; then echo "  PASS  boot: ready+quiescent"; els
 fi
 chk "agent pane hidden at boot" "$(f terminalVisible)" "false"
 
+echo "== click the status-bar AGENT glyph opens the pane (the chord-free path) =="
+# Cluster pinned to the right edge, 3 cells each: [ agent ][ terminal ][ gear ][ ? ]. The terminal
+# button's middle cell is width-8 (per smoke-terminal); the agent button sits one button (3 cells) left.
+sb_width="$(f width)"; sb_height="$(f height)"
+agent_btn_x=$(( sb_width - 11 )); status_row=$(( sb_height - 1 ))
+"$H" click "$S" "$agent_btn_x" "$status_row" >/dev/null
+sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
+chk "clicking the agent glyph OPENS the pane" "$(f terminalVisible)" "true"
+chk "active pane content is the agent (via button)" "$(f panelActiveContent)" "agent"
+"$H" click "$S" "$agent_btn_x" "$status_row" >/dev/null
+sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
+chk "clicking the agent glyph again HIDES the pane" "$(f terminalVisible)" "false"
+
 echo "== toggle the agent pane (Ctrl+Shift+A) opens it in the bottom slot, focused =="
 toggle_agent
 chk "panel visible after toggle" "$(f terminalVisible)" "true"

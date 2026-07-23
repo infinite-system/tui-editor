@@ -36,6 +36,10 @@ class $Theme {
   get terminalIcon(): string {
     return ThemeIcons.Class.terminalIconFor(this.glyphLevel.value);
   }
+
+  get agentIcon(): string {
+    return ThemeIcons.Class.agentIconFor(this.glyphLevel.value);
+  }
   /** Git changes-row action button glyphs at the current glyph level (nerd → unicode → ascii). */
   get actionIcons(): ActionIconSet {
     return ThemeIcons.Class.actionIconsFor(this.glyphLevel.value);

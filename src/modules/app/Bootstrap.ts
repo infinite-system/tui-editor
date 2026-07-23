@@ -197,6 +197,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     overlayCoordinator,
     panelHost,
     toggleTerminal,
+    toggleAgent,
     activateQuickOpenSelection,
     revealFindMatch,
   );
