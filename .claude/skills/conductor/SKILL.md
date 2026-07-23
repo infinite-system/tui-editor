@@ -198,6 +198,13 @@ LOAD-BEARING, user-facing behavior that no smoke drives?* If so, ratchet it in. 
   surface. Only load-bearing, user-relied-on behaviors earn a smoke — not every internal detail. An
   unrunnably-slow gate destroys the doubt-elimination it exists to provide.
 
+**Harness blind spot.** The tmux/SGR harness proves LOGIC but cannot exercise terminal-SPECIFIC paths —
+a terminal's mouse protocol (SGR-1006 vs X10, the 223-col clamp), glyph tier, or escape-sequence support.
+A real user "break" that won't reproduce in-harness is often such a path (the macOS Terminal.app mouse
+case). Do NOT fabricate a code fix for a bug that doesn't reproduce (it ships a no-op) — diagnose the
+terminal-capability path defensively from the code, and flag that final verification needs the user's
+real terminal, not the harness.
+
 ## Loop shape (the hourly orchestration cron)
 1. **Drain the real backlog first** — the task list (HANDOFF → the numbered UI tasks → polish
    requests → follow-ups). Ensure the fork is driving each unfinished task; nudge or take over.
