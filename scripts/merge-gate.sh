@@ -110,6 +110,7 @@ if [ "${FAST:-0}" != "1" ]; then
   step "smoke: diagnostics" bash scripts/smoke-diagnostics.sh
   step "smoke: image-preview" bash scripts/smoke-image-preview.sh
   step "smoke: agent"       bash scripts/smoke-agent.sh
+  step "smoke: agent-pane-ux" bash scripts/smoke-agent-pane-ux.sh
   # Audio narration (third projection): drives an agent turn with narration OFF (silent) then ON (speaks
   # the completed turn through the mock TTS backend), plus barge-in. No audio in CI (INVAR_TTS_BACKEND=mock).
   step "smoke: audio-narration" bash scripts/smoke-audio-narration.sh

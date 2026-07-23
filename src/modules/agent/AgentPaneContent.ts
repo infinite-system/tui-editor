@@ -1,16 +1,26 @@
 // The agent session as a PaneContent — the adapter that makes an AgentSession a first-class occupant of
-// the composable PanelHost. It owns only the COMPOSER buffer (the line being typed); all session state
-// lives below in the AgentSession (the single source of truth). render() delegates to AgentPaneRenderer,
-// handleKey() edits the composer (printable → append, Backspace → delete, Enter → send + clear), and
-// renderRevision fuses the session's paint pulse with composer edits so both repaint through the one
-// frame effect. The host sees only a generic PaneContent.
+// the composable PanelHost. It owns the COMPOSER buffer and the pane's VIEW state (scroll position, the
+// per-entry expand set, the spinner animator); the session below owns the transcript (single source of
+// truth). None of this view state is a parallel history — the expand set holds entry INDICES, the scroll
+// holds a line offset — so the renderer stays a pure projection.
+//
+// render() projects the transcript fresh each frame (AgentTranscriptProjection), windows it tail-anchored
+// (auto-stick to newest unless the user scrolled up), and hands the already-windowed rows + spinner +
+// composer to AgentPaneRenderer. handleKey() edits the composer AND scrolls (PageUp/Down always, arrows
+// when the composer is empty); wheel + click route through onWheel/onPointerDown. renderRevision fuses the
+// session pulse, composer edits, the spinner frame, and view-state bumps so all repaint through one frame
+// effect.
 //
 // invariant: The agent pane is a PaneContent citizen, not a special case (src/modules/agent/agent.invariants.md)
 // invariant: The transcript is the single source of agent session truth (src/modules/agent/agent.invariants.md)
 import type { StyledText, KeyEvent } from '@opentui/core';
-import { computed, ref, type Ref } from 'vue';
+import { computed, ref, watch, type Ref } from 'vue';
 import type { PaneContent, PaneRenderContext } from '../ui/PaneContent';
-import { AgentPaneRenderer } from './AgentPaneRenderer';
+import type { GlyphLevel } from '../theme/TerminalCapabilities';
+import { AgentPaneRenderer, type SpinnerLine } from './AgentPaneRenderer';
+import { AgentTranscriptProjection, type ProjectedLine } from './AgentTranscriptProjection';
+import { AgentSpinner } from './AgentSpinner';
+import { AgentSpinnerFrames } from './AgentSpinnerFrames';
 import type { AgentSession } from './AgentSession';
 
 /** A printable single character (no modifier, code ≥ 32, not DEL) — same test the editor input uses. */
@@ -27,13 +37,49 @@ class $AgentPaneContent implements PaneContent {
   readonly icon = '✦';
 
   private readonly composer = ref('');
-  /** Fuses the session's paint pulse with composer edits — the frame effect tracks both. */
+  /** Fuses the session pulse, composer edits, the spinner frame, and view-state changes. */
   private readonly revision: Ref<number>;
+  /** Bumped on scroll/collapse changes (which carry no session/composer change) so they repaint. */
+  private readonly viewRevision = ref(0);
+  /** The spinner animator — ticks only while the session is busy (idle quiescence at rest). */
+  private readonly spinner = new AgentSpinner.Class();
+  /** Stops the status→spinner watcher on dispose. */
+  private readonly stopStatusWatch: () => void;
+
+  /** Transcript indices the user has expanded (tool rows). Default (absent) = collapsed. View state,
+   *  NOT a transcript copy. */
+  private readonly expandedIndices = new Set<number>();
+  /** True while the view auto-sticks to the newest line; false once the user scrolls up. */
+  private stickToBottom = true;
+  /** First visible line index while unstuck (absolute from the top of the projection). */
+  private scrollTopLines = 0;
+
+  /** Last render's geometry, so wheel/keys can clamp scroll without re-projecting. */
+  private lastBodyHeight = 1;
+  private lastTotalLines = 0;
   /** The pane height at last render, so caret() can pin the composer caret to the bottom row. */
   private lastHeight = 1;
+  /** The body rows painted last frame (top-padded to bodyHeight) — the hit map for onPointerDown. */
+  private lastBodyRows: readonly ProjectedLine[] = [];
+  private lastGlyphLevel: GlyphLevel = 'unicode';
 
   constructor(private readonly session: AgentSession.Instance) {
-    this.revision = computed(() => this.session.renderRevision.value + this.composer.value.length);
+    this.revision = computed(
+      () =>
+        this.session.renderRevision.value +
+        this.composer.value.length +
+        this.spinner.frame.value +
+        this.viewRevision.value,
+    );
+    // The spinner ticks ONLY while busy: arm on the first busy status, tear down at idle/ended.
+    this.stopStatusWatch = watch(
+      () => this.session.busy,
+      (busy) => {
+        if (busy) this.spinner.start();
+        else this.spinner.stop();
+      },
+      { immediate: true },
+    );
   }
 
   /** Read-only access to the underlying session — so an additional PROJECTION of the same transcript
@@ -50,22 +96,99 @@ class $AgentPaneContent implements PaneContent {
     return this.revision;
   }
 
+  /** True while the view auto-sticks to the newest line (drives the driving smoke's scroll assertion). */
+  get stuckToBottom(): boolean {
+    return this.stickToBottom;
+  }
+
+  /** How many transcript entries are currently expanded (drives the driving smoke's collapse assertion). */
+  get expandedCount(): number {
+    return this.expandedIndices.size;
+  }
+
   render(context: PaneRenderContext): StyledText {
     this.lastHeight = context.height;
+    this.lastGlyphLevel = context.glyphLevel;
+    const busy = this.session.busy;
+    const bodyHeight = Math.max(1, context.height - 1 - (busy ? 1 : 0)); // composer + (optional spinner)
+
+    const lines = AgentTranscriptProjection.Class.project(
+      this.session.transcript,
+      context.palette,
+      context.glyphLevel,
+      context.width,
+      this.expandedIndices,
+    );
+    this.lastBodyHeight = bodyHeight;
+    this.lastTotalLines = lines.length;
+
+    const firstLine = AgentTranscriptProjection.Class.firstVisibleLine(
+      lines.length,
+      bodyHeight,
+      this.scrollTopLines,
+      this.stickToBottom,
+    );
+    // Keep scrollTopLines coherent with the resolved window, so a later wheel step continues smoothly.
+    this.scrollTopLines = firstLine;
+
+    const visible = lines.slice(firstLine, firstLine + bodyHeight);
+    // Tail-anchor: a short transcript pads with blank lines at the TOP so newest sits above the composer.
+    const bodyRows: ProjectedLine[] = [];
+    for (let blank = visible.length; blank < bodyHeight; blank += 1)
+      bodyRows.push({ text: '', color: context.palette.fg, bold: false, entryIndex: -1, toggleable: false });
+    for (const line of visible) bodyRows.push(line);
+    this.lastBodyRows = bodyRows;
+
+    const spinner: SpinnerLine | null = busy
+      ? {
+          glyph: AgentSpinnerFrames.Class.glyphFor(this.spinner.frame.value, context.glyphLevel),
+          label: AgentSpinnerFrames.Class.labelFor(this.session.status.value, this.runningToolName(), context.glyphLevel),
+          color: context.palette.func,
+        }
+      : null;
+
     return AgentPaneRenderer.Class.render({
-      session: this.session,
       palette: context.palette,
-      width: context.width,
-      height: context.height,
+      bodyRows,
+      spinner,
       composer: this.composer.value,
       focused: context.focused,
     });
+  }
+
+  /** The name of the tool whose result is still pending, for the "Running <tool>…" label. */
+  private runningToolName(): string | null {
+    const transcript = this.session.transcript;
+    for (let index = transcript.length - 1; index >= 0; index -= 1) {
+      const entry = transcript[index];
+      if (entry?.role === 'tool-use') return entry.name;
+      if (entry?.role === 'tool-result') return null;
+    }
+    return null;
   }
 
   handleKey(key: KeyEvent): boolean {
     if (key.name === 'return') {
       this.session.send(this.composer.value);
       this.composer.value = '';
+      this.stickToBottom = true; // sending re-anchors to the newest output
+      return true;
+    }
+    if (key.name === 'pageup') {
+      this.scrollByRows(-(this.lastBodyHeight - 1));
+      return true;
+    }
+    if (key.name === 'pagedown') {
+      this.scrollByRows(this.lastBodyHeight - 1);
+      return true;
+    }
+    // Arrow scroll only when the composer is empty, so typing/editing keeps the arrows.
+    if (key.name === 'up' && this.composer.value.length === 0) {
+      this.scrollByRows(-1);
+      return true;
+    }
+    if (key.name === 'down' && this.composer.value.length === 0) {
+      this.scrollByRows(1);
       return true;
     }
     if (key.name === 'backspace') {
@@ -77,6 +200,32 @@ class $AgentPaneContent implements PaneContent {
       return true;
     }
     return false;
+  }
+
+  /** A wheel gesture over the pane — signed content rows (negative = up/older). */
+  onWheel(rowDelta: number): boolean {
+    this.scrollByRows(rowDelta);
+    return true;
+  }
+
+  /** A pointer-down inside the pane at content-local (column, row): toggle a tool row's expand state. */
+  onPointerDown(_column: number, row: number): boolean {
+    const line = this.lastBodyRows[row];
+    if (!line || !line.toggleable || line.entryIndex < 0) return false;
+    if (this.expandedIndices.has(line.entryIndex)) this.expandedIndices.delete(line.entryIndex);
+    else this.expandedIndices.add(line.entryIndex);
+    this.viewRevision.value += 1;
+    return true;
+  }
+
+  /** Move the scroll window by whole rows and re-resolve tail-anchoring, then request a repaint. */
+  private scrollByRows(deltaRows: number): void {
+    const maximumTop = Math.max(0, this.lastTotalLines - this.lastBodyHeight);
+    const base = this.stickToBottom ? maximumTop : this.scrollTopLines;
+    const next = Math.max(0, Math.min(base + deltaRows, maximumTop));
+    this.scrollTopLines = next;
+    this.stickToBottom = next >= maximumTop; // reaching the bottom re-arms auto-stick
+    this.viewRevision.value += 1;
   }
 
   caret(): { column: number; row: number } | null {
@@ -97,6 +246,8 @@ class $AgentPaneContent implements PaneContent {
   }
 
   dispose(): void {
+    this.stopStatusWatch();
+    this.spinner.dispose();
     this.session.dispose();
   }
 }

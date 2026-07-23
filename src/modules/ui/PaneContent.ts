@@ -11,6 +11,7 @@ import type { StyledText } from '@opentui/core';
 import type { KeyEvent } from '@opentui/core';
 import type { Ref } from 'vue';
 import type { Palette } from '../theme/ThemePalettes';
+import type { GlyphLevel } from '../theme/TerminalCapabilities';
 
 /** What a pane content is handed to render itself into the panel slot. */
 export interface PaneRenderContext {
@@ -19,6 +20,8 @@ export interface PaneRenderContext {
   /** Inner cell rows available to the content. */
   height: number;
   palette: Palette;
+  /** The active glyph fallback tier (nerd → unicode → ascii) — one source for every pane's icons. */
+  glyphLevel: GlyphLevel;
   /** True while the panel owns the keyboard (content may paint focus affordances). */
   focused: boolean;
 }
@@ -41,6 +44,12 @@ export interface PaneContent {
   caret?(): { column: number; row: number } | null;
   /** Consume a keystroke while the panel is focused; return true if it was handled. */
   handleKey(key: KeyEvent): boolean;
+  /** Optional: a wheel gesture over this cell, in signed content rows (negative = toward older/up,
+   *  positive = toward newer/down); magnitude is the settings-sourced step. True if it was consumed. */
+  onWheel?(rowDelta: number): boolean;
+  /** Optional: a pointer-down inside this cell at content-local (column, row) — for click hit-testing
+   *  (e.g. toggling a collapsed row). True if it was consumed (a repaint is requested for it). */
+  onPointerDown?(column: number, row: number): boolean;
   /** The panel's region resized to this many cell columns × rows. */
   onResize(columns: number, rows: number): void;
   /** The panel gained keyboard focus. */

@@ -397,10 +397,24 @@ function $buildRootView(
     const existing = panelCellViews[index];
     if (existing) return existing;
     const body = new TextRenderable(renderer, { id: `panel-cell-${index}`, content: '', wrapMode: 'none', flexShrink: 0 });
-    // Focus-follows-click at the CELL grain: clicking a cell body focuses the panel and that cell.
-    body.onMouseDown = () => {
+    // Focus-follows-click at the CELL grain: clicking a cell body focuses the panel and that cell, then
+    // routes the click to the content at content-local coordinates (for row hit-testing, e.g. toggling
+    // a collapsed tool row in the agent pane).
+    body.onMouseDown = (event) => {
       panelHost.focus();
       panelHost.focusCell(index);
+      const content = panelHost.resolvedCells[index]?.content;
+      content?.onPointerDown?.((event.x as number) - (body.x as number), (event.y as number) - (body.y as number));
+      renderer.requestRender();
+    };
+    // Vertical wheel over a cell scrolls its content (the agent pane's transcript). The pane WRAPS —
+    // horizontal wheel is intentionally ignored (no horizontal scroll). Reuses the settings-sourced step.
+    body.onMouseScroll = (event) => {
+      const content = panelHost.resolvedCells[index]?.content;
+      if (!content?.onWheel) return;
+      const direction = event.scroll?.direction;
+      if (direction !== 'up' && direction !== 'down') return;
+      content.onWheel((direction === 'up' ? -1 : 1) * wheelStep(event));
       renderer.requestRender();
     };
     let dividerBox: BoxRenderable | null = null;
@@ -902,7 +916,7 @@ function $buildRootView(
         const cellFocused = panelFocused && index === focusedIndex;
         view.body.width = span.columns;
         view.body.fg = palette.fg;
-        view.body.content = span.content.render({ width: span.columns, height: cellRows, palette, focused: cellFocused });
+        view.body.content = span.content.render({ width: span.columns, height: cellRows, palette, glyphLevel: theme.glyphLevel.value, focused: cellFocused });
         if (view.dividerBox) view.dividerBox.backgroundColor = panelFocused ? palette.borderActive : palette.border;
       });
     }

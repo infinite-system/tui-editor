@@ -236,6 +236,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   // visual→decorations, audio→speech). Created alongside the agent pane so it subscribes to the SAME
   // AgentSession; null until the agent pane is ensured. Barge-in + dispose route through it.
   let narration: NarrationProjection.Instance | null = null;
+  // The agent pane instance once ensured — the frame dump reads its view state (scroll/collapse) so the
+  // driving smoke asserts the UX without pane-scraping. Null until the pane is first toggled.
+  let agentPaneContent: AgentPaneContent.Model | null = null;
   const ensureAgent = (): void => {
     if (agentRegistered) return;
     agentRegistered = true;
@@ -248,6 +251,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     });
     panelHost.register(agentPane);
     if (agentPane instanceof AgentPaneContent.Class) {
+      agentPaneContent = agentPane;
       narration = new NarrationProjection.Class(
         agentPane.agentSession,
         settings.agentAudioNarration,
@@ -463,6 +467,11 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       narrationSpokenCount: narration?.spokenCount.value ?? 0,
       narrationLastSpoken: narration?.lastSpoken.value ?? '',
       narrationBargeInCount: narration?.bargeInCount.value ?? 0,
+      // Agent pane UX view state (drives smoke-agent-pane-ux): busy shows the spinner; stuckToBottom
+      // flips false once the user scrolls up; expandedCount rises when a collapsed tool row is opened.
+      agentBusy: agentPaneContent?.agentSession.busy ?? false,
+      agentStuckToBottom: agentPaneContent?.stuckToBottom ?? true,
+      agentExpandedCount: agentPaneContent?.expandedCount ?? 0,
     });
   };
 
