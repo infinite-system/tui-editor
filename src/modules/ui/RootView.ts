@@ -699,7 +699,11 @@ function $buildRootView(
     const sourcePaneFocused = workspaceSet.active.focus.value === 'editor' &&
       !(editorContentMount.markdownSplitView?.previewFocused ?? false);
     editorArea.borderColor = sourcePaneFocused ? palette.borderActive : palette.border;
-    editorArea.title = workspaceSet.active.editor.hasDocument.value ? workspaceSet.active.editor.title : 'Editor';
+    // No filename legend on the editor-pane border: the path now lives in the buffer-tab breadcrumb
+    // (project › dir › file). Keep the border BOX (codeBody coords stay stable) but drop the redundant
+    // '╭─README.md' legend. Safe: the app's find/paste source identity is the document PATH, never this
+    // display title — the only thing that ever keyed off the legend text was a test probe (now fixed).
+    editorArea.title = '';
     editorArea.titleColor = sourcePaneFocused ? palette.accent : palette.dim;
     // The diff view has no editor buffer tabs — blank the buffer tab strip while a diff is showing
     // (keep its row so the diff panes don't jump when toggling in/out of a diff).
