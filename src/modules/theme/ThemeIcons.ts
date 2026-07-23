@@ -102,8 +102,20 @@ const ACTIVITY_ICONS: Record<GlyphLevel, ActivityIconSet> = {
   ascii: { files: 'F', sourceControl: 'G', extensions: 'X', accentBar: '|' },
 };
 
+// Status-bar affordance glyph ladder. nerd = fa cog; unicode = the gear ⚙; ascii = `*` so a
+// no-nerd-font terminal still shows a settings mark. Single cell at every tier.
+const SETTINGS_ICON: Record<GlyphLevel, string> = {
+  nerd: '\u{f013}', // fa cog / gear
+  unicode: '⚙',
+  ascii: '*',
+};
+
 function $iconSetFor(level: GlyphLevel): IconSet {
   return SETS[level];
+}
+
+function $settingsIconFor(level: GlyphLevel): string {
+  return SETTINGS_ICON[level];
 }
 
 function $actionIconsFor(level: GlyphLevel): ActionIconSet {
@@ -130,6 +142,7 @@ function $iconFor(set: IconSet, name: string, isDirectory: boolean, open = false
 
 class $ThemeIcons {
   static iconSetFor = $iconSetFor;
+  static settingsIconFor = $settingsIconFor;
   static actionIconsFor = $actionIconsFor;
   static checkboxIconsFor = $checkboxIconsFor;
   static activityIconsFor = $activityIconsFor;

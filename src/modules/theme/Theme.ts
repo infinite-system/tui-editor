@@ -28,6 +28,10 @@ class $Theme {
   get icons(): IconSet {
     return ThemeIcons.Class.iconSetFor(this.glyphLevel.value);
   }
+  /** Status-bar settings (gear) glyph at the current glyph level (nerd cog → ⚙ → `*`). */
+  get settingsIcon(): string {
+    return ThemeIcons.Class.settingsIconFor(this.glyphLevel.value);
+  }
   /** Git changes-row action button glyphs at the current glyph level (nerd → unicode → ascii). */
   get actionIcons(): ActionIconSet {
     return ThemeIcons.Class.actionIconsFor(this.glyphLevel.value);

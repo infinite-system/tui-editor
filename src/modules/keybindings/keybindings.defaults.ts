@@ -48,6 +48,12 @@ export const canonicalBindings: Keybinding[] = [
   // terminals (CSI 1;2P) and under kitty alike, and taken by nothing else. The sheet lists itself.
   { chord: { key: 'f1', shift: true }, action: 'help.shortcuts' },
   { chord: { key: 'g', ctrl: true }, action: 'git.togglePanel' },
+  // Toggle the bottom panel (integrated terminal). Ctrl+` is the VS Code-parity chord; it is RESERVED
+  // so it fires from any mode — including from inside the focused terminal, to hide it. Ctrl+backtick
+  // is unencodable on some legacy terminals (they send NUL), so F8 is a single-function-key ALIAS that
+  // is always deliverable and drivable (same rationale as F1 aliasing the command palette).
+  { chord: { key: '`', ctrl: true }, action: 'panel.toggleTerminal', reserved: true },
+  { chord: { key: 'f8' }, action: 'panel.toggleTerminal', reserved: true },
   { chord: { key: 'tab' }, action: 'focus.toggle' },
   // Editor buffer tabs (item 10a) — global (work in any focus). Ctrl+Tab needs the kitty keyboard
   // protocol; Ctrl+PageUp/PageDown are the widely-supported equivalents.

@@ -105,13 +105,17 @@ python3 -c "import json,os;p=os.path.expanduser('$SET');d=json.load(open(p));d['
 # (authoritative signal — CPU stays low even while an empty loop ticks, the false-green a pre-fix build
 # shipped). Paired with momentum-glide, these two bound the feel: motion continues when pushed, and the
 # loop halts when left alone.
-echo "== CONTRACT idle-quiescence: at rest the render loop STOPS (frame delta == 0) =="
+# Idle is demand-driven, NOT a busy loop. The status-bar minute-clock is the one legitimate periodic
+# wake — it repaints EXACTLY once per minute at the boundary — so a few-second window sees 0 frames
+# between ticks, at most 1 if a minute boundary falls inside it. A busy loop would be ~90 (30fps×3s):
+# the ≤1 bound cleanly separates the two.
+echo "== CONTRACT idle-quiescence: at rest the render loop STOPS (frame delta <= 1: clock only) =="
 S="bc-idle-$$"; SESSIONS="$SESSIONS $S"
 "$H" launch "$S" 120x40 bun run src/main.ts "$TREE" >/dev/null; "$H" ready "$S" 20 >/dev/null
 "$H" send "$S" Escape >/dev/null; "$H" settle "$S" >/dev/null 2>&1; sleep 1
 istart="$("$H" field "$S" frame)"; sleep 3; iend="$("$H" field "$S" frame)"
-if [ "$(( ${iend:-0} - ${istart:-0} ))" -eq 0 ]; then
-  pass "idle frame delta == 0 over 3s untouched (frame stayed $istart)"
+if [ "$(( ${iend:-0} - ${istart:-0} ))" -le 1 ]; then
+  pass "idle frame delta <= 1 over 3s untouched (frame $istart -> $iend; clock tick at most)"
 else
   bad "idle loop still ticking ($istart -> $iend) — rendering is NOT demand-driven"
 fi
