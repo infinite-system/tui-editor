@@ -183,6 +183,21 @@ Verify EVERYTHING by driving the real user path (tmux harness + frame probe), ne
 values. Reproduce before diagnosing. Ratchet a verified behavior into a gated smoke so it can't
 silently regress.
 
+**Smoke-coverage ratchet (on every ALL-PASS gate).** A green gate only proves what the smokes
+actually DRIVE — an invariant with no driving smoke is a silent hole (the drag-select regression:
+the "scrollable surface is drag-selectable" invariant existed, but no smoke drove the hover card's
+drag, so the gate stayed green while it broke). So on ALL-PASS, ask: *did this change touch or add a
+LOAD-BEARING, user-facing behavior that no smoke drives?* If so, ratchet it in. Rules:
+- **Regression → permanent smoke (HARD).** Every user-flagged bug fix MUST land with a driven smoke
+  for that behavior, so it can never silently regress again.
+- **Invariant without a driving smoke = a coverage hole** — prefer to close it. A future checker that
+  maps invariants↔smokes (by annotation) and flags the un-driven ones makes this objective, the way
+  `check_invariants --refs` did for annotations. Build it when there's slack.
+- **Guard against smoke bloat (the gate is a ~7min time budget).** Grow coverage in ASSERTIONS folded
+  into existing smokes over new slow tmux-launch scripts; add a NEW smoke only for a genuinely new
+  surface. Only load-bearing, user-relied-on behaviors earn a smoke — not every internal detail. An
+  unrunnably-slow gate destroys the doubt-elimination it exists to provide.
+
 ## Loop shape (the hourly orchestration cron)
 1. **Drain the real backlog first** — the task list (HANDOFF → the numbered UI tasks → polish
    requests → follow-ups). Ensure the fork is driving each unfinished task; nudge or take over.
