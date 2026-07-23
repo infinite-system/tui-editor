@@ -809,6 +809,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'editor.delete': () => {
       if (!view.activeMarkdownSplitView()?.previewFocused) workspaceSet.active.editor.deleteChar();
     },
+    'editor.deleteToLineStart': () => {
+      if (!view.activeMarkdownSplitView()?.previewFocused) workspaceSet.active.editor.deleteToLineStart();
+    },
     'edit.deletePreviousWord': () => {
       if (!view.activeMarkdownSplitView()?.previewFocused) commands.run('edit.deletePreviousWord');
     },
