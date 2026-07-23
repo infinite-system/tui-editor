@@ -36,6 +36,11 @@ class $Files {
     return basename(path);
   }
 
+  /** Absolute form of a path (resolves '.', '..', and relative paths against the process cwd). */
+  static absolute(path: string): string {
+    return resolve(path);
+  }
+
   static extname(path: string): string {
     return extname(path);
   }

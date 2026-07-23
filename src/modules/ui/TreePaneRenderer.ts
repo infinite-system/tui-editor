@@ -49,7 +49,8 @@ function $renderTree(context: TreePaneRenderContext): StyledText {
     const selected = rowIndex === selectedIndex;
     const selectionFocused = filesFocused;
     const hovered = rowIndex === hoveredIndex;
-    const marker = selected ? '›' : ' ';
+    // No selection arrow — the row background is the selection signal (the '›' marker was noise).
+    const marker = ' ';
     const indent = '  '.repeat(row.depth);
     const icon = context.icon(row.name, row.isDir, row.expanded);
     const completeLabel = `${marker}${indent}${icon} ${row.name}`;

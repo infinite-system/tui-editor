@@ -13,6 +13,9 @@ test_home="$(mktemp -d /tmp/tui-selection-home.XXXXXX)"
 session_name="selection-$$"
 failure_count=0
 focused_selection_color='69,71,90,255'
+# The git changes/staging panel paints its selected rows with the softer-blue selectionMuted token
+# (#33415e) so a multi-selection stays legible; tree + commit-log still use the standard selection bg.
+changes_focused_selection_color='51,65,94,255'
 unfocused_selection_color='41,44,60,255'
 
 cleanup() {
@@ -187,7 +190,7 @@ expect_row_background 'file-10.txt' "$unfocused_selection_color" 'clicked change
 
 "$harness" send "$session_name" C-g >/dev/null
 settle
-expect_row_background 'file-10.txt' "$focused_selection_color" 'refocused changes selection paints the full token'
+expect_row_background 'file-10.txt' "$changes_focused_selection_color" 'refocused changes selection paints the full token'
 
 tmux send-keys -t "$session_name" -l "$(printf '\033[<35;11;7M')"
 settle
@@ -198,7 +201,7 @@ changes_selection_before_scroll="$(field gitChangesIndex)"
 settle
 expect_equal "$(field gitChangesIndex)" "$changes_selection_before_scroll" 'changes wheel kept the selected item'
 expect_greater_than "$(field changesScrollTop)" '0' 'changes wheel moved only the viewport'
-expect_row_background 'file-10.txt' "$focused_selection_color" 'changes highlight travelled with its item after scroll'
+expect_row_background 'file-10.txt' "$changes_focused_selection_color" 'changes highlight travelled with its item after scroll'
 
 "$harness" send "$session_name" Tab >/dev/null
 settle
@@ -209,7 +212,7 @@ expect_row_background 'file-10.txt' "$unfocused_selection_color" 'blurred change
 "$harness" send "$session_name" Down >/dev/null
 settle
 expect_equal "$(field gitChangesIndex)" '11' 'refocused changes arrow resumed one item after selection'
-expect_row_background 'file-11.txt' "$focused_selection_color" 'keyboard-moved changes selection paints full token'
+expect_row_background 'file-11.txt' "$changes_focused_selection_color" 'keyboard-moved changes selection paints full token'
 
 echo '== commit log: click selection survives scroll and blur, then keyboard resumes =='
 # Commit-log row 10 is commit-14 before expansion; it is at screen row 29 in this fixed fixture.
