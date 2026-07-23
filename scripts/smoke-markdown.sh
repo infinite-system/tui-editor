@@ -169,7 +169,7 @@ if awk "BEGIN { exit !($ratio_before_drag <= 0.3) }"; then
 else
   divider_target_column=$((divider_column - 10))
 fi
-"$HARNESS" drag "$SESSION_NAME" "$divider_column" $((8 + content_offset)) "$divider_target_column" $((8 + content_offset)) >/dev/null
+"$HARNESS" drag "$SESSION_NAME" "$divider_column" $((9 + content_offset)) "$divider_target_column" $((9 + content_offset)) >/dev/null
 sleep 0.7
 settle
 persisted_ratio="$(field markdownSplitRatio)"
@@ -197,7 +197,7 @@ selection_column=$((preview_border_column + 5))
 # Press near the top of the preview text (shifted down with the workspace strip); HOLD/RELEASE stay at
 # the terminal's last rows -- a fixed screen position at the pane bottom that the strip growth does not
 # move -- so the autoscroll keeps advancing before release.
-printf -v selection_press '\033[<0;%d;%dM' "$((selection_column + 1))" "$((4 + content_offset))"
+printf -v selection_press '\033[<0;%d;%dM' "$((selection_column + 1))" "$((5 + content_offset))"
 printf -v selection_drag_inside '\033[<32;%d;%dM' "$((selection_column + 1))" 35
 printf -v selection_drag_edge '\033[<32;%d;%dM' "$((selection_column + 1))" 40
 printf -v selection_release '\033[<0;%d;%dm' "$((selection_column + 1))" 40
@@ -225,7 +225,7 @@ else
 fi
 
 source_border_column="$(frame_value source-border-column)"
-"$HARNESS" click "$SESSION_NAME" "$((source_border_column + 8))" $((4 + content_offset)) >/dev/null
+"$HARNESS" click "$SESSION_NAME" "$((source_border_column + 8))" $((5 + content_offset)) >/dev/null
 revision_before_paste="$(field bufferRevision)"
 "$HARNESS" send "$SESSION_NAME" C-v >/dev/null
 sleep 1.0
@@ -242,7 +242,7 @@ echo '== Ctrl+F keeps independent source and preview state =='
 sleep 0.4
 "$HARNESS" send "$SESSION_NAME" Escape >/dev/null
 preview_border_column="$(frame_value preview-border-column)"
-"$HARNESS" click "$SESSION_NAME" "$((preview_border_column + 5))" $((3 + content_offset)) >/dev/null
+"$HARNESS" click "$SESSION_NAME" "$((preview_border_column + 5))" $((4 + content_offset)) >/dev/null
 "$HARNESS" send "$SESSION_NAME" C-f >/dev/null
 for character in R e n d e r e d; do "$HARNESS" send "$SESSION_NAME" "$character" >/dev/null; done
 sleep 0.5

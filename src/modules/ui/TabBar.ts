@@ -101,6 +101,18 @@ class $TabBar {
     return result.text;
   }
 
+  /** Render the breadcrumb bar (active file's path) that sits under the buffer strip. Display only —
+   *  no interaction state, so nothing is kept here. */
+  renderBreadcrumb(): StyledText {
+    const { bufferTabStrip, tabBar, workspaceSet, readPalette } = this.deps;
+    return TabBarRenderer.Class.renderBreadcrumb({
+      strip: bufferTabStrip,
+      palette: readPalette(),
+      barWidth: tabBar.width as number, // same full-width as the tab bar
+      projectRoot: workspaceSet.active.root,
+    });
+  }
+
   private workspaceSegmentAt(primaryCoordinate: number): WorkspaceTabBarSegment | null {
     return this.workspaceSegments.find(
       (segment) => primaryCoordinate >= segment.primaryStart && primaryCoordinate < segment.primaryEnd,

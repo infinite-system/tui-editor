@@ -140,12 +140,14 @@ class $ActivityBar {
       const isActive = activeView === item.view;
       const isHovered = this.hoveredItemIndex === index;
       const glyphColor = isActive ? palette.accent : isHovered ? palette.fg : palette.dim;
-      // Top row (4 cols): ONLY the count/flag badge, at TOP-LEFT (col 0) — the same corner the editor
-      // tabs use — the rest padded. It is a placeholder row ABOVE the icon; today only Source Control
-      // fills it (the working-tree change count).
+      // Top row (4 cols): ONLY the count/flag badge, at col 1 (one cell in from the edge) so it reads a
+      // bit closer to the icon below — which is centred at col 2 — rather than jammed against the left
+      // edge. Layout [pad][badge][pad][pad] = 4 cols. A placeholder row ABOVE the icon; today only
+      // Source Control fills it (the working-tree change count).
       const badge = item.view === 'git' && changedCount > 0 ? (changedCount > 9 ? '+' : String(changedCount)) : ' ';
+      chunks.push(fg(palette.fg)(' '));
       chunks.push(fg(palette.accent)(badge));
-      chunks.push(fg(palette.fg)('   '));
+      chunks.push(fg(palette.fg)('  '));
       chunks.push(fg(palette.fg)('\n'));
       // Bottom row (4 cols): the active-item accent bar and the ICON on the SAME row (aligned) — accent
       // at the left edge (col 0, one cell per active item), then ` icon `. The accent reads as the

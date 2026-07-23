@@ -26,13 +26,14 @@ done
 tabs="$(f bufferTabCount)"
 if [ "${tabs:-0}" -ge 8 ] 2>/dev/null; then echo "  PASS  opened $tabs tabs"; else echo "  FAIL  only $tabs tabs"; fail=1; fi
 
-echo "== buffer tabs render a path breadcrumb + a powerline separator between tabs =="
-# FrameProbe remaps the non-ASCII crumb (›) and separator glyphs into its opaque plane, so assert the
-# REAL rendered text via tmux capture. › is the always-present crumb separator; the tab separator is
-# tier-dependent (nerd  / unicode ❯ / ascii >), so match any of them between two crumbs.
+echo "== tabs show FILENAMES; the breadcrumb ROW below shows the active file's path; NO arrow divides tabs =="
+# FrameProbe remaps the non-ASCII crumb (›) / arrow (❯) into its opaque plane, so assert the REAL
+# rendered text via tmux capture. The tab labels are plain filenames + a ✕ close; the path breadcrumb
+# (project › dir › file) now lives on its OWN row directly under the strip, not inside each tab.
 tab_capture="$("$H" capture "$S")"
-if echo "$tab_capture" | grep -q "›"; then echo "  PASS  buffer tab shows a path breadcrumb (project › … › file)"; else echo "  FAIL  no breadcrumb (›) in the buffer tab bar"; fail=1; fi
-if echo "$tab_capture" | grep -qE "› [A-Za-z].* (❯|>|) "; then echo "  PASS  a powerline separator divides adjacent tabs"; else echo "  FAIL  no powerline separator between tabs"; fail=1; fi
+if echo "$tab_capture" | grep -qE "[A-Za-z0-9_-]+\.[A-Za-z]+ +✕"; then echo "  PASS  a buffer tab shows a filename + ✕"; else echo "  FAIL  no filename+✕ tab label"; fail=1; fi
+if echo "$tab_capture" | grep -q "›"; then echo "  PASS  the breadcrumb row shows the active file's path (project › … › file)"; else echo "  FAIL  no breadcrumb (›) row under the tabs"; fail=1; fi
+if echo "$tab_capture" | grep -qE "✕ *❯"; then echo "  FAIL  an arrow (❯) still divides adjacent tabs"; fail=1; else echo "  PASS  no arrow between tabs"; fi
 
 echo "== Ctrl+PageDown / Ctrl+PageUp cycle positionally (advance by one, wrap) =="
 start="$(f activeBufferIndex)"

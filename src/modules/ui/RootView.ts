@@ -202,6 +202,10 @@ function $buildRootView(
     flexDirection: 'column',
   });
   const tabBar = new TextRenderable(renderer, { id: 'editor-tab-bar', content: '', height: 1, width: '100%' });
+  // The path breadcrumb row (VS Code parity): sits directly UNDER the buffer-tab strip and shows the
+  // active file's `project › dir › file` path. Always 1 row (blank when no file is open) so the editor
+  // never jumps as files open/close.
+  const breadcrumbBar = new TextRenderable(renderer, { id: 'editor-breadcrumb-bar', content: '', height: 1, width: '100%' });
   const editorArea = new BoxRenderable(renderer, {
     id: 'editor-area',
     flexGrow: 1,
@@ -236,6 +240,7 @@ function $buildRootView(
   editorArea.add(gutterBody);
   editorArea.add(codeBody);
   editorColumn.add(tabBar);
+  editorColumn.add(breadcrumbBar);
   editorColumn.add(editorArea);
   // A definite-size host for the rich DiffView, swapped IN PLACE of editorArea (add/remove, not runtime
   // flex toggling — OpenTUI doesn't re-lay-out on a runtime flexGrow/height change). flexGrow:1 mirrors
@@ -711,6 +716,9 @@ function $buildRootView(
     // (keep its row so the diff panes don't jump when toggling in/out of a diff).
     const diffShowing = workspaceSet.active.showingDiff.value;
     tabBar.content = diffShowing ? '' : tabBarController.renderBuffer();
+    // Breadcrumb row: the active file's path, blank during a diff or when no file is open.
+    breadcrumbBar.content =
+      diffShowing || !workspaceSet.active.editor.hasDocument.value ? '' : tabBarController.renderBreadcrumb();
     workspaceTabBar.content = tabBarController.renderWorkspace();
     workspaceTabBar.fg = palette.fg;
 

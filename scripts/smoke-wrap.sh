@@ -77,7 +77,7 @@ console.log(base>=0&&row2>base+1&&continuationOk?`OK rows=${1+continuationRows}`
 case "$wrap_gutter" in OK*) echo "  PASS  wrapped rows + blank continuation gutters ($wrap_gutter)";; *) echo "  FAIL  $wrap_gutter"; fail=1;; esac
 
 echo "== caret vs tmux cursor MID-WRAPPED-LINE (click a continuation row, type X) =="
-"$H" click "$S" 60 4 >/dev/null
+"$H" click "$S" 60 5 >/dev/null
 "$H" settle "$S" >/dev/null 2>&1
 "$H" send "$S" -l X >/dev/null
 sleep 0.4; "$H" settle "$S" >/dev/null 2>&1

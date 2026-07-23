@@ -96,8 +96,8 @@ fi
 # strip, so it shifts down by this many rows when the strip grows past 1 line (two-line workspace tabs
 # -> offset 1). Derived from the booted tree frame. Every hardcoded toolbar/body row below adds it.
 content_offset="$("$HARNESS" content-offset "$SESSION_NAME" 2>/dev/null)"; content_offset="${content_offset:-0}"
-toolbar_button_row=$((2 + content_offset))   # 'Open current' / 'Next' affordance row
-toolbar_title_row=$((3 + content_offset))    # 'Base (HEAD)' / 'Current (working)' title row
+toolbar_button_row=$((3 + content_offset))   # 'Open current' / 'Next' affordance row
+toolbar_title_row=$((4 + content_offset))    # 'Base (HEAD)' / 'Current (working)' title row
 if ! open_diff; then
   echo '  FAIL  git panel did not open the changed file in DiffView'
   exit 1
@@ -182,7 +182,7 @@ fi
 echo '== draggable split: live width change and persistence to a second diff open =='
 current_column_before_drag="$(current_working_column)"
 divider_column=$((current_column_before_drag - 2))
-"$HARNESS" drag "$SESSION_NAME" "$divider_column" $((10 + content_offset)) "$((divider_column + 14))" $((10 + content_offset)) >/dev/null
+"$HARNESS" drag "$SESSION_NAME" "$divider_column" $((11 + content_offset)) "$((divider_column + 14))" $((11 + content_offset)) >/dev/null
 sleep 0.4
 settle
 current_column_after_drag="$(current_working_column)"
@@ -216,7 +216,7 @@ selection_column=$((current_title_column + 7))
 # SGR coordinates are 1-based. Press near the top of current text (shifted down with the workspace
 # strip), establish capture inside the pane, then HOLD at the last code row -- a fixed screen position
 # at the pane bottom, which the strip growth does not move -- so SelectionDragBehavior keeps advancing.
-printf -v selection_press '\033[<0;%d;%dM' "$((selection_column + 1))" "$((6 + content_offset))"
+printf -v selection_press '\033[<0;%d;%dM' "$((selection_column + 1))" "$((7 + content_offset))"
 printf -v selection_drag_inside '\033[<32;%d;%dM' "$((selection_column + 1))" 31
 printf -v selection_drag_edge '\033[<32;%d;%dM' "$((selection_column + 1))" 38
 printf -v selection_release '\033[<0;%d;%dm' "$((selection_column + 1))" 38

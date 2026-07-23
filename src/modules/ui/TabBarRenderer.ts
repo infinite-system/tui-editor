@@ -295,19 +295,13 @@ function $renderBufferTabBar(context: BufferTabBarRenderContext): BufferTabBarRe
   if (tabs.length === 0) return { text: new StyledText([fg(palette.dim)('  no open files')]), segments, revealedIndex };
   const barWidth = Math.max(1, context.barWidth);
 
-  // Each tab lays out as ` breadcrumb <dirty> ✕ ` — the ✕ has a space BEFORE and AFTER so it is never
-  // flush against the tab edge, and the padding is identical regardless of label length. The label is
-  // a path BREADCRUMB (project › dir › file) capped per tab: leading dirs collapse to an ellipsis, the
-  // filename always survives.
-  const CRUMB_SEPARATOR = ' › ';
-  const MAX_TAB_BREADCRUMB_WIDTH = 28;
+  // Each tab lays out as ` filename <dirty> ✕ ` — the ✕ has a space BEFORE and AFTER so it is never
+  // flush against the tab edge, and the padding is identical regardless of label length. The tab shows
+  // just the FILENAME; the active file's full path renders in the breadcrumb bar BELOW the strip
+  // (renderBreadcrumbBar), VS Code-style — so tabs stay compact (many fit) while the path is always
+  // legible for the file you're editing.
   const measured = tabs.map((tab) => {
-    const crumbs = Breadcrumb.Class.fitBreadcrumb(
-      Breadcrumb.Class.breadcrumbSegments(tab.identifier, context.projectRoot),
-      MAX_TAB_BREADCRUMB_WIDTH,
-      CRUMB_SEPARATOR.length,
-    );
-    const name = crumbs.join(CRUMB_SEPARATOR);
+    const name = tab.identifier.split('/').filter(Boolean).pop() ?? tab.identifier;
     const labelWidth = 1 + EditorCoordinates.Class.lineWidth(name) + 1 + 1 + 1; // ' ' + name + ' ' + dirtyGlyph + ' '
     return { tab, name, labelWidth, width: labelWidth + 2 }; // + '✕' + trailing ' '
   });
@@ -363,19 +357,14 @@ function $renderBufferTabBar(context: BufferTabBarRenderContext): BufferTabBarRe
   const chunks: TextChunk[] = [];
   let column = 0;
   let endIndex = startIndex;
-  const separatorWidth = EditorCoordinates.Class.lineWidth(context.separatorGlyph);
   for (let index = startIndex; index < measured.length; index += 1) {
     const entry = measured[index];
-    // A 1-cell gap sets the FIRST tab off the splitter; between tabs a powerline separator divides
-    // them. Both are accounted for in the fit check so a tab never half-renders past the edge.
-    const isFirstRendered = index === startIndex;
-    const leadWidth = isFirstRendered ? 1 : separatorWidth;
+    // A 1-cell gap sets every tab apart — the first off the splitter, the rest off the prior tab's
+    // trailing ✕. NO powerline separator between tabs (the ✕ + gap is the divider; an arrow between
+    // tabs read as clutter). The gap is in the fit check so a tab never half-renders past the edge.
+    const leadWidth = 1;
     if (!entry || column + leadWidth + entry.width > tabsAreaWidth) break;
-    if (isFirstRendered) {
-      chunks.push(fg(palette.fg)(' '));
-    } else {
-      chunks.push(fg(palette.border)(context.separatorGlyph));
-    }
+    chunks.push(fg(palette.fg)(' '));
     column += leadWidth;
     const isActive = entry.tab.active;
     const isTabHover = hover?.kind === 'tab' && hover.index === index;
@@ -473,9 +462,41 @@ function $renderBufferTabBar(context: BufferTabBarRenderContext): BufferTabBarRe
   return { text: new StyledText(chunks), segments, revealedIndex };
 }
 
+export interface BreadcrumbBarRenderContext {
+  strip: TabStrip.Instance;
+  palette: Palette;
+  barWidth: number;
+  /** Active workspace root — the breadcrumb is the active file's path relative to it. */
+  projectRoot: string;
+}
+
+// The breadcrumb bar that sits UNDER the buffer-tab strip (VS Code parity): the ACTIVE file's full
+// path as `project › dir › file`, dim for the leading path and bright for the filename, collapsing
+// leading crumbs to `…` only when the whole path exceeds the bar width. Empty when no file is open.
+// This is where the path lives now — the tabs themselves show just the filename, so they stay compact.
+function $renderBreadcrumbBar(context: BreadcrumbBarRenderContext): StyledText {
+  const { strip, palette, projectRoot } = context;
+  const activeTab = strip.items.find((tab) => tab.active);
+  if (!activeTab) return new StyledText([fg(palette.dim)('')]);
+  const barWidth = Math.max(1, context.barWidth);
+  const crumbs = Breadcrumb.Class.fitBreadcrumb(
+    Breadcrumb.Class.breadcrumbSegments(activeTab.identifier, projectRoot),
+    Math.max(1, barWidth - 2), // reserve a leading + trailing pad cell
+    3, // ' › ' separator width
+  );
+  const chunks: TextChunk[] = [fg(palette.fg)(' ')];
+  crumbs.forEach((crumb, index) => {
+    const isFilename = index === crumbs.length - 1;
+    chunks.push(fg(isFilename ? palette.fg : palette.dim)(crumb));
+    if (!isFilename) chunks.push(fg(palette.border)(' › '));
+  });
+  return new StyledText(chunks);
+}
+
 class $TabBarRenderer {
   static renderWorkspace = $renderWorkspaceTabBar;
   static renderBuffer = $renderBufferTabBar;
+  static renderBreadcrumb = $renderBreadcrumbBar;
 }
 
 export namespace TabBarRenderer {
