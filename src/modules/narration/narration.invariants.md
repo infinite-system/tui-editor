@@ -239,3 +239,39 @@ slash-by-slash; a fenced code block read as source.
 **Status:** provisional
 
 **Last refined:** 2026-07-23
+
+### Inline code is spoken as words, not symbols
+
+**Invariant:** Inline code and bare code tokens are made SPEAKABLE before narration, never read
+character-by-character. A code EXPRESSION (brackets `(){}[]`, operators `;=<>`, or several stray
+symbols — e.g. `get hasDocument() { return ref(false) }`) is spoken as the single word "code"; a plain
+identifier is spoken as its split words (`hasDocument` → "has Document", `attachWordWrap` → "attach Word
+Wrap", camelCase / PascalCase / snake_case / kebab all split) with any known file extension dropped
+(`Editor.ts` → "Editor"); a path collapses to its last segment. So piper/espeak never spell out parens,
+braces, dots, or mashed camelCase — the residual garble the user reported after the markdown fix.
+
+**Scope:** `SpeakableText` (`simplifyInlineCode`, `isCodeExpression`, `splitWords`, `dropExtension`,
+`speakBareToken`, `isBareCodeIdentifier`), called by `NarrationProjection` before `tts.speak()`.
+
+**Mechanism:** the inline-code pass classifies each backticked span: path → `lastSegment` + `dropExtension`;
+code expression (`isCodeExpression`) → "code"; else `splitWords(dropExtension(...))`. Bare prose tokens
+get the same treatment via `speakBareToken`, but camelCase splitting requires TWO+ humps
+(`isBareCodeIdentifier`) so ordinary CamelCase brand words ("GitHub", "JavaScript", "iPhone" — one hump)
+are left intact.
+
+**Generates:** dense code-heavy replies that narrate as comprehensible prose — "Editor defines code, and
+code plus attach Word Wrap follow suit" instead of "Editor dot tee-ess … open-paren close-paren
+open-brace …".
+
+**Evidence:** `src/modules/narration/SpeakableText.test.ts` (the exact reported snippet: `Editor.ts` →
+"Editor", the `get hasDocument(){…}` expression → "code", `attachWordWrap` → "attach Word Wrap", with
+no `(){}[];=` and no ".ts" surviving; identifier splitting; brand words spared).
+
+**Impossible if true:** narration spelling parens/braces/dots of a code span; a mashed camelCase
+identifier read as one run; a bare ".ts" spoken as "dot tee-ess"; a common CamelCase brand word split.
+
+**Verification:** `bun test src/modules/narration/SpeakableText.test.ts`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23
