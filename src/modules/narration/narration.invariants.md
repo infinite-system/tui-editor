@@ -169,3 +169,40 @@ failed synth spawn; narration that refuses to exist unless an engine is present.
 **Status:** provisional
 
 **Last refined:** 2026-07-23
+
+### The narration voice is chosen from the discovered set
+
+**Invariant:** The narration voice is picked from the piper voices actually INSTALLED on the machine —
+discovered by scanning the voices directory (`$XDG_DATA_HOME/piper-voices`, else `~/.local/share/…`) AND
+its `library/` subdir for `*.onnx` — never a hardcoded list. The selected voice (`agentNarrationVoice`,
+'' = auto) resolves to that voice's model; an empty or unknown selection falls back to the first
+discovered voice; no voices → null (silent). So every downloaded voice is selectable and the setting can
+never point at a voice that is not present.
+
+**Scope:** `VoiceDiscovery` (`discover`/`names`/`options`/`resolvePath`), `SystemTtsBackend.resolvePiperModel`
++ its `voice` option, `TtsFactory` (threads `voice`), and the settings picker (`agentNarrationVoice`, a
+`dynamic-enum` whose options come from `VoiceDiscovery.options()`).
+
+**Mechanism:** `VoiceDiscovery.discover` lists `*.onnx` in the dir + `library/`, dedupes by name (top
+level wins), sorts. `options()` prepends '' (auto). `resolvePath(selected)` returns the matching model,
+else the first, else null. `SystemTtsBackend.resolvePiperModel` delegates to it (an explicit
+`INVAR_PIPER_MODEL` still overrides, for tests). The settings panel probes `options()` at panel-open so
+the picker lists what is installed right now.
+
+**Generates:** a real voice selector that replaces hand-moving `.onnx` files; the dynamic-enum primitive
+(options-from-a-runtime-probe) reused later for providers/LSP servers.
+
+**Evidence:** `src/modules/narration/VoiceDiscovery.test.ts` (discovery across dir + library/, ignoring
+non-onnx; selected-over-first resolution incl. a library/ voice; INVAR_PIPER_MODEL override);
+`src/modules/settings/SettingsPanel.test.ts` (the voice row is a dynamic-enum whose options are probed at
+open and cycle the setting); `scripts/smoke-voice-picker.sh` (a seeded fake voices dir lists in the
+picker, cycling changes the setting).
+
+**Impossible if true:** a voice option that is not installed; a downloaded voice in `library/` that the
+picker cannot select; a hardcoded voice list.
+
+**Verification:** `bun test src/modules/narration/VoiceDiscovery.test.ts src/modules/settings/SettingsPanel.test.ts && bash scripts/smoke-voice-picker.sh`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23

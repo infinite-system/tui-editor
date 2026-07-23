@@ -61,6 +61,8 @@ export interface SettingsValues {
   agentSkipPermissions: boolean;
   agentModel: string;
   agentAudioNarration: boolean;
+  agentNarrationVoice: string;
+  agentNarrationRate: number;
   // Splitter geometry.
   sidebarWidth: number;
   gitSplitRatio: number;
@@ -178,6 +180,13 @@ class $Settings {
   get agentModel(): Ref<string> {
     return ref('');
   }
+  get agentNarrationVoice(): Ref<string> {
+    return ref('');
+  }
+  /** Piper `--length_scale` (lower = faster; 1.0 = normal). espeak maps it to `-s ≈ 175/rate` wpm. */
+  get agentNarrationRate(): Ref<number> {
+    return ref(1.0);
+  }
   get agentAudioNarration(): Ref<boolean> {
     return ref(false);
   }
@@ -216,6 +225,8 @@ class $Settings {
       agentSkipPermissions: this.agentSkipPermissions,
       agentModel: this.agentModel,
       agentAudioNarration: this.agentAudioNarration,
+      agentNarrationVoice: this.agentNarrationVoice,
+      agentNarrationRate: this.agentNarrationRate,
       sidebarWidth: this.sidebarWidth,
       gitSplitRatio: this.gitSplitRatio,
       diffSplitRatio: this.diffSplitRatio,
@@ -365,6 +376,8 @@ class $Settings {
       agentSkipPermissions: true,
       agentModel: '',
       agentAudioNarration: false,
+      agentNarrationVoice: '',
+      agentNarrationRate: 1.0,
       sidebarWidth: 32,
       gitSplitRatio: 0.5,
       diffSplitRatio: 0.5,
@@ -422,6 +435,8 @@ class $Settings {
     if (typeof record.agentSkipPermissions === 'boolean') result.agentSkipPermissions = record.agentSkipPermissions;
     if (typeof record.agentModel === 'string') result.agentModel = record.agentModel;
     if (typeof record.agentAudioNarration === 'boolean') result.agentAudioNarration = record.agentAudioNarration;
+    if (typeof record.agentNarrationVoice === 'string') result.agentNarrationVoice = record.agentNarrationVoice;
+    readNumber('agentNarrationRate');
     readNumber('lspFileSizeLimitKb');
     readNumber('sidebarWidth');
     readNumber('gitSplitRatio');

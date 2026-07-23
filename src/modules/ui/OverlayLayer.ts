@@ -27,6 +27,16 @@ import type { Tooltip } from './Tooltip';
 import type { Theme } from '../theme/Theme';
 import type { WorkspaceSet } from '../workspace/WorkspaceSet';
 
+/** A clickable settings widget: the text row + column range it occupies, the descriptor it edits, and
+ *  what a click does. `select` just selects the row; `dec`/`inc` select then step/cycle/toggle it. */
+interface SettingsWidgetZone {
+  row: number;
+  startColumn: number;
+  endColumn: number;
+  index: number;
+  action: 'select' | 'dec' | 'inc';
+}
+
 export interface OverlayLayerDeps {
   renderer: CliRenderer;
   commands: CommandRegistry.Instance;
@@ -69,6 +79,10 @@ class $OverlayLayer {
   // Hit geometry the renderers drew this frame, read by the pointer handlers so a drawn cell and its
   // hit-rect never disagree (the one-geometry-source rule). Written in update(), read on mouse events.
   private findBarButtonZones: FindBarButtonZone[] = [];
+  // Clickable widget zones the settings renderer drew this frame (one-geometry-source): each maps a
+  // (row, column-range) to a descriptor index + an action, so a mouse click edits the setting like a UI
+  // app — steppers for numbers, a toggle for booleans, arrows for enums.
+  private settingsWidgetZones: SettingsWidgetZone[] = [];
   private quickOpenRowCount = 0;
   // The model index of the first row the quick-open list currently draws (its scroll window's top), so a
   // pointer hit-test maps a visible row back to the match it draws. 0 whenever the list is unscrolled.
@@ -191,6 +205,23 @@ class $OverlayLayer {
         (zone) => zone.row === localRow && localColumn >= zone.startColumn && localColumn < zone.endColumn,
       );
       if (button) this.runFindButton(button.action);
+    };
+
+    // Settings are editable by MOUSE, not just keyboard: click a row's label to select it, its [−]/[+]
+    // steppers to change a number, its arrows to cycle an enum, or its toggle to flip a boolean. Hit-test
+    // the pointer against the widget zones the renderer drew THIS frame (one geometry source).
+    // invariant: Settings are editable by mouse per widget kind (src/modules/ui/ui.invariants.md)
+    this.settingsText.onMouseDown = (event) => {
+      const localRow = event.y - this.settingsText.y;
+      const localColumn = event.x - this.settingsText.x;
+      const zone = this.settingsWidgetZones.find(
+        (candidate) => candidate.row === localRow && localColumn >= candidate.startColumn && localColumn < candidate.endColumn,
+      );
+      if (!zone) return;
+      this.deps.settingsPanel.select(zone.index);
+      if (zone.action === 'dec') this.deps.settingsPanel.adjust(-1);
+      else if (zone.action === 'inc') this.deps.settingsPanel.adjust(1);
+      this.deps.renderer.requestRender();
     };
 
     // Tooltip — display-only + hit-transparent.
@@ -328,29 +359,62 @@ class $OverlayLayer {
       this.confirmText.fg = palette.fg;
     }
 
-    // Settings panel overlay.
+    // Settings panel overlay — sectioned, with a clickable widget per row (steppers / toggle / arrows).
     this.settingsBox.visible = settingsPanel.open.value;
     if (settingsPanel.open.value) {
       this.settingsBox.borderColor = palette.accent;
       this.settingsBox.titleColor = palette.accent;
       this.settingsBox.backgroundColor = palette.panel;
       const settingsChunks: TextChunk[] = [];
-      settingsChunks.push(fg(palette.dim)('  ↑/↓ select   ←/→ change   Esc close   (saved live)\n\n'));
+      const zones: SettingsWidgetZone[] = [];
+      let textRow = 0; // the current 0-based row within settingsText, tracked as newlines are emitted
+
+      const emitLine = (chunk: TextChunk): void => {
+        settingsChunks.push(chunk);
+        textRow += 1; // each header/blank line carries exactly one trailing newline
+      };
+      emitLine(fg(palette.dim)('  up/down select · click [-]/[+], < >, or the toggle · Esc close (saved live)\n'));
+
       const settingsRows = settingsPanel.rows();
       const labelWidth = settingsRows.reduce((widest, row) => Math.max(widest, row.label.length), 0);
-      settingsRows.forEach((row) => {
-        const marker = row.selected ? '›' : ' ';
-        const labelText = ` ${marker} ${row.label.padEnd(labelWidth, ' ')}   `;
-        const valueText = `${row.valueText}\n`;
-        if (row.selected) {
-          settingsChunks.push(bg(palette.selection)(fg(palette.fg)(labelText)));
-          settingsChunks.push(bg(palette.selection)(fg(palette.accent)(valueText)));
-        } else {
-          settingsChunks.push(fg(palette.fg)(labelText));
-          settingsChunks.push(fg(palette.dim)(valueText));
+      let lastSection = '';
+      for (const row of settingsRows) {
+        if (row.section !== lastSection) {
+          emitLine(fg(palette.dim)('\n')); // a blank spacer row before each section
+          emitLine(bold(fg(palette.accent)(`  ${row.section}\n`)));
+          lastSection = row.section;
         }
-      });
+        // One setting row: [marker+label = the 'select' zone] then a per-kind widget. A running column
+        // counter keeps every zone's hit-rect aligned with the exact cells drawn.
+        let column = 0;
+        const emit = (text: string, color: string, action?: SettingsWidgetZone['action']): void => {
+          settingsChunks.push(row.selected ? bg(palette.selection)(fg(color)(text)) : fg(color)(text));
+          if (action) zones.push({ row: textRow, startColumn: column, endColumn: column + text.length, index: row.index, action });
+          column += text.length;
+        };
+        const marker = row.selected ? '›' : ' ';
+        emit(` ${marker} ${row.label.padEnd(labelWidth, ' ')}   `, palette.fg, 'select');
+        const value = row.valueText;
+        // ASCII widget glyphs so a driving test can locate them in the framebuffer (box-drawing/unicode
+        // is remapped to astral cells) and column math stays 1:1.
+        if (row.kind === 'number') {
+          emit('[-]', palette.accent, 'dec');
+          emit(` ${value} `, palette.accent);
+          emit('[+]', palette.accent, 'inc');
+        } else if (row.kind === 'boolean') {
+          emit(`[ ${value} ]`, palette.accent, 'inc'); // click toggles either way
+        } else {
+          emit('<', palette.accent, 'dec');
+          emit(` ${value} `, palette.accent);
+          emit('>', palette.accent, 'inc');
+        }
+        settingsChunks.push(fg(palette.fg)('\n'));
+        textRow += 1;
+      }
       this.settingsText.content = new StyledText(settingsChunks);
+      this.settingsWidgetZones = zones;
+    } else {
+      this.settingsWidgetZones = [];
     }
 
     // Shortcut cheat-sheet overlay.

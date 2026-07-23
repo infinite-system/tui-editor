@@ -11,8 +11,8 @@
 //
 // invariant: Narration audio crosses exactly one TTS backend seam (src/modules/narration/narration.invariants.md)
 // invariant: A missing speech engine degrades to silence, never an error (src/modules/narration/narration.invariants.md)
-import { readdirSync } from 'node:fs';
 import type { TtsBackend } from './TtsBackend';
+import { VoiceDiscovery } from './VoiceDiscovery';
 
 /** A detected engine: how to synthesize `text`, and whether it plays on its own (macOS `say`) or emits
  *  a WAV that must be piped into a separate player. */
@@ -27,48 +27,47 @@ interface DetectedEngine {
 export interface SystemTtsOptions {
   /** Override engine auto-detection (mainly for tests). */
   enginePath?: string;
+  /** The user-selected piper voice NAME (the `.onnx` basename); '' / unknown → the first discovered. */
+  voice?: string;
+  /** Speech rate as piper's `--length_scale` (lower = faster; 1.0 = normal). Mapped to espeak/`say`
+   *  words-per-minute (≈ 175 / rate). Undefined → normal speed. */
+  rate?: number;
 }
 
-/** Resolve piper's voice model: an explicit INVAR_PIPER_MODEL, else the first `*.onnx` in the
- *  conventional voices dir (`$XDG_DATA_HOME/piper-voices` or `~/.local/share/piper-voices`). Returns null
- *  when no model is found — a model-less piper cannot synthesize, so it is skipped. */
-function resolvePiperModel(): string | null {
+/** Resolve piper's voice model for the selected voice: an explicit INVAR_PIPER_MODEL wins (tests), else
+ *  the discovered voice matching `voice` (or the first-found when `voice` is empty/unknown), across the
+ *  voices dir + its `library/` subdir. Returns null when no model is found — a model-less piper cannot
+ *  synthesize, so it is skipped. */
+function resolvePiperModel(voice: string): string | null {
   const explicit = process.env.INVAR_PIPER_MODEL;
   if (explicit) return explicit;
-  const dataHome = process.env.XDG_DATA_HOME ?? `${process.env.HOME ?? ''}/.local/share`;
-  const voicesDir = `${dataHome}/piper-voices`;
-  try {
-    const model = readdirSync(voicesDir)
-      .filter((entry) => entry.endsWith('.onnx'))
-      .sort()[0];
-    return model ? `${voicesDir}/${model}` : null;
-  } catch {
-    return null; // dir absent / unreadable → no piper model
-  }
+  return VoiceDiscovery.Class.resolvePath(voice);
 }
 
 /** Resolve the best available engine, or null. Ordered by QUALITY: piper (neural — far less robotic) is
  *  preferred when its binary AND a voice model are present; espeak-ng (formant synth) is the always-there
  *  fallback; macOS `say` last. espeak/piper emit a WAV on stdout (piped to a player); `say` plays
  *  directly. */
-function detectEngine(): DetectedEngine | null {
+function detectEngine(voice: string, rate: number): DetectedEngine | null {
+  const lengthScale = Math.max(0.1, Math.min(rate, 5)); // piper --length_scale (lower = faster)
+  const wordsPerMinute = Math.max(50, Math.min(Math.round(175 / lengthScale), 500)); // espeak/say wpm
   const piper = Bun.which('piper');
-  const piperModel = piper ? resolvePiperModel() : null;
+  const piperModel = piper ? resolvePiperModel(voice) : null;
   if (piper && piperModel) {
     return {
       name: 'piper',
       playsDirectly: false,
       // piper reads the utterance on stdin; the queue writes text to stdin below.
-      synthCommand: () => [piper, '--model', piperModel, '--output_file', '-'],
+      synthCommand: () => [piper, '--model', piperModel, '--length_scale', String(lengthScale), '--output_file', '-'],
     };
   }
   const espeak = Bun.which('espeak-ng') ?? Bun.which('espeak');
   if (espeak) {
-    return { name: 'espeak-ng', playsDirectly: false, synthCommand: (text) => [espeak, '--stdout', text] };
+    return { name: 'espeak-ng', playsDirectly: false, synthCommand: (text) => [espeak, '-s', String(wordsPerMinute), '--stdout', text] };
   }
   const say = Bun.which('say');
   if (say) {
-    return { name: 'say', playsDirectly: true, synthCommand: (text) => [say, text] };
+    return { name: 'say', playsDirectly: true, synthCommand: (text) => [say, '-r', String(wordsPerMinute), text] };
   }
   return null;
 }
@@ -87,6 +86,10 @@ function detectPlayer(): string | null {
 type Spawned = { kill(): void; readonly exited: Promise<number> };
 
 class $SystemTtsBackend implements TtsBackend {
+  /** Resolve the piper `.onnx` path for a selected voice (selected-over-first-found). Exposed for tests
+   *  and callers that need the resolved model without constructing a backend. */
+  static resolvePiperModel = resolvePiperModel;
+
   private readonly engine: DetectedEngine | null;
   private readonly playerPath: string | null;
   private readonly queue: string[] = [];
@@ -94,8 +97,8 @@ class $SystemTtsBackend implements TtsBackend {
   private player: Spawned | null = null;
   private disposed = false;
 
-  constructor(_options: SystemTtsOptions = {}) {
-    this.engine = detectEngine();
+  constructor(options: SystemTtsOptions = {}) {
+    this.engine = detectEngine(options.voice ?? '', options.rate ?? 1.0);
     this.playerPath = this.engine && !this.engine.playsDirectly ? detectPlayer() : null;
   }
 

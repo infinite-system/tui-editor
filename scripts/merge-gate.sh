@@ -117,6 +117,9 @@ if [ "${FAST:-0}" != "1" ]; then
   # Audio narration (third projection): drives an agent turn with narration OFF (silent) then ON (speaks
   # the completed turn through the mock TTS backend), plus barge-in. No audio in CI (INVAR_TTS_BACKEND=mock).
   step "smoke: audio-narration" bash scripts/smoke-audio-narration.sh
+  # Voice picker + mouse-editable settings: seeded voices dir → dynamic-enum picker (keyboard + mouse),
+  # rate stepper, boolean toggle, Test-Voice command. No audio (mock TTS).
+  step "smoke: voice-picker" bash scripts/smoke-voice-picker.sh
   # Bottom-panel SPLIT (experiment-panel-split): drives F9 to split the panel into two side-by-side
   # cells and asserts independent sub-region render, per-cell focus routing, divider re-flow, un-split.
   step "smoke: panel-split" bash scripts/smoke-panel-split.sh

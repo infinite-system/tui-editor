@@ -33,7 +33,10 @@ export PATH="$HOME/.bun/bin:$PATH"
 # so they are covered here for the schema meta-gate without a frame-based applied-effect drive.
 # agentAudioNarration's applied effect (speaks completed turns when ON, silent when OFF) is DRIVEN in
 # scripts/smoke-audio-narration.sh through the mock TTS backend — covered here for the schema meta-gate.
-COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap showActivityBar workspaceTabPosition typescriptServer lspFileSizeLimitKb agentProvider agentSkipPermissions agentModel agentAudioNarration sidebarWidth gitSplitRatio diffSplitRatio markdownSplitRatio"
+# agentNarrationVoice / agentNarrationRate change how the piper/espeak SUBPROCESS is spawned (voice model
+# + length_scale/wpm), driven in scripts/smoke-voice-picker.sh (the picker dynamic-enum + a mouse edit) —
+# covered here for the schema meta-gate.
+COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap showActivityBar workspaceTabPosition typescriptServer lspFileSizeLimitKb agentProvider agentSkipPermissions agentModel agentAudioNarration agentNarrationVoice agentNarrationRate sidebarWidth gitSplitRatio diffSplitRatio markdownSplitRatio"
 
 # ---- schema-enumeration META-GATE (cheap; the enforcing check) -------------------------------------
 meta_gate() {

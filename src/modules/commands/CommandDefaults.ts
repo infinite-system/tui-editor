@@ -21,6 +21,9 @@ export interface CommandContext {
   hasHoveredMarkdownReference: () => boolean;
   openHoveredMarkdownReference: () => void;
   openShortcutHelp: () => void;
+  /** Speak a fixed sample line through the REAL TTS backend in the currently-selected voice — the
+   *  audition affordance for the voice picker (legit user-triggered audio, never in the gate). */
+  testNarrationVoice: () => void;
 }
 
 // Manifest first — the capability's surface reads at the top of the file; implementations follow.
@@ -99,6 +102,12 @@ function $registerDefaultCommands(
       category: 'Edit',
       when: hasDocument,
       run: () => getEditor().deletePreviousWord(),
+    },
+    {
+      id: 'narration.testVoice',
+      title: 'Narration: Test Voice',
+      category: 'Narration',
+      run: context.testNarrationVoice,
     },
     {
       id: 'view.focusFiles',

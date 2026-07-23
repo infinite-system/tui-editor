@@ -722,3 +722,39 @@ mark + red underline cells on the error line for each.
 **Status:** provisional
 
 **Last refined:** 2026-07-23
+
+### Settings are editable by mouse per widget kind
+
+**Invariant:** Every setting in the panel is editable by MOUSE, not only the keyboard — matching the
+"everything is like a UI app" principle. Each row draws a clickable widget matched to its kind: a number
+shows `[−]`/`[+]` steppers, a boolean a clickable toggle, and an enum / dynamic-enum `‹`/`›` arrows;
+clicking a row's label selects it. A click hit-tests against the widget zones the renderer drew THIS
+frame (one geometry source — the drawn cell and its hit-rect never disagree), then selects the row and
+applies the same `adjust(±1)` the keyboard uses, so mouse and keyboard edits are one code path.
+
+**Scope:** the settings render + `settingsText.onMouseDown` hit-test in `OverlayLayer`
+(`settingsWidgetZones`), and `SettingsPanel` (`rows()` exposing `kind`/`index`, `select`, `adjust`).
+
+**Mechanism:** the settings renderer emits, per row, a `select` zone over the label and `dec`/`inc`
+(or a single toggle `inc`) zones over the widget glyphs, recording each zone's `(row, columns, index,
+action)` as it advances a running column counter. `settingsText.onMouseDown` maps the pointer's local
+(row, column) to a zone, calls `settingsPanel.select(index)`, then `adjust(-1|+1)` — the identical
+mutation the ←/→ keys drive (numbers step+clamp, booleans toggle, enums cycle), live-applied + saved.
+
+**Generates:** a settings panel usable entirely by mouse (steppers, toggles, dropdown-style arrows), with
+mouse and keyboard sharing one adjust path so they never diverge; sections give the list visual grouping.
+
+**Evidence:** `src/modules/settings/SettingsPanel.test.ts` (rows expose `kind`/`section`/`index`;
+`select` + `adjust` mutate the target row for numbers/booleans/enums/dynamic-enums);
+`scripts/smoke-voice-picker.sh` (clicking a widget stepper/arrow in the rendered panel changes the
+setting via the recorded zones).
+
+**Impossible if true:** a setting editable by keyboard but not mouse; a mouse click that edits a
+different row than the widget drawn under the pointer; a mouse edit that bypasses the keyboard's
+adjust/clamp path.
+
+**Verification:** `bun test src/modules/settings/SettingsPanel.test.ts && bash scripts/smoke-voice-picker.sh`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23
