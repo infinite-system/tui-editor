@@ -129,7 +129,7 @@ if [ "$files_row" -lt 0 ] 2>/dev/null; then echo 'activity bar not located; abor
 
 echo '== initial state: Explorer active, accent on it, exactly one accent, tree content shown =='
 expect_equal "$(field sidebarView)" 'files' 'boots on the Explorer view'
-expect_equal "$(char_at "$((files_row + 1))" 0)" "$accent_bar" 'active accent sits on the Explorer button (bottom-left cell)'
+expect_equal "$(char_at "$files_row" 0)" "$accent_bar" 'active accent sits on the Explorer button, on the icon row (aligned)'
 expect_equal "$(accent_count_col0)" '1' 'exactly one activity item is active'
 expect_frame_contains 'tree-marker.txt' 'Explorer view renders the file tree'
 
@@ -137,18 +137,18 @@ echo '== click Source Control: view + accent + content switch, badge shows the c
 "$harness" click "$session_name" 1 "$git_row" >/dev/null
 settle
 expect_equal "$(field sidebarView)" 'git' 'clicking Source Control switched the view'
-expect_equal "$(char_at "$((git_row + 1))" 0)" "$accent_bar" 'accent moved to the Source Control button (bottom-left cell)'
-expect_equal "$(char_at "$((files_row + 1))" 0)" ' ' 'the Explorer button is no longer accented'
+expect_equal "$(char_at "$git_row" 0)" "$accent_bar" 'accent moved to the Source Control button, on the icon row (aligned)'
+expect_equal "$(char_at "$files_row" 0)" ' ' 'the Explorer button is no longer accented'
 expect_equal "$(accent_count_col0)" '1' 'still exactly one active item after switch'
 expect_frame_contains 'Git' 'Source Control view renders the git panel (sidebar title)'
 # The count/flag badge sits TOP-LEFT (row = glyph row, col 0) — the same corner the editor tabs use.
-expect_equal "$(char_at "$git_row" 0)" '1' 'git badge shows the change count in the TOP-LEFT cell'
+expect_equal "$(char_at "$((git_row - 1))" 0)" '1' 'git badge shows the change count in the TOP-LEFT cell (row above the icon)'
 
 echo '== click Extensions: content switches to the placeholder =='
 "$harness" click "$session_name" 1 "$extensions_row" >/dev/null
 settle
 expect_equal "$(field sidebarView)" 'extensions' 'clicking Extensions switched the view'
-expect_equal "$(char_at "$((extensions_row + 1))" 0)" "$accent_bar" 'accent moved to the Extensions button (bottom-left cell)'
+expect_equal "$(char_at "$extensions_row" 0)" "$accent_bar" 'accent moved to the Extensions button, on the icon row (aligned)'
 expect_equal "$(accent_count_col0)" '1' 'still exactly one active item on Extensions'
 expect_frame_contains 'Coming soon' 'Extensions view renders the placeholder'
 expect_frame_absent 'tree-marker.txt' 'the file tree is gone while Extensions is shown'
@@ -163,7 +163,7 @@ echo '== keyboard parity: Ctrl+Shift+G / +E / +X switch the same views =='
 send_kitty '103;6u'   # Ctrl+Shift+G -> Source Control
 settle
 expect_equal "$(field sidebarView)" 'git' 'Ctrl+Shift+G switched to Source Control'
-expect_equal "$(char_at "$((git_row + 1))" 0)" "$accent_bar" 'chord moved the accent to Source Control (bottom-left cell)'
+expect_equal "$(char_at "$git_row" 0)" "$accent_bar" 'chord moved the accent to Source Control, on the icon row (aligned)'
 
 send_kitty '101;6u'   # Ctrl+Shift+E -> Explorer
 settle

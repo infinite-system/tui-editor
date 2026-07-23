@@ -140,17 +140,18 @@ class $ActivityBar {
       const isActive = activeView === item.view;
       const isHovered = this.hoveredItemIndex === index;
       const glyphColor = isActive ? palette.accent : isHovered ? palette.fg : palette.dim;
-      // Top row (4 cols): [badge | space glyph space]. A count/flag badge sits TOP-LEFT (col 0), the
-      // same corner the editor tabs use, so both surfaces read consistently. Today only Source Control
-      // shows one (the working-tree change count); other items pad col 0 with a space.
+      // Top row (4 cols): ONLY the count/flag badge, at TOP-LEFT (col 0) — the same corner the editor
+      // tabs use — the rest padded. It is a placeholder row ABOVE the icon; today only Source Control
+      // fills it (the working-tree change count).
       const badge = item.view === 'git' && changedCount > 0 ? (changedCount > 9 ? '+' : String(changedCount)) : ' ';
       chunks.push(fg(palette.accent)(badge));
-      chunks.push(fg(glyphColor)(` ${item.glyph(icons)} `));
-      chunks.push(fg(palette.fg)('\n'));
-      // Bottom row (4 cols): the active-item accent bar at the LEFT edge (col 0) — one cell per active
-      // item — with the rest padded so the button stays 4 wide.
-      chunks.push(fg(palette.accent)(isActive ? icons.accentBar : ' '));
       chunks.push(fg(palette.fg)('   '));
+      chunks.push(fg(palette.fg)('\n'));
+      // Bottom row (4 cols): the active-item accent bar and the ICON on the SAME row (aligned) — accent
+      // at the left edge (col 0, one cell per active item), then ` icon `. The accent reads as the
+      // selection highlight for the icon, at the icon's level.
+      chunks.push(fg(palette.accent)(isActive ? icons.accentBar : ' '));
+      chunks.push(fg(glyphColor)(` ${item.glyph(icons)} `));
       if (index < ACTIVITY_ITEMS.length - 1) chunks.push(fg(palette.fg)('\n'));
     });
     this.body.content = new StyledText(chunks);
