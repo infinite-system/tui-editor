@@ -10,16 +10,24 @@
 import { Static } from 'ivue/extras';
 import type { AgentBackend } from './AgentBackend';
 import { EchoAgentBackend } from './EchoAgentBackend';
+import { CliStreamBackend } from './CliStreamBackend';
 import { AgentSession } from './AgentSession';
 import { AgentPaneContent } from './AgentPaneContent';
 
 export interface AgentCreateOptions {
-  /** Inject a specific backend (tests pass a MockAgentBackend; phase 2 passes CliStreamBackend). */
+  /** Inject a specific backend (tests pass a MockAgentBackend; a host may pass any implementation). */
   backend?: AgentBackend;
+  /** The workspace root — the cwd real Claude runs in, so it operates in the user's project. */
+  cwd?: string;
 }
 
-/** Build the default backend (the local echo). Overridable seam. */
-function $createBackend(_options: AgentCreateOptions): AgentBackend {
+/** Pick the default backend by auto-detection: real Claude (`claude` on PATH) when available, the local
+ *  echo otherwise. `INVAR_AGENT_BACKEND=echo` forces the echo (keeps the driving smoke hermetic —
+ *  no subprocess, no billing). Overridable Static seam. */
+function $createBackend(options: AgentCreateOptions): AgentBackend {
+  if (process.env.INVAR_AGENT_BACKEND === 'echo') return new EchoAgentBackend.Class();
+  const claudePath = Bun.which('claude');
+  if (claudePath) return new CliStreamBackend.Class({ claudePath, cwd: options.cwd });
   return new EchoAgentBackend.Class();
 }
 

@@ -91,10 +91,13 @@ with zero change to `AgentSession` or the pane. Parallel to the terminal's `Term
 
 **Mechanism:** `AgentBackend` is `send`/`onEvent`/`interrupt`/`dispose`. `AgentSession` wires
 `backend.onEvent → fold` once in its constructor and calls `backend.send` on a turn. `AgentFactory`
-(Static, overridable) picks the default backend; tests/hosts swap it via `create({ backend })`.
+(Static, overridable) picks the default backend by auto-detection — real `CliStreamBackend` when
+`claude` is on PATH, `EchoAgentBackend` otherwise, `EchoAgentBackend` forced by
+`INVAR_AGENT_BACKEND=echo`; tests/hosts swap it via `create({ backend })`.
 
-**Generates:** hermetic tests (Mock), a live app today (Echo), and a real subscription-billed agent
-later (CliStream) — all behind one seam.
+**Generates:** hermetic tests (Mock), an offline fallback (Echo), and the real subscription-billed
+agent (CliStream driving `claude -p --output-format stream-json`) — all behind one seam, so
+AgentSession/the pane never change when the backend does.
 
 **Impossible if true:** `AgentSession` branching on backend type; a second entry path for events that
 bypasses `onEvent`.

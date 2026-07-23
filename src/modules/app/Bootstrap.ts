@@ -223,7 +223,8 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   const ensureAgent = (): void => {
     if (agentRegistered) return;
     agentRegistered = true;
-    panelHost.register(AgentFactory.Class.create());
+    // Real Claude (when `claude` is on PATH) runs in the workspace root so it operates in the project.
+    panelHost.register(AgentFactory.Class.create({ cwd: workspaceSet.active.root }));
   };
   app.onDispose(() => panelHost.dispose());
 

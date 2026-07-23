@@ -32,7 +32,10 @@ fi
 rm -f /tmp/agent-unit-$$.log
 
 echo "== B) launch + boot =="
-"$H" launch "$S" 120x40 env TUI_FRAME_DUMP=1 bun run src/main.ts "$FIX" >/dev/null
+# INVAR_AGENT_BACKEND=echo forces the hermetic local echo backend: the driving smoke never spawns a
+# real `claude` subprocess (no billing, no network flakiness in the gate). The real CliStreamBackend
+# auto-activates in the app when `claude` is on PATH; its line→event mapping is unit-tested separately.
+"$H" launch "$S" 120x40 env TUI_FRAME_DUMP=1 INVAR_AGENT_BACKEND=echo bun run src/main.ts "$FIX" >/dev/null
 if "$H" ready "$S" 20 >/dev/null; then echo "  PASS  boot: ready+quiescent"; else
   echo "  FAIL  boot never ready"; "$H" capture "$S"; exit 1
 fi
