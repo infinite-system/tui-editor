@@ -149,11 +149,12 @@ function $buildRootView(
 
   // The project-layer tab strip is ONE renderable + ONE TabStrip model. The setting moves that same
   // strip between the horizontal top slot and the vertical left slot; it never duplicates state.
+  // The top strip is TWO rows: the project name over its worktree/branch detail.
   const workspaceTabBar = new TextRenderable(renderer, {
     id: 'workspace-tab-strip',
     content: '',
     width: '100%',
-    height: 1,
+    height: 2,
     wrapMode: 'none',
   });
   if (settings.workspaceTabPosition.value === 'left') {
@@ -383,7 +384,7 @@ function $buildRootView(
       mainRow.remove(workspaceTabBar);
       column.add(workspaceTabBar, 0);
       workspaceTabBar.width = '100%';
-      workspaceTabBar.height = 1;
+      workspaceTabBar.height = 2; // two rows: project name over worktree/branch detail
     }
     workspaceTabBarMountedPosition = position;
   }

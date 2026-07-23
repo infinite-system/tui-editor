@@ -101,6 +101,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       workspaceSet.tabs().map((workspaceTab) => ({
         identifier: workspaceTab.root,
         label: workspaceTab.name,
+        detailLabel: workspaceTab.detail,
         active: workspaceTab.active,
         closable: workspaceSet.count > 1,
       })),

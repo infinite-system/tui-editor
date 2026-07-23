@@ -425,6 +425,16 @@ class $Workspace {
   get name() {
     return ref('');
   }
+  /** The linked-worktree name when the root is a linked git worktree — its `.git` is a gitdir-pointer
+   *  FILE, not a directory — else null. The name is the worktree root's folder name. */
+  get worktreeName() {
+    return ref<string | null>(null);
+  }
+  /** The second tab-strip line for this project: the worktree name when the root is a linked git
+   *  worktree, else the checked-out branch (empty until git reports / when not a repository). */
+  get tabDetail(): string {
+    return this.worktreeName.value ?? this.git.value?.branch.value ?? '';
+  }
   // The repository + commit-log window for the current root (null until open()).
   get git() {
     return shallowRef<GitRepository.Instance | null>(null);
@@ -442,6 +452,13 @@ class $Workspace {
     // (or a trailing-slash path) still yields the real directory name.
     const absoluteRoot = Files.Class.absolute(root);
     this.name.value = Files.Class.basename(absoluteRoot) || absoluteRoot;
+    // A linked git worktree keeps `.git` as a pointer FILE ("gitdir: …"), never a directory — the
+    // main checkout's `.git` is a directory. The worktree's own name is its root folder name.
+    const gitPointerPath = Files.Class.join(absoluteRoot, '.git');
+    this.worktreeName.value =
+      Files.Class.exists(gitPointerPath) && !Files.Class.isDir(gitPointerPath)
+        ? Files.Class.basename(absoluteRoot) || null
+        : null;
     this.tree.open(root);
     this.focus.value = 'files';
     // Live-wire git: create the repository + log for this root and kick a non-blocking refresh.

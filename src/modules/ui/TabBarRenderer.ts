@@ -156,13 +156,22 @@ function $renderWorkspaceTabBar(context: WorkspaceTabBarRenderContext): Workspac
     return { text: new StyledText(chunks), segments, revealedIndex };
   }
 
+  // Horizontal (top) strip: each project tab is TWO rows — row 0 is ` ● name ✕ ` and row 1 is the
+  // worktree/branch detail indented under the name. Segments stay COLUMN spans (both rows of a tab
+  // share the same x-span), and the close ✕ lives on row 0 only (TabBar checks the cross axis).
   const barWidth = Math.max(1, context.barWidthValue || context.rendererWidth);
   const controlsText = ' ‹  ›  + ';
   const controlsWidth = EditorCoordinates.Class.lineWidth(controlsText);
   const availableTabsWidth = Math.max(1, barWidth - controlsWidth);
   const measuredWorkspaceTabs = workspaceTabs.map((workspaceTab) => ({
     workspaceTab,
-    width: Math.min(availableTabsWidth, EditorCoordinates.Class.lineWidth(workspaceTab.label) + 6),
+    width: Math.min(
+      availableTabsWidth,
+      Math.max(
+        EditorCoordinates.Class.lineWidth(workspaceTab.label),
+        EditorCoordinates.Class.lineWidth(workspaceTab.detailLabel ?? ''),
+      ) + 6,
+    ),
   }));
   const maximumScrollOffset = Math.max(0, measuredWorkspaceTabs.length - 1);
   strip.clampScrollOffset(maximumScrollOffset);
@@ -237,6 +246,28 @@ function $renderWorkspaceTabBar(context: WorkspaceTabBarRenderContext): Workspac
       primaryEnd: columnIndex,
     });
   });
+  // Second row: the worktree/branch detail under each visible tab, sharing the tab's background so
+  // the two rows read as one tab. The controls have no second row — plain background fills it.
+  chunks.push(fg(palette.fg)('\n'));
+  let detailColumnIndex = 0;
+  for (let workspaceIndex = startWorkspaceIndex; workspaceIndex < endWorkspaceIndex; workspaceIndex += 1) {
+    const measuredWorkspaceTab = measuredWorkspaceTabs[workspaceIndex]!;
+    const workspaceTab = measuredWorkspaceTab.workspaceTab;
+    const hovered = hover?.workspaceIndex === workspaceIndex;
+    const rowBackground = workspaceTab.active ? palette.selection : hovered ? palette.cursorLine : null;
+    const maximumDetailWidth = Math.max(1, measuredWorkspaceTab.width - 6);
+    const detailLabel = (workspaceTab.detailLabel ?? '')
+      .slice(0, maximumDetailWidth)
+      .padEnd(maximumDetailWidth, ' ');
+    const detailText = `   ${detailLabel}   `;
+    const styledDetail = fg(palette.dim)(detailText);
+    chunks.push(rowBackground ? bg(rowBackground)(styledDetail) : styledDetail);
+    detailColumnIndex += measuredWorkspaceTab.width;
+  }
+  while (detailColumnIndex < barWidth) {
+    chunks.push(fg(palette.fg)(' '));
+    detailColumnIndex += 1;
+  }
   return { text: new StyledText(chunks), segments, revealedIndex };
 }
 
