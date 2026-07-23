@@ -374,6 +374,43 @@ Six new operational lessons, every one from real friction this run.
 
 ---
 
+## Part 7 — Conductor run 2026-07-23 (backlog drained; wrap fix + agent-harness experiment)
+
+State at this fire: **frontier empty** — ground-truthed against `origin/main`, NOT the handoff anchor
+(which lagged, still listing "remaining 0.5 + 6"). All 11 UI tasks + the 7 polish requests +
+pull-diagnostics are merged (`893c581` activity-toggle, `061d583` two-line→breadcrumb flip, `9d5b9b4`
+undo-unchanged, `c54be3a` open-project navigator, `ce8a261` open-project wrap). The full lesson set is
+in `/home/parallels/dev/ibr/Skills/Orchestration Lessons.md`; the doctrine-worthy new ones:
+
+- **Ground-truth the backlog against `git log origin/main`, never the handoff anchor.** The anchor is a
+  point-in-time note and lags reality by hours; three fires were spent re-reporting "parked" against a
+  backlog that git showed already merged. First action of every fire: `git log --oneline origin/main`
+  and match each named task to a commit.
+- **The caret/cursor smoke is the CPU-load canary.** `smoke-wrap`'s "caret == tmux cursor on a wrapped
+  row" FAILED with unrelated changes purely because `tsc` ran concurrently with the gate; isolated
+  re-run = ALL-PASS. Rule: gates run SOLO — one gate at a time across BOTH agents, and never `tsc`/second
+  gate alongside. A red caret smoke on unrelated code is almost always load, not regression.
+- **New `git worktree add` worktrees have NO node_modules** — symlink it to the main repo immediately
+  (`ln -s <mainrepo>/node_modules node_modules`) or `bun test` dies "Cannot find package 'ivue'".
+- **Pre-commit hook re-runs the full gate → a foreground `git commit` times out (~2min tool ceiling vs
+  ~5min gate).** Commit in the background, or `SKIP_GATE=1` when the identical tree just gated green
+  (state which gate log + exit 0 in the message). Never SKIP_GATE an unverified tree.
+- **`pkill -f "<pat>"` self-matches and SIGTERMs your own shell** (exit 144) when the pattern appears in
+  the killing command's `bash -c` wrapper. Kill by explicit PID from a prior `pgrep`.
+- **A stood-down fork is a resource, not a corpse.** Re-engage it with `SendMessage` (full context
+  intact) for the next experiment rather than spawning a cold subagent that re-explores.
+- **Mirror an existing module 1:1 to build a new one cheaply.** The agent-harness experiment
+  (`experiment-agent-harness`) mirrored `terminal/` exactly (backend seam + mock + Reactive
+  single-source + PaneContent + Static factory + colocated invariants + smoke) and typechecked
+  first-try. When a contract doc names the file layout, follow it verbatim (file-name-follows-class).
+
+**Cron drift (still open):** the live hourly (`4e2da192`) + 10-min (`e4de2d1a`) prompts hardcode "the 11
+Invar UI tasks" — all done. They should be re-pointed to "invent + gate ONE experiment-branch feature
+per fire; verify frontier against git" on the next reasonably-safe cron edit (deferred here to avoid
+restructuring the live loop while the user sleeps).
+
+---
+
 ## Live cron prompts (canonical copy now in the /conductor SKILL.md "Live cron prompts" section — edit THERE; the copy below may lag)
 
 These are the exact prompts driving the orchestration loop this session. **Improve them HERE, then
