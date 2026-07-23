@@ -60,6 +60,9 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 'j', ctrl: true }, action: 'panel.toggleTerminal', reserved: true },
   { chord: { key: '`', ctrl: true }, action: 'panel.toggleTerminal', reserved: true },
   { chord: { key: 'f8' }, action: 'panel.toggleTerminal', reserved: true },
+  // Split the bottom panel into two side-by-side cells (agent | terminal) and back. Reserved so it
+  // fires even while the terminal owns the keyboard.
+  { chord: { key: 'f9' }, action: 'panel.toggleSplit', reserved: true },
   { chord: { key: 'tab' }, action: 'focus.toggle' },
   // Editor buffer tabs (item 10a) — global (work in any focus). Ctrl+Tab needs the kitty keyboard
   // protocol; Ctrl+PageUp/PageDown are the widely-supported equivalents.

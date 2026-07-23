@@ -139,3 +139,79 @@ the panel is unfocused.
 **Status:** provisional
 
 **Last refined:** 2026-07-23
+
+### A split panel renders every visible cell into its own sub-region
+
+**Invariant:** When the panel holds two or more visible cells, the slot is partitioned left-to-right by
+each cell's ratio (one column per interior divider), and each cell's `PaneContent.render` AND its
+`onResize` see ONLY that cell's sub-region — never the full slot. The single-cell case is the same code
+with one full-width partition, so nothing regresses when nothing is split. One width algorithm
+(`PanelHost.cellSpans`) feeds BOTH the laid-out cell width and the content's `onResize`, so a cell can
+never be sized for a region different from the one it is painted into.
+
+**Scope:** `PanelHost` (`layout`, `resolvedCells`, `cellSpans`, `setViewportSize`, `moveDivider`), the
+panel cell-pool render in `RootView` (`syncPanelCellMount`, the per-span body loop), and any
+`PaneContent` (e.g. `StaticPaneContent`, `TerminalPaneContent`) that occupies a cell.
+
+**Mechanism:** `PanelHost.cellSpans(totalColumns)` distributes the slot's inner columns across the
+resolved cells by normalized ratio, reserving one column per divider and giving the remainder to the
+last cell. `RootView.update` mounts one body per span (a divider before each body from the second on),
+sets each body's width to its span, and fills it from `span.content.render({width: span.columns, …})`.
+`Bootstrap`'s converge step calls `panelHost.setViewportSize`, which walks the SAME `cellSpans` and
+calls each `content.onResize(span.columns, rows)`. `moveDivider` re-flows only the two cells adjacent
+to the dragged divider, each clamped to a minimum share.
+
+**Generates:** an agent | terminal (or N-way) bottom panel where each pane is a first-class occupant of
+its own region; a resizable divider that reflows both neighbours; a single-pane panel as the degenerate
+1-cell case with byte-identical behaviour.
+
+**Evidence:** `src/modules/ui/PanelHost.test.ts` (`split` layout + normalized shares, `cellSpans`
+per-cell widths reserving the divider column, `setViewportSize` resizes each cell independently,
+`moveDivider` re-flow + minimum clamp); `scripts/smoke-panel-split.sh` drives F9 to split live and
+asserts two cells render into distinct sub-widths (the left cell prints its own converged width), the
+divider drag reflows both, and un-split restores the full-width pane.
+
+**Impossible if true:** a split cell rendered at the full slot width while another cell overlaps it; a
+cell whose content is `onResize`d to a region different from the one it is painted into; a divider drag
+that resizes one neighbour but not the other; a split that changes the single-pane render path.
+
+**Verification:** `bun test src/modules/ui/PanelHost.test.ts && bash scripts/smoke-panel-split.sh`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23
+
+### A focused split panel routes keystrokes to the focused cell
+
+**Invariant:** When the panel is focused and split, every non-reserved keystroke goes to exactly ONE
+cell — the focused cell — and clicking a cell makes it the focused cell (focus-follows-click at the
+cell grain). The block caret is drawn in the focused cell's sub-region. An unfocused cell receives no
+keys and shows no caret. With a single cell this is identical to the old "focused panel routes to its
+active content".
+
+**Scope:** `PanelHost` (`focusedIndex`, `focusedContent`, `focusCell`, `handleKey`, `retargetFocus`),
+the panel cell-body `onMouseDown` handlers + caret anchoring in `RootView`, and the panel-input branch
+in `Bootstrap.keyTick`.
+
+**Mechanism:** `PanelHost.handleKey` delegates to `focusedContent` (the resolved cell at `focusedIndex`,
+or the single active content). `RootView` gives each cell body an `onMouseDown` that calls
+`panelHost.focus()` + `panelHost.focusCell(index)`, and anchors the caret to the focused cell body's
+laid-out screen cell. `focusCell`/`split`/`unsplit` run through `retargetFocus`, which fires
+`onBlur`/`onFocus` only when the focused content actually changes, so exactly one cell is ever focused.
+
+**Generates:** two live panes (agent | terminal) where typing drives only the one you clicked, the
+caret sits in the active pane, and switching panes is a single click; no keystroke drives two panes.
+
+**Evidence:** `src/modules/ui/PanelHost.test.ts` (a focused split routes to the focused cell; `focusCell`
+moves the routing target; splitting while focused blurs the old content and focuses the new cell);
+`scripts/smoke-panel-split.sh` types into the focused left cell (`key:z` renders), clicks the right cell
+(focus index → 1), and asserts a later key never reaches the now-blurred left cell.
+
+**Impossible if true:** a keystroke delivered to an unfocused cell; two cells focused at once; a click
+on a cell that does not focus it; a caret drawn in a blurred cell.
+
+**Verification:** `bun test src/modules/ui/PanelHost.test.ts && bash scripts/smoke-panel-split.sh`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23

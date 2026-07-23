@@ -38,6 +38,7 @@ import { Logging } from '../system/Logging';
 import { HandlerGuard } from './HandlerGuard';
 import { TerminalSession } from './TerminalSession';
 import { PanelHost } from '../ui/PanelHost';
+import { StaticPaneContent } from '../ui/StaticPaneContent';
 import { TerminalFactory } from '../terminal/TerminalFactory';
 import { dirname, join } from 'node:path';
 
@@ -201,6 +202,26 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     panelHost.register(content);
   };
   app.onDispose(() => panelHost.dispose());
+
+  // Toggle the bottom panel between one cell and two side-by-side cells (a second pane on the LEFT, the
+  // terminal on the RIGHT), and back. On this experiment branch the second pane is a placeholder
+  // StaticPaneContent; the agent-harness rebase swaps in the real agent pane. This proves the split
+  // slot end to end: 2-up render into independent sub-regions, per-cell click-to-focus, divider re-flow.
+  let panelSecondContent: StaticPaneContent.Model | null = null;
+  const togglePanelSplit = (): void => {
+    ensureTerminal();
+    if (!panelHost.visible.value) panelHost.show();
+    if (panelHost.isSplit) {
+      panelHost.unsplit();
+      return;
+    }
+    if (!panelSecondContent) {
+      panelSecondContent = new StaticPaneContent.Class('panel-b', 'Pane B', '▣');
+      panelHost.register(panelSecondContent);
+    }
+    const terminalId = panelHost.activeId.value ?? 'terminal';
+    panelHost.split([panelSecondContent.id, terminalId]); // second pane LEFT, terminal RIGHT
+  };
 
   // Theme + glyph mode are settings-driven (single source): the panel edits settings.theme /
   // settings.glyphMode, and these reactive hooks PUSH the change into the Theme so it live-applies with
@@ -376,6 +397,11 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       panelContentIds: panelHost.order.value,
       terminalColumns: view.panelViewportColumns(),
       terminalRows: view.panelViewportRows(),
+      // Split state: which cells occupy the slot, which one has the keyboard, and each cell's converged
+      // column width — the driving smoke reads this to prove 2-up render, focus routing, and re-flow.
+      panelCellIds: panelHost.resolvedCells.map((cell) => cell.content.id),
+      panelFocusedIndex: panelHost.focusedIndex.value,
+      panelCellColumns: panelHost.cellSpans(view.panelViewportColumns()).map((span) => span.columns),
       // Active buffer is an image the editor renders as half-block cells (drives smoke-image-preview).
       activeFileIsImage: workspaceSet.active.activeFileIsImage,
     });
@@ -491,7 +517,11 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     void panelHost.focused.value;
     void panelHost.activeId.value;
     void panelHost.order.value;
-    void panelHost.activeContent?.renderRevision.value;
+    void panelHost.layout.value;
+    void panelHost.focusedIndex.value;
+    // Repaint on ANY visible cell's paint signal — a split panel has two live panes, either of which
+    // can emit async output (PTY bytes) that must repaint without a keypress.
+    for (const content of panelHost.visibleContents()) void content.renderRevision.value;
     HandlerGuard.Class.run('paint', paint, () => renderer.requestRender());
   });
 
@@ -1003,6 +1033,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     // focused terminal (to hide it) — exactly like the quit escape hatch. Same closure the status-bar
     // terminal button runs, so chord and click are one action.
     'panel.toggleTerminal': toggleTerminal,
+    'panel.toggleSplit': togglePanelSplit,
     'menu.previous': () => contextMenu.moveSelection(-1),
     'menu.next': () => contextMenu.moveSelection(1),
     'menu.run': () => contextMenu.runSelected(),
