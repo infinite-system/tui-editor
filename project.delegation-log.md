@@ -81,3 +81,7 @@ NOT to touch. This reinforces the pre-existing "SERIALIZE RootView, PARALLELIZE 
   check_invariants.mjs) — is the prime fan-out candidate; RootView wiring stays serial/mine.
 
 - feat-two-line-tabs-v2 · tip d15b454 · merged-into main (d15b454) · 2026-07-23 · task 0.5 two-line workspace tabs (project name / worktree-or-branch); smoke height-robustness applied
+
+- feat-pull-diagnostics · tip a750a85 · merged-into main (a750a85) · 2026-07-23 · tsgo pull-diagnostics (textDocument/diagnostic) so red-squiggly errors show under the tsgo default; drive-verified tsgo pull + tsserver push; new invariant; finished/ tag pushed
+- codex workers · DEPRECATED 2026-07-23 · "You've hit your usage limit ... try again Jul 28th 2026" — codex exec unusable until 2026-07-28; use fable/claude subagents (conductor-spawned) instead
+- feat-diff-prefix · DEAD-ON-ARRIVAL · empty branch off origin/main (d2a186e); codex worker quota-failed before any commit; branch PRESERVED per guardrail, no work on it
