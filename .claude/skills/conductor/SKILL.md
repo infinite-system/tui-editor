@@ -151,8 +151,17 @@ the DEFAULT; destruction requires explicit, per-instance user authorization.**
 - **Tracked background, never nohup.** Run every gate/long command as a TRACKED background child
   (the harness re-invokes you on completion and keeps you visible in /tasks). `nohup … &` leaves
   you with no live children and the harness drops you from view.
-- **Cap concurrency ~2–3 builders, ONE gate at a time.** 3+ concurrent gates starve CPU and
-  flake load-sensitive smokes (e.g. word-wrap caret timing). Over-spawn → tell the fleet to cap.
+- **Parallel gates are OK now — cap ~2–3 concurrent (soft CPU ceiling), no longer strictly serial.**
+  Gates USED to require strict "one gate at a time" because `smoke-settings-applied` launched tmux
+  sessions with FIXED names (`sa-sbt-a`…) and read `artifacts/frame-<session>.json` — tmux names are
+  global to the one server, so two gates clobbered each other's session + frame dump, a DETERMINISTIC
+  collision that threw `IndexError` in the frame probe. Fixed (2026-07-23): every smoke now
+  PID-namespaces its sessions (`sa-$$-…`, matching what all other smokes already did), so concurrent
+  gates no longer collide — run them in PARALLEL. The remaining limit is SOFT: ~4–5 simultaneous gates
+  starve CPU enough to flake timing-sensitive smokes (word-wrap caret, frame-settle). Keep ~2–3
+  concurrent; if a smoke fails oddly while several gates run, RE-RUN IT ISOLATED before treating it as
+  real (a load flake re-runs green). Over-spawn → tell the fleet to cap. When adding a smoke, PID-
+  namespace its tmux sessions from the start, or it silently re-breaks concurrent gating.
 - **Heartbeat over PID-watching.** PIDs rotate every turn; give long workers a heartbeat artifact
   (phase + last-progress timestamp + done-flag) so "still building" ≠ "done-and-stranded" ≠
   "crashed". File mtimes are the fallback read.
@@ -247,7 +256,7 @@ Hourly orchestration loop (bounded per fire). Follow the `/conductor` skill (tui
 
 (4) Append orchestrator lessons learned this fire to /home/parallels/dev/tui-editor/project.conductor.md (the running lessons log). AND when a lesson generalizes into durable doctrine, REFINE the /conductor SKILL.md itself (tui-editor/.claude/skills/conductor/SKILL.md) and commit it — the stable doctrine is NOT frozen; the loop improving its own method is IBR self-application. If you edit the cron prompts, keep their verbatim copy in the skill in sync.
 
-(5) Keep yourself, the fork, and its workers in working order — verify alive by fork-specific evidence (gate-log step activity is authoritative, NOT process/tmux counts; never kill tmux mid-gate). Cap builders ~2-3, ONE gate at a time. Verify by DRIVING the real user path. Keep local main synced to origin/main (clean ff; never update-ref a checked-out branch). Report concisely.
+(5) Keep yourself, the fork, and its workers in working order — verify alive by fork-specific evidence (gate-log step activity is authoritative, NOT process/tmux counts; never kill tmux mid-gate). Cap builders ~2-3; gates may run in PARALLEL now (smokes are PID-namespaced) but keep ~2-3 concurrent (soft CPU ceiling) and re-run a load-flaked smoke isolated before believing it. Verify by DRIVING the real user path. Keep local main synced to origin/main (clean ff; never update-ref a checked-out branch). Report concisely.
 ```
 
 ### 10-minute liveness check — `3,13,23,33,43,53 * * * *` (every 10 min)

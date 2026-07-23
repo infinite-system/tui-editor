@@ -343,6 +343,35 @@ Six new operational lessons, every one from real friction this run.
   acted on, arm a Monitor on the named gate log rather than trusting the tracked-bg re-invoke; the 10-min
   loop-check remains the floor under it.
 
+- **One fixed-session-name smoke silently serialized the WHOLE fleet.** We'd capped at 2–3 builders and
+  strictly "one gate at a time" for the whole run, believing 3+ gates always flake. The real cause was
+  narrower and fixable: `smoke-settings-applied.sh` was the ONLY smoke using FIXED tmux session names
+  (`sa-sbt-a`…) while every other smoke already PID-namespaced (`smoke-$$`). tmux session names are global
+  to the one server, and the frame dump is keyed by session (`artifacts/frame-<session>.json`), so two
+  concurrent gates clobbered each other → the frame probe read a half-written frame → `IndexError` → a
+  gate RED that looked like a code bug. Proof it wasn't the code: the same check failed on CLEAN main while
+  another gate ran, and passed 30 min earlier in isolation. Fix: PID-namespace that smoke's sessions
+  (`sa-$$-…`); frame path + cleanup follow the name automatically. After the fix, the namespaced smoke
+  passed WHILE another gate ran — gates became genuinely parallel. Lesson: when a whole workflow is
+  serialized "because concurrency flakes," find the ONE shared-resource collision and fix IT rather than
+  serializing everything; and audit new smokes for PID-namespacing or they silently re-break parallel gating.
+  The remaining ceiling is soft: ~4–5 simultaneous gates still CPU-starve timing-sensitive smokes (my first
+  part-4 gate RED'd as a load flake at 4–5 concurrent; isolated re-run was ALL-PASS), so keep ~2–3 and
+  re-run a load-flaked smoke isolated before believing it.
+
+- **A UI test must locate elements by STRUCTURE, not by cosmetic display text — and a correct bisect can
+  still mislead about the mechanism.** The deferred "editorArea.title ↔ markdown find/paste coupling" looked
+  like the app keying find-source off the display title (the fork's bisect was correct: title='' → paste
+  no-op + find mis-route, deterministically). But the app was never coupled — find-source is the document
+  PATH (`source:${path}`, `markdown-preview:${sourcePath}`). The real coupling was in the OBSERVER:
+  `smoke-markdown`'s `source-border-column` probe located the source pane by searching the frame for the
+  literal `╭─README.md` (the pane's title text), so blanking the title made the probe return -1 → the
+  focus-click missed → paste went nowhere. Fix: locate the pane structurally (leftmost box corner on the
+  split border row), title-independent. Lesson: a probe that keys off cosmetic text couples the PRODUCT to
+  a value the product itself doesn't depend on, manufacturing a phantom "app bug." And a bisect that
+  correctly isolates the trigger variable (title) can still point at the wrong SYSTEM — the cause lived in
+  the measuring instrument, not the measured system. Verify the mechanism, not just the trigger.
+
 ---
 
 ## Live cron prompts (canonical copy now in the /conductor SKILL.md "Live cron prompts" section — edit THERE; the copy below may lag)
