@@ -105,11 +105,14 @@ class $TabBar {
    *  no interaction state, so nothing is kept here. */
   renderBreadcrumb(): StyledText {
     const { bufferTabStrip, tabBar, workspaceSet, readPalette } = this.deps;
+    const navigationHistory = workspaceSet.active.navigationHistory;
     return TabBarRenderer.Class.renderBreadcrumb({
       strip: bufferTabStrip,
       palette: readPalette(),
       barWidth: tabBar.width as number, // same full-width as the tab bar
       projectRoot: workspaceSet.active.root,
+      canGoBack: navigationHistory.canGoBack,
+      canGoForward: navigationHistory.canGoForward,
     });
   }
 

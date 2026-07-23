@@ -101,5 +101,38 @@ else
   fail "Alt+] did not return to beta.ts (activeBuffer=$forward_buffer)"
 fi
 
+echo '== the ‹ › breadcrumb buttons drive the same navigation on click =='
+# Locate the breadcrumb row + the ‹ button column from the real pane (tmux capture renders the actual
+# glyphs). The row is the one carrying ‹ AND the active filename — the workspace strip's own ‹ › pan
+# controls live on a different row and carry no filename. The › button sits two columns right of ‹.
+button_location="$("$HARNESS" capture "$SESSION_NAME" | python3 -c "
+import sys
+for row_index, line in enumerate(sys.stdin.read().split(chr(10))):
+    column = line.find('‹')
+    if column >= 0 and 'beta.ts' in line:
+        print(f'{column} {row_index}'); break
+")"
+if [ -z "$button_location" ]; then
+  fail 'could not find the breadcrumb ‹ › buttons in the rendered pane'
+else
+  back_column="${button_location% *}"; button_row="${button_location#* }"
+  forward_column=$((back_column + 2))
+  pass "breadcrumb buttons rendered (‹ at col $back_column, row $button_row)"
+  "$HARNESS" click "$SESSION_NAME" "$back_column" "$button_row" >/dev/null   # ‹ back
+  "$HARNESS" settle "$SESSION_NAME" 8 >/dev/null 2>&1 || true
+  if [ "$(field activeBuffer)" = "$FIXTURE_ROOT/alpha.ts" ]; then
+    pass 'clicking ‹ went back to alpha.ts'
+  else
+    fail "clicking ‹ did not go back (activeBuffer=$(field activeBuffer))"
+  fi
+  "$HARNESS" click "$SESSION_NAME" "$forward_column" "$button_row" >/dev/null   # › forward
+  "$HARNESS" settle "$SESSION_NAME" 8 >/dev/null 2>&1 || true
+  if [ "$(field activeBuffer)" = "$FIXTURE_ROOT/beta.ts" ]; then
+    pass 'clicking › went forward to beta.ts'
+  else
+    fail "clicking › did not go forward (activeBuffer=$(field activeBuffer))"
+  fi
+fi
+
 echo "== RESULT: $([ "$FAILURE_COUNT" -eq 0 ] && echo ALL-PASS || echo FAILURES) =="
 exit "$FAILURE_COUNT"

@@ -422,6 +422,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     void bufferTabStrip.scrollOffset.value;
     void workspaceSet.active.focus.value;
     void workspaceSet.active.sidebarView.value;
+    // The breadcrumb's ‹ › history buttons re-colour (enabled/disabled) as the trail moves.
+    void workspaceSet.active.navigationHistory.currentIndex.value;
+    void workspaceSet.active.navigationHistory.entries.value;
     void workspaceSet.active.markdownPreviewPaths.value;
     void workspaceSet.active.tree.selectedIndex.value;
     void workspaceSet.active.tree.hoveredIndex.value;
