@@ -376,6 +376,8 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       panelContentIds: panelHost.order.value,
       terminalColumns: view.panelViewportColumns(),
       terminalRows: view.panelViewportRows(),
+      // Active buffer is an image the editor renders as half-block cells (drives smoke-image-preview).
+      activeFileIsImage: workspaceSet.active.activeFileIsImage,
     });
   };
 

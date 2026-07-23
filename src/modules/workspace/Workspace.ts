@@ -301,6 +301,17 @@ class $Workspace {
     );
   }
 
+  /** The active buffer is a previewable image (a .png for now) — RootView renders it as half-block
+   *  cells instead of the binary-file text. Never true during a diff or with no document open. */
+  // invariant: An image buffer replaces the code text and leaves other files untouched (src/modules/image/image.invariants.md)
+  get activeFileIsImage(): boolean {
+    return (
+      !this.showingDiff.value &&
+      this.editor.hasDocument.value &&
+      Files.Class.extname(this.editor.document.path).toLowerCase() === '.png'
+    );
+  }
+
   get showingMarkdownPreview(): boolean {
     return this.activeFileIsMarkdown && this.markdownPreviewPaths.value.has(this.editor.document.path);
   }
