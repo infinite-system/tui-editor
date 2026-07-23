@@ -58,6 +58,10 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 'w', ctrl: true, shift: true }, action: 'workspace.close' },
   { chord: { key: 'pagedown', ctrl: true, shift: true }, action: 'workspace.next' },
   { chord: { key: 'pageup', ctrl: true, shift: true }, action: 'workspace.previous' },
+  // Ctrl+Shift+] / Ctrl+Shift+[ also cycle projects (VS Code-style bracket cycling) — the two-line
+  // workspace tabs are the thing being cycled. The macOS overlay adds the Cmd (super) form.
+  { chord: { key: ']', ctrl: true, shift: true }, action: 'workspace.next' },
+  { chord: { key: '[', ctrl: true, shift: true }, action: 'workspace.previous' },
   { chord: { key: 'w', ctrl: true }, action: 'buffer.close' },
   { chord: { key: 'tab', ctrl: true, shift: false }, action: 'buffer.next' },
   { chord: { key: 'tab', ctrl: true, shift: true }, action: 'buffer.previous' },
