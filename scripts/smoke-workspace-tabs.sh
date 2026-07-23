@@ -155,7 +155,9 @@ SECOND_TOP_COORDINATE="$(frame_coordinate "${SECOND_NAME:0:17}")"
 SECOND_TOP_ROW="${SECOND_TOP_COORDINATE##* }"
 check_equal "$SECOND_TOP_ROW" "0" "horizontal strip paints both projects on the top row"
 "$HARNESS" send "$SESSION_NAME" C-, >/dev/null
-for _settingRow in $(seq 1 11); do "$HARNESS" send "$SESSION_NAME" Down >/dev/null; done
+# 12 Downs to reach the 'Workspace tabs' (workspaceTabPosition) row: the boolean 'Indent guides' row
+# sits above it (after 'Word wrap'), so the panel is one row taller than before indent guides.
+for _settingRow in $(seq 1 12); do "$HARNESS" send "$SESSION_NAME" Down >/dev/null; done
 "$HARNESS" send "$SESSION_NAME" Right >/dev/null
 "$HARNESS" send "$SESSION_NAME" Escape >/dev/null
 sleep 0.8
