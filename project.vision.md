@@ -134,7 +134,38 @@ verify; the membrane governs; evidence flows up. That division of labor is not a
 AI — it is the correct factoring of software work, and it was discovered here by building an
 editor and refusing, at every step, to let anything hold together by vigilance.
 
-## 7. The name of the thing
+## 7. The Emacs inversion — shipping the ability to grow
+
+The last realization: Invar ships WITH its own source, law, and skills — because the product's
+final form is self-extension. This is the Emacs thesis (the editor users extend from inside, in
+the editor's own language) with its two fatal frictions deleted: the extension language was Lisp
+and is now conversation; extensions were lawless and are now gated.
+
+- **Distribution = binary + source + law.** The repo is not just code — it is the operating
+  manual for agents: the ivue skill, the conventions gate, the colocated contracts, the smoke
+  harness, the delegation doctrine. A user's agent inherits the same physics as the home fleet:
+  it cannot merge vibes, because the gate came in the box. Bun's 163 ms rebuild makes
+  "agent edits Invar → gate → rebuild → relaunch" an inner loop, not a release cycle.
+- **The seams are the plugin API.** Every `Static()` Class slot is a swap point; PanelHost takes
+  new PaneContent citizens with zero host rewiring; new capability = new module + registrations,
+  held to the same conventions gate. Fork-first (agents make forking cheap and the gate travels
+  with the fork); an out-of-tree package format only if the ecosystem proves the need.
+- **The contribution flywheel.** User asks; agent builds against the contracts; gate verifies;
+  user drives it same-day. Then three routes at the membrane: UPSTREAM (generic +
+  invariant-worthy → PR with its evidence attached — contract, driving smoke, gate transcript),
+  SHARED (the user's own invar-extensions repo, re-verified by every installer's local gate),
+  PRIVATE (stays in-tree).
+- **The slop-PR immune system.** The rule at the community boundary: a PR is reviewable only if
+  it arrives with contract + driving smoke + green gate run. Maintainers review invariants, not
+  ten thousand lines of vibes. The membrane governs the ecosystem edge exactly as it governs the
+  local agent — evidence-first, mechanically enforced.
+- **The collapse that matters:** user and contributor stop being different people. Every install
+  is a development seat; every conversation is potentially a feature. Self-extension without
+  self-corruption — the editor that grows by conversation and cannot drift while doing it.
+- **The most gated tool of all:** self-modification. Replacing the running binary requires
+  gate-green; nothing auto-pushes anywhere — the house rule, generalized to every user.
+
+## 8. The name of the thing
 
 An editor hosts your attention. An IDE hosts your tools. This hosts **a governed collaboration**:
 human intent, agent labor, contract law, and mechanical verification, sharing one object graph —
