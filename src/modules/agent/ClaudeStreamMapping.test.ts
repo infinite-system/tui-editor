@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { mapClaudeStreamEvent } from './CliStreamBackend';
+import { ClaudeStreamMapping } from './ClaudeStreamMapping';
+
+const mapClaudeStreamEvent = ClaudeStreamMapping.Class.mapEvent;
 
 // Fixtures trimmed from a REAL `claude -p "…" --output-format stream-json --verbose` run (2026-07-23).
 const INIT = { type: 'system', subtype: 'init', session_id: 'e85079b7', model: 'claude-fable-5' };

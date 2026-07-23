@@ -10,65 +10,7 @@
 // invariant: Agent events cross exactly one backend seam (src/modules/agent/agent.invariants.md)
 import type { AgentBackend } from './AgentBackend';
 import type { AgentEvent } from './AgentEvents';
-
-/** Extract the plain text out of a tool_result block's `content` (string, or an array of text parts). */
-function toolResultText(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => (part && typeof part === 'object' && 'text' in part ? String((part as { text?: unknown }).text ?? '') : ''))
-      .join('');
-  }
-  return '';
-}
-
-/** Map ONE parsed `claude --output-format stream-json` object to zero or more AgentEvents. Pure and
- *  total — unknown/uninteresting event types (rate_limit_event, stream_event, …) map to []. */
-export function mapClaudeStreamEvent(raw: unknown): AgentEvent[] {
-  if (!raw || typeof raw !== 'object') return [];
-  const record = raw as Record<string, unknown>;
-  switch (record.type) {
-    case 'system':
-      return record.subtype === 'init' ? [{ kind: 'session-start' }] : [];
-    case 'assistant': {
-      const content = (record.message as { content?: unknown })?.content;
-      if (!Array.isArray(content)) return [];
-      const events: AgentEvent[] = [];
-      for (const block of content) {
-        if (!block || typeof block !== 'object') continue;
-        const part = block as Record<string, unknown>;
-        if (part.type === 'text' && typeof part.text === 'string' && part.text) {
-          events.push({ kind: 'text-delta', text: part.text });
-        } else if (part.type === 'tool_use') {
-          events.push({ kind: 'tool-use', id: String(part.id ?? ''), name: String(part.name ?? 'tool'), input: part.input });
-        }
-      }
-      return events;
-    }
-    case 'user': {
-      const content = (record.message as { content?: unknown })?.content;
-      if (!Array.isArray(content)) return [];
-      const events: AgentEvent[] = [];
-      for (const block of content) {
-        if (!block || typeof block !== 'object') continue;
-        const part = block as Record<string, unknown>;
-        if (part.type === 'tool_result') {
-          events.push({
-            kind: 'tool-result',
-            id: String(part.tool_use_id ?? ''),
-            result: toolResultText(part.content),
-            isError: part.is_error === true,
-          });
-        }
-      }
-      return events;
-    }
-    case 'result':
-      return [{ kind: 'session-end', reason: record.is_error === true ? 'error' : 'completed' }];
-    default:
-      return [];
-  }
-}
+import { ClaudeStreamMapping } from './ClaudeStreamMapping';
 
 export interface CliStreamOptions {
   /** Absolute path to the `claude` binary (resolved by the factory via Bun.which). */
@@ -144,12 +86,12 @@ class $CliStreamBackend implements AgentBackend {
     } catch {
       return; // non-JSON diagnostic noise on stdout — ignore
     }
-    const record = raw as Record<string, unknown>;
-    if (record.type === 'system' && record.subtype === 'init' && typeof record.session_id === 'string') {
-      this.sessionId = record.session_id; // captured for --resume on the next turn
+    const sessionId = ClaudeStreamMapping.Class.sessionIdOf(raw);
+    if (sessionId) this.sessionId = sessionId; // captured for --resume on the next turn
+    for (const event of ClaudeStreamMapping.Class.mapEvent(raw)) {
+      if (event.kind === 'session-end') this.sawResult = true; // the stream ended the turn itself
+      this.emit(event);
     }
-    if (record.type === 'result') this.sawResult = true;
-    for (const event of mapClaudeStreamEvent(raw)) this.emit(event);
   }
 
   onEvent(callback: (event: AgentEvent) => void): void {
