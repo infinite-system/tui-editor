@@ -411,6 +411,61 @@ restructuring the live loop while the user sleeps).
 
 ---
 
+## Part 8 — Conductor run 2026-07-23 (agent harness → main, provider layer, panel-split integration)
+
+Big session: shipped to main the native agent harness + real Claude (phase 2, `claude -p
+--output-format stream-json`), HTML/CSS/Vue highlighting, the provider-agnostic layer
+(`agentProvider` auto/claude/codex + `agentSkipPermissions` default-ON + auth hardening), and the
+bottom-panel split (agent-LEFT / terminal-RIGHT). Fork built indent-guides (experiment) + the
+split-capability; I built the agent stack + did the split integration. Hard lessons, most about
+**two agents sharing one gate lane**:
+
+- **Gate serialization is a HARD lock across BOTH agents — not a guideline.** Twice, my gate and the
+  fork's gate ran concurrently and BOTH flaked `smoke: wrap`'s caret-vs-cursor canary (identical wrong
+  coords). Even a *stray isolation smoke* run during the other's gate does it. Rule: exactly ONE
+  merge-gate (or smoke, or `bun test`) across both agents at a time. Protocol that worked: the builder
+  pings "ready to gate", the conductor replies "clear", and everyone else HOLDS all CPU until the gate
+  reports. The systemic fix is still unbuilt: a **gate-lock file** the merge-gate acquires/releases so
+  concurrency is impossible, not just discouraged.
+
+- **The waiter self-match footgun (inverse of pkill -f).** A background waiter
+  `until ! pgrep -f "bash scripts/merge-gate.sh"; do …` MATCHES ITS OWN shell (the pattern is in its
+  command line) → it never exits AND poisons every "is a gate running?" check with false positives.
+  Use `ps -eo args | grep -E "^bash scripts/merge-gate\.sh$"` (anchored, exact) to detect a real gate;
+  key waiters on the gate LOG's exit line (`grep -q GATE-EXIT`), never on pgrep of the gate command.
+
+- **A mock with a no-op `onResize` cannot test real resize propagation.** The fork's split smoke used a
+  `StaticPaneContent` mock whose `onResize` did nothing — it proved RENDER-width sharing but never that
+  per-cell `onResize` actually resizes a real child. Wiring the REAL terminal into the split caught a
+  latent bug: the panel converge guard keyed on the panel's TOTAL width (unchanged by a split — same
+  118 cols, just redistributed), so `setViewportSize` never re-fired and the terminal's pty kept its
+  full width. Fix: key on the cell-LAYOUT signature (`rows + each cell id=width`). Lesson: test
+  multi-region/resize features by DRIVING a real child (terminal `stty size`), not a mock — the mock
+  hides exactly the propagation bug you need to catch. (This is "verify by driving the real user path"
+  with teeth.)
+
+- **A fork waiting on a long background gate must arm a Monitor on the gate-LOG file, not trust the
+  tracked-bg re-invoke.** Recurred again: the fork's solo split gate went ALL-PASS and the fork sat
+  DORMANT ~10 min (branch unpushed) until a loop-check nudge, because it relied on the tracked-bg
+  completion to wake it. Standing rule (already in the doctrine, now doubly confirmed): `Monitor` the
+  named gate log; the 10-min loop-check is the floor under it, not the primary signal.
+
+- **Concede overclaims under peer pushback — the test is the arbiter, not assertion.** I told the fork
+  its wrap failure was "certainly" a load flake; the fork rightly countered with a controlled
+  observation (same concurrent load: base PASS, its branch FAIL, deterministic coords) that a pure-flake
+  theory had to explain. I was overconfident; the SOLO gate was the real decider (it passed → flake
+  confirmed). Truth-over-self-protection in fleet coordination: don't defend a diagnosis, run the clean
+  experiment. Good teammate behavior on both sides — nobody pushed on a red gate.
+
+- **Auto-detect + graceful-skip is the reusable shape for external-dependency features.** The provider
+  layer (claude/codex on PATH → real backend, else echo), the future TTS (espeak-ng/piper/say installed
+  → real audio, else silent no-op), the LSP server table — all the same pattern: neutral intent above
+  a seam, per-tool dialect below, availability-detected, never a hard dependency. When the dependency is
+  absent at build (codex out of credits; no TTS engine installed), build + unit-test the envelope/mapping
+  against known fixtures and FLAG the unverified path in-file — don't fake a drive-verify.
+
+---
+
 ## Live cron prompts (canonical copy now in the /conductor SKILL.md "Live cron prompts" section — edit THERE; the copy below may lag)
 
 These are the exact prompts driving the orchestration loop this session. **Improve them HERE, then
