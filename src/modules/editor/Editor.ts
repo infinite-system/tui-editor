@@ -385,7 +385,9 @@ class $Editor {
     const target = this.undo.undo(current);
     if (!target) return;
     this.document.restore(target.lines);
-    this.document.dirty.value = true;
+    // Content-aware dirty: an undo/redo that lands back on the saved content reads as UNCHANGED, not
+    // dirty. (A normal edit always dirties eagerly; only undo/redo can return to the clean baseline.)
+    this.document.dirty.value = !this.document.matchesSaved();
     this.placeCursor(target.cursor.line, target.cursor.col);
     this.cursor.clearSelection();
     this.scrollLineIntoView(target.cursor.line);
@@ -401,7 +403,9 @@ class $Editor {
     const target = this.undo.redo(current);
     if (!target) return;
     this.document.restore(target.lines);
-    this.document.dirty.value = true;
+    // Content-aware dirty: an undo/redo that lands back on the saved content reads as UNCHANGED, not
+    // dirty. (A normal edit always dirties eagerly; only undo/redo can return to the clean baseline.)
+    this.document.dirty.value = !this.document.matchesSaved();
     this.placeCursor(target.cursor.line, target.cursor.col);
     this.cursor.clearSelection();
     this.scrollLineIntoView(target.cursor.line);

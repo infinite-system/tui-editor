@@ -93,6 +93,15 @@ chkne "selection range published" "$(f selection)"
 "$H" send "$S" Escape >/dev/null
 chk "selection cleared after Escape" "$(f hasSelection)" "false"
 
+echo "== undo back to the saved content reads UNCHANGED (dirty clears, not sticky) =="
+# The buffer is dirty from the X typed earlier. Undo every edit back to the on-disk content: dirty
+# must CLEAR — a buffer undone all the way to its saved state is not modified (it used to stay dirty
+# forever after the first edit). Loop is teeth-checked: if dirty never clears, the chk below fails.
+chk "buffer dirty from the earlier edit" "$(f dirty)" "true"
+for _ in 1 2 3 4 5; do [ "$(f dirty)" = "false" ] && break; "$H" send "$S" C-z >/dev/null; sleep 0.25; "$H" settle "$S" >/dev/null 2>&1; done
+chk "undo all the way to the saved content cleared dirty" "$(f dirty)" "false"
+"$H" send "$S" -l X >/dev/null; sleep 0.2; "$H" settle "$S" >/dev/null 2>&1   # restore a dirty edit for the later close-tab step
+
 echo "== mouse drag-select persists + Ctrl+C copies (human-QA regression) =="
 # Drag along doc line 1 ("A tiny project..." — a CONTENT line; an empty line cannot hold a
 # horizontal selection). Screen row = editor content top, shifted by the workspace-strip height.

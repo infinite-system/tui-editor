@@ -14,6 +14,11 @@ class $TextDocument {
   // Compact ground truth — a plain string[], not a reactive-per-line structure.
   private _lines: string[] = [''];
   private _eol: '\n' | '\r\n' = '\n';
+  // Signature of the content as it was last SAVED/LOADED (the clean baseline). Lets undo/redo clear
+  // the dirty flag when the buffer returns to exactly the on-disk content, instead of staying dirty
+  // forever after the first edit. Line-count + FNV-1a hash: a false "clean" would need a hash
+  // collision AND a matching line count for different text — negligible, and only costs a missing dot.
+  private savedSignature = '';
 
   // Reactive signals: revision (bumped on any change) and dirty flag.
   get revision() {
@@ -33,6 +38,7 @@ class $TextDocument {
       this._eol = '\n';
       this.binary.value = true;
       this.dirty.value = false;
+      this.captureSavedBaseline();
       this.revision.value++;
       return;
     }
@@ -42,6 +48,7 @@ class $TextDocument {
     if (this._lines.length === 0) this._lines = [''];
     this.binary.value = false;
     this.dirty.value = false;
+    this.captureSavedBaseline();
     this.revision.value++;
   }
 
@@ -52,6 +59,7 @@ class $TextDocument {
     if (this._lines.length === 0) this._lines = [''];
     this.binary.value = false;
     this.dirty.value = false;
+    this.captureSavedBaseline();
     this.revision.value++;
   }
 
@@ -113,6 +121,32 @@ class $TextDocument {
 
   markSaved(): void {
     this.dirty.value = false;
+    this.captureSavedBaseline();
+  }
+
+  /** Snapshot the current content as the clean baseline (called on load + save). */
+  private captureSavedBaseline(): void {
+    this.savedSignature = this.contentSignature();
+  }
+
+  /** True when the current content is byte-identical to the last saved/loaded baseline — so an undo
+   *  (or redo) that lands back on the on-disk content reads as UNCHANGED, not dirty. */
+  matchesSaved(): boolean {
+    return this.contentSignature() === this.savedSignature;
+  }
+
+  /** `lineCount:hash` over the joined lines (FNV-1a, allocation-free — hashes chars in place with a
+   *  newline separator between lines rather than materializing one big joined string). */
+  private contentSignature(): string {
+    let hash = 0x811c9dc5;
+    for (let lineIndex = 0; lineIndex < this._lines.length; lineIndex += 1) {
+      const line = this._lines[lineIndex]!;
+      for (let charIndex = 0; charIndex < line.length; charIndex += 1) {
+        hash = Math.imul(hash ^ line.charCodeAt(charIndex), 0x01000193);
+      }
+      hash = Math.imul(hash ^ 0x0a, 0x01000193); // newline separator
+    }
+    return `${this._lines.length}:${(hash >>> 0).toString(36)}`;
   }
 
   // --- character-level editing (used from M3) ---
