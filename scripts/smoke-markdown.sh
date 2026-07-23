@@ -55,8 +55,12 @@ if operation == 'preview-button-column':
 elif operation == 'preview-border-column':
     print(next((text.find('╭─Preview') for text in texts if '╭─Preview' in text), -1))
 elif operation == 'source-border-column':
-    row = next((text for text in texts if '╭─README.md' in text), '')
-    print(row.find('╭─README.md'))
+    # The source pane's border is the LEFTMOST box corner on the split's border row (the same row
+    # carries '╭─Preview' further right). Locate it structurally, NOT by the pane's title text —
+    # the title (filename legend) is cosmetic and may be blank, so keying off it would couple this
+    # probe to a display value it has no business depending on.
+    row = next((text for text in texts if '╭─Preview' in text), '')
+    print(row.find('╭'))
 elif operation == 'reference-cell':
     preview_column = next((text.find('╭─Preview') for text in texts if '╭─Preview' in text), -1)
     for row_index, text in enumerate(texts):
