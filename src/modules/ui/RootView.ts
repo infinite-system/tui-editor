@@ -696,8 +696,10 @@ function $buildRootView(
     const sourcePaneFocused = workspaceSet.active.focus.value === 'editor' &&
       !(editorContentMount.markdownSplitView?.previewFocused ?? false);
     editorArea.borderColor = sourcePaneFocused ? palette.borderActive : palette.border;
-    editorArea.title = workspaceSet.active.editor.hasDocument.value ? workspaceSet.active.editor.title : 'Editor';
-    editorArea.titleColor = sourcePaneFocused ? palette.accent : palette.dim;
+    // No border legend: the buffer tab bar above the pane is the filename header, so a filename on the
+    // border too read as a redundant fieldset legend poking through the top edge. Keep the pane border
+    // (its box gives the editor its shape and keeps codeBody coords stable) but with a clean top edge.
+    editorArea.title = '';
     // The diff view has no editor buffer tabs — blank the buffer tab strip while a diff is showing
     // (keep its row so the diff panes don't jump when toggling in/out of a diff).
     const diffShowing = workspaceSet.active.showingDiff.value;
