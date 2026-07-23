@@ -93,7 +93,7 @@ PY
 echo "== build narrow overflowing repository fixture =="
 mkdir -p "$overflow_workspace/.invar"
 printf '%s\n' \
-  '{"sidebarWidth":28,"scrollbarThickness":1,"horizontalScrollModifier":"alt","linesPerNotch":3,"gitSplitRatio":0.5}' \
+  '{"sidebarWidth":28,"scrollbarThickness":1,"horizontalScrollModifier":"alt","linesPerNotch":3,"gitSplitRatio":0.5,"showActivityBar":false}' \
   > "$overflow_workspace/.invar/settings.json"
 (
   cd "$overflow_workspace" || exit 1
@@ -150,7 +150,7 @@ if frame_contains "$overflow_frame" 'LOG-END-MARKER'; then pass "Option-wheel re
 
 echo "== fitting tree + git panes paint no horizontal bar =="
 mkdir -p "$fits_workspace/.invar"
-printf '%s\n' '{"sidebarWidth":28,"scrollbarThickness":1,"gitSplitRatio":0.5}' > "$fits_workspace/.invar/settings.json"
+printf '%s\n' '{"sidebarWidth":28,"scrollbarThickness":1,"gitSplitRatio":0.5,"showActivityBar":false}' > "$fits_workspace/.invar/settings.json"
 (
   cd "$fits_workspace" || exit 1
   git init -q

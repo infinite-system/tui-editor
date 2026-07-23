@@ -44,7 +44,7 @@ echo "== baseline (wrap OFF): consecutive gutters 1,2 (one line == one row) =="
 "$H" settle "$S" >/dev/null 2>&1
 baseline="$(FRAME_FILE="$FRAME" "$BUN" -e '
 const frame=JSON.parse(require("fs").readFileSync(process.env.FRAME_FILE));
-const gutterNumber=(y)=>{const m=frame.rows[y].text.slice(33,40).match(/\d+/);return m?Number(m[0]):null};
+const gutterNumber=(y)=>{const m=frame.rows[y].text.slice(37,44).match(/\d+/);return m?Number(m[0]):null};
 // FIND the first gutter row (content starts below the tab bar + pane border — do not hardcode the
 // row, so the check survives chrome-layout shifts) then assert the next line is consecutive.
 let base=-1;for(let y=0;y<frame.height;y++){if(gutterNumber(y)===1){base=y;break}}
@@ -64,8 +64,8 @@ chk "scrollLeft forced 0" "$(f editorScrollLeft)" "0"
 echo "== wrap ON: long line occupies MULTIPLE rows; gutter number only on the FIRST =="
 wrap_gutter="$(FRAME_FILE="$FRAME" "$BUN" -e '
 const frame=JSON.parse(require("fs").readFileSync(process.env.FRAME_FILE));
-const gutterNumber=(y)=>{const m=frame.rows[y].text.slice(33,40).match(/\d+/);return m?Number(m[0]):null};
-const codeBody=(y)=>frame.rows[y].text.slice(40).trim();
+const gutterNumber=(y)=>{const m=frame.rows[y].text.slice(37,44).match(/\d+/);return m?Number(m[0]):null};
+const codeBody=(y)=>frame.rows[y].text.slice(44).trim();
 // Find the first line (gutter 1) wherever the chrome places it, then the gutter-2 line below it;
 // the rows between must be wrap CONTINUATIONS (no gutter number, non-empty body).
 let base=-1;for(let y=0;y<frame.height;y++){if(gutterNumber(y)===1){base=y;break}}
@@ -125,7 +125,7 @@ sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
 chk "wordWrap OFF" "$(f wordWrap)" "false"
 off_gutter="$(FRAME_FILE="$FRAME" "$BUN" -e '
 const frame=JSON.parse(require("fs").readFileSync(process.env.FRAME_FILE));
-const gutterNumber=(y)=>{const m=frame.rows[y].text.slice(33,40).match(/\d+/);return m?Number(m[0]):null};
+const gutterNumber=(y)=>{const m=frame.rows[y].text.slice(37,44).match(/\d+/);return m?Number(m[0]):null};
 // FIND the first gutter row (content starts below the tab bar + pane border — do not hardcode the
 // row, so the check survives chrome-layout shifts) then assert the next line is consecutive.
 let base=-1;for(let y=0;y<frame.height;y++){if(gutterNumber(y)===1){base=y;break}}
