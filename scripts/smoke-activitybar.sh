@@ -174,6 +174,20 @@ settle
 expect_equal "$(field sidebarView)" 'extensions' 'Ctrl+Shift+X switched to Extensions'
 expect_frame_contains 'Coming soon' 'the chord switched the rendered content too'
 
+echo '== Ctrl+Shift+B toggles the whole activity bar (hide reclaims the 4 columns) =='
+send_kitty '101;6u'   # back to Explorer for a known state
+settle
+bar_accents_before="$(accent_count_col0)"
+if [ "${bar_accents_before:-0}" -ge 1 ] 2>/dev/null; then pass 'activity bar visible before toggle (accent in column 0)'; else fail "activity bar not visible before toggle (accents=$bar_accents_before)"; fi
+send_kitty '98;6u'    # Ctrl+Shift+B -> hide
+settle
+expect_equal "$(accent_count_col0)" '0' 'Ctrl+Shift+B hid the bar — no activity accent column remains'
+expect_equal "$(field showActivityBar)" 'false' 'the showActivityBar setting flipped off'
+send_kitty '98;6u'    # Ctrl+Shift+B -> show again
+settle
+bar_accents_after="$(accent_count_col0)"
+if [ "${bar_accents_after:-0}" -ge 1 ] 2>/dev/null; then pass 'Ctrl+Shift+B showed the bar again'; else fail "Ctrl+Shift+B did not restore the bar (accents=$bar_accents_after)"; fi
+
 echo ''
 if [ "$failure_count" = '0' ]; then
   echo 'smoke-activitybar: ALL-PASS'

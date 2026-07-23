@@ -152,6 +152,13 @@ class $ActivityBar {
     });
     this.body.content = new StyledText(chunks);
   }
+
+  /** Show or hide the bar (the View: Toggle Activity Bar command). Collapsing the width to 0 returns
+   *  the 4 columns to the sidebar/editor so hiding it truly reclaims the space, not just blanks it. */
+  setVisible(visible: boolean): void {
+    this.bar.visible = visible;
+    this.bar.width = visible ? BUTTON_WIDTH : 0;
+  }
 }
 
 export namespace ActivityBar {

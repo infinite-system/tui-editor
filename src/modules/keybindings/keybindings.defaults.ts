@@ -30,6 +30,9 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 'e', ctrl: true, shift: true }, action: 'view.showFiles' },
   { chord: { key: 'g', ctrl: true, shift: true }, action: 'view.showSourceControl' },
   { chord: { key: 'x', ctrl: true, shift: true }, action: 'view.showExtensions' },
+  // Ctrl+Shift+B shows/hides the whole activity bar (Ctrl+B is VS Code's SIDEBAR toggle and is free
+  // here too, but the bar is the activity-bar feature so B-for-bar with shift keeps chord space open).
+  { chord: { key: 'b', ctrl: true, shift: true }, action: 'view.toggleActivityBar' },
   // Find and Replace are global overlay-switch actions: from any current input overlay, one chord
   // replaces the shared modal slot. They still no-op in Bootstrap when no document is open.
   { chord: { key: 'f', ctrl: true }, action: 'find.open' },

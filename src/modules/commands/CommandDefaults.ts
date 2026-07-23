@@ -17,6 +17,7 @@ export interface CommandContext {
   nextDiffChange: () => void;
   previousDiffChange: () => void;
   toggleMarkdownPreview: () => void;
+  toggleActivityBar: () => void;
   hasHoveredMarkdownReference: () => boolean;
   openHoveredMarkdownReference: () => void;
   openShortcutHelp: () => void;
@@ -143,6 +144,12 @@ function $registerDefaultCommands(
       category: 'View',
       when: hasDocument,
       run: () => getEditor().toggleWordWrap(),
+    },
+    {
+      id: 'view.toggleActivityBar',
+      title: 'View: Toggle Activity Bar',
+      category: 'View',
+      run: context.toggleActivityBar,
     },
     {
       id: 'markdown.togglePreview',

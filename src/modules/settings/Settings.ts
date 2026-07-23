@@ -45,6 +45,7 @@ export interface SettingsValues {
   glyphMode: GlyphMode;
   theme: string;
   wordWrap: boolean;
+  showActivityBar: boolean;
   workspaceTabPosition: WorkspaceTabPosition;
   // Language intelligence.
   typescriptServer: TypeScriptServer;
@@ -139,6 +140,9 @@ class $Settings {
   get wordWrap(): Ref<boolean> {
     return ref(false);
   }
+  get showActivityBar(): Ref<boolean> {
+    return ref(true);
+  }
   get workspaceTabPosition(): Ref<WorkspaceTabPosition> {
     return ref<WorkspaceTabPosition>('top');
   }
@@ -172,6 +176,7 @@ class $Settings {
       glyphMode: this.glyphMode,
       theme: this.theme,
       wordWrap: this.wordWrap,
+      showActivityBar: this.showActivityBar,
       workspaceTabPosition: this.workspaceTabPosition,
       typescriptServer: this.typescriptServer,
       sidebarWidth: this.sidebarWidth,
@@ -315,6 +320,7 @@ class $Settings {
       glyphMode: 'auto',
       theme: 'dark',
       wordWrap: false,
+      showActivityBar: true,
       workspaceTabPosition: 'top',
       typescriptServer: 'tsgo',
       sidebarWidth: 32,
@@ -352,6 +358,7 @@ class $Settings {
     }
     if (typeof record.theme === 'string') result.theme = record.theme;
     if (typeof record.wordWrap === 'boolean') result.wordWrap = record.wordWrap;
+    if (typeof record.showActivityBar === 'boolean') result.showActivityBar = record.showActivityBar;
     if (
       typeof record.workspaceTabPosition === 'string' &&
       ALLOWED_WORKSPACE_TAB_POSITIONS.has(record.workspaceTabPosition as WorkspaceTabPosition)

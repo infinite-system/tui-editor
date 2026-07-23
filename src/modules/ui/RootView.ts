@@ -551,6 +551,7 @@ function $buildRootView(
     const gitView = sidebarViewValue === 'git';
     const extensionsView = sidebarViewValue === 'extensions';
     // The activity bar reflects sidebarView (active-item accent) + the git badge each frame.
+    activityBar.setVisible(settings.showActivityBar.value);
     activityBar.update(palette);
     sidebar.width = sidebarWidth(); // live width from the draggable splitter (persisted to settings)
     sidebar.backgroundColor = palette.panel;

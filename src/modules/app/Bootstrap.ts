@@ -261,6 +261,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       editorScrollTop: editor.viewport.scrollTop.value,
       editorScrollLeft: editor.viewport.scrollLeft.value,
       wordWrap: editor.wordWrap.value,
+      showActivityBar: settings.showActivityBar.value,
       changesScrollTop: workspaceSet.active.gitPanel.changesScrollTop.value,
       gitChangesIndex: workspaceSet.active.gitPanel.changesIndex.value,
       gitLogScrollTop: workspaceSet.active.gitPanel.logScrollTop.value,
@@ -522,6 +523,10 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     nextDiffChange: () => view.activeDiffView()?.jumpToNextChange(),
     previousDiffChange: () => view.activeDiffView()?.jumpToPreviousChange(),
     toggleMarkdownPreview: () => workspaceSet.active.toggleMarkdownPreview(),
+    toggleActivityBar: () => {
+      settings.showActivityBar.value = !settings.showActivityBar.value;
+      app.requestRender();
+    },
     hasHoveredMarkdownReference: () =>
       Boolean(view.activeMarkdownSplitView()?.hoveredReferencePath.value),
     openHoveredMarkdownReference: () => view.activeMarkdownSplitView()?.openHoveredReference(),
@@ -679,6 +684,11 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'view.showFiles': () => workspaceSet.active.showSidebarView('files'),
     'view.showSourceControl': () => workspaceSet.active.showSidebarView('git'),
     'view.showExtensions': () => workspaceSet.active.showSidebarView('extensions'),
+    // Ctrl+Shift+B shows/hides the whole activity bar (same setting-flip the palette command runs).
+    'view.toggleActivityBar': () => {
+      settings.showActivityBar.value = !settings.showActivityBar.value;
+      app.requestRender();
+    },
     'git.up': () => {
       normalizeChangesIndex();
       if (workspaceSet.active.gitPanel.region.value === 'changes') moveChanges(-1);
