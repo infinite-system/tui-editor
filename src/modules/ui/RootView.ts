@@ -312,7 +312,7 @@ function $buildRootView(
   // invariant: A scrollable pane height is an input not an output (src/modules/ui/ui.invariants.md)
   // INTEGRATOR NOTE: this bottom-panel mount is the ONE shared RootView touch for the terminal; it is
   // independent of the activity-bar change landing in parallel (which touches the sidebar/left slot).
-  let panelHeightRows = 12;
+  let panelHeightRows = 18; // roomier default terminal (still drag-resizable 3–40 via the divider)
   const panelStack = new BoxRenderable(renderer, {
     id: 'panel-stack',
     flexDirection: 'column',
