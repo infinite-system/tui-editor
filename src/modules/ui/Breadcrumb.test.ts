@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { breadcrumbSegments, fitBreadcrumb } from './TabBarRenderer';
+import { Breadcrumb } from './TabBarRenderer';
+const { breadcrumbSegments, fitBreadcrumb } = Breadcrumb.Class;
 
 describe('breadcrumbSegments', () => {
   test('project + intermediate dirs + filename', () => {

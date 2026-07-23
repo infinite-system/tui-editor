@@ -28,7 +28,7 @@ function ellipsize(text: string, width: number): string {
 /** Breadcrumb path segments for a buffer tab: the project folder, then each directory between it and
  *  the file, then the filename — rendered `project › src › ui › Foo.ts`. Paths outside the project
  *  root (rare) fall back to just the filename. POSIX separators (the app's paths are absolute POSIX). */
-export function breadcrumbSegments(absolutePath: string, projectRoot: string): string[] {
+function $breadcrumbSegments(absolutePath: string, projectRoot: string): string[] {
   const fileName = absolutePath.split('/').filter(Boolean).pop() ?? absolutePath;
   const normalizedRoot = projectRoot.replace(/\/+$/, '');
   const projectName = normalizedRoot.split('/').filter(Boolean).pop() ?? normalizedRoot;
@@ -40,7 +40,7 @@ export function breadcrumbSegments(absolutePath: string, projectRoot: string): s
 /** Fit breadcrumb segments into `maxWidth` display columns (separators included, `separatorWidth`
  *  cells each): drop LEADING segments — collapsing them into a single `…` crumb — until it fits, but
  *  ALWAYS keep the filename (the last segment) even if it alone must be hard-truncated. */
-export function fitBreadcrumb(segments: string[], maxWidth: number, separatorWidth: number): string[] {
+function $fitBreadcrumb(segments: string[], maxWidth: number, separatorWidth: number): string[] {
   if (segments.length === 0) return [];
   const width = (parts: string[]): number =>
     parts.reduce((sum, part) => sum + part.length, 0) + Math.max(0, parts.length - 1) * separatorWidth;
@@ -58,6 +58,15 @@ export function fitBreadcrumb(segments: string[], maxWidth: number, separatorWid
     return [maxWidth <= 1 ? '…' : `${fileName.slice(0, maxWidth - 1)}…`];
   }
   return visible;
+}
+
+class $Breadcrumb {
+  static breadcrumbSegments = $breadcrumbSegments;
+  static fitBreadcrumb = $fitBreadcrumb;
+}
+export namespace Breadcrumb {
+  export const $Class = $Breadcrumb;
+  export const Class = Static($Breadcrumb);
 }
 
 export type WorkspaceTabBarSegment = {
@@ -336,8 +345,8 @@ function $renderBufferTabBar(context: BufferTabBarRenderContext): BufferTabBarRe
   const CRUMB_SEPARATOR = ' › ';
   const MAX_TAB_BREADCRUMB_WIDTH = 28;
   const measured = tabs.map((tab) => {
-    const crumbs = fitBreadcrumb(
-      breadcrumbSegments(tab.identifier, context.projectRoot),
+    const crumbs = Breadcrumb.Class.fitBreadcrumb(
+      Breadcrumb.Class.breadcrumbSegments(tab.identifier, context.projectRoot),
       MAX_TAB_BREADCRUMB_WIDTH,
       CRUMB_SEPARATOR.length,
     );
