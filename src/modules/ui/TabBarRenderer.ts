@@ -260,7 +260,7 @@ function $renderWorkspaceTabBar(context: WorkspaceTabBarRenderContext): Workspac
       .slice(0, maximumDetailWidth)
       .padEnd(maximumDetailWidth, ' ');
     const detailText = `   ${detailLabel}   `;
-    const styledDetail = fg(palette.dim)(detailText);
+    const styledDetail = fg(workspaceTab.active ? palette.fg : palette.dim)(detailText);
     chunks.push(rowBackground ? bg(rowBackground)(styledDetail) : styledDetail);
     detailColumnIndex += measuredWorkspaceTab.width;
   }
