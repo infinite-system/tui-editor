@@ -27,11 +27,26 @@ interface DetectedEngine {
 export interface SystemTtsOptions {
   /** Override engine auto-detection (mainly for tests). */
   enginePath?: string;
-  /** The user-selected piper voice NAME (the `.onnx` basename); '' / unknown → the first discovered. */
+  /** A FIXED selected voice NAME (the `.onnx` basename); '' / unknown → first discovered. Used by
+   *  one-shot callers (Test Voice). For live narration, prefer `voiceProvider`. */
   voice?: string;
-  /** Speech rate as piper's `--length_scale` (lower = faster; 1.0 = normal). Mapped to espeak/`say`
-   *  words-per-minute (≈ 175 / rate). Undefined → normal speed. */
+  /** A FIXED speech rate (piper length_scale; lower = faster; 1.0 = normal). For live narration, prefer
+   *  `rateProvider`. */
   rate?: number;
+  /** LIVE voice: read per utterance so a settings change takes effect without recreating the backend. */
+  voiceProvider?: () => string;
+  /** LIVE rate: read per utterance so a settings change takes effect without recreating the backend. */
+  rateProvider?: () => number;
+}
+
+/** piper `--length_scale` (lower = faster), clamped to a sane band. */
+function toLengthScale(rate: number): number {
+  return Math.max(0.1, Math.min(rate, 5));
+}
+
+/** espeak/`say` words-per-minute from the length_scale (≈ 175 / scale), clamped. */
+function toWordsPerMinute(rate: number): number {
+  return Math.max(50, Math.min(Math.round(175 / toLengthScale(rate)), 500));
 }
 
 /** Resolve piper's voice model for the selected voice: an explicit INVAR_PIPER_MODEL wins (tests), else
@@ -48,26 +63,36 @@ function resolvePiperModel(voice: string): string | null {
  *  preferred when its binary AND a voice model are present; espeak-ng (formant synth) is the always-there
  *  fallback; macOS `say` last. espeak/piper emit a WAV on stdout (piped to a player); `say` plays
  *  directly. */
-function detectEngine(voice: string, rate: number): DetectedEngine | null {
-  const lengthScale = Math.max(0.1, Math.min(rate, 5)); // piper --length_scale (lower = faster)
-  const wordsPerMinute = Math.max(50, Math.min(Math.round(175 / lengthScale), 500)); // espeak/say wpm
+// Detect the ENGINE once (which binary + whether any voice model exists), but RESOLVE the voice model
+// and rate per utterance from the live providers — so changing the voice/rate in settings takes effect
+// on the next spoken turn without recreating the backend.
+function detectEngine(resolveVoice: () => string, resolveRate: () => number): DetectedEngine | null {
   const piper = Bun.which('piper');
-  const piperModel = piper ? resolvePiperModel(voice) : null;
-  if (piper && piperModel) {
+  const detectedModel = piper ? resolvePiperModel(resolveVoice()) : null;
+  if (piper && detectedModel) {
     return {
       name: 'piper',
       playsDirectly: false,
-      // piper reads the utterance on stdin; the queue writes text to stdin below.
-      synthCommand: () => [piper, '--model', piperModel, '--length_scale', String(lengthScale), '--output_file', '-'],
+      // piper reads the utterance on stdin; the queue writes text to stdin below. Voice + rate are read
+      // LIVE here (fall back to the model found at detection if the current selection resolves to null).
+      synthCommand: () => [
+        piper,
+        '--model',
+        resolvePiperModel(resolveVoice()) ?? detectedModel,
+        '--length_scale',
+        String(toLengthScale(resolveRate())),
+        '--output_file',
+        '-',
+      ],
     };
   }
   const espeak = Bun.which('espeak-ng') ?? Bun.which('espeak');
   if (espeak) {
-    return { name: 'espeak-ng', playsDirectly: false, synthCommand: (text) => [espeak, '-s', String(wordsPerMinute), '--stdout', text] };
+    return { name: 'espeak-ng', playsDirectly: false, synthCommand: (text) => [espeak, '-s', String(toWordsPerMinute(resolveRate())), '--stdout', text] };
   }
   const say = Bun.which('say');
   if (say) {
-    return { name: 'say', playsDirectly: true, synthCommand: (text) => [say, '-r', String(wordsPerMinute), text] };
+    return { name: 'say', playsDirectly: true, synthCommand: (text) => [say, '-r', String(toWordsPerMinute(resolveRate())), text] };
   }
   return null;
 }
@@ -98,7 +123,9 @@ class $SystemTtsBackend implements TtsBackend {
   private disposed = false;
 
   constructor(options: SystemTtsOptions = {}) {
-    this.engine = detectEngine(options.voice ?? '', options.rate ?? 1.0);
+    const resolveVoice = options.voiceProvider ?? ((): string => options.voice ?? '');
+    const resolveRate = options.rateProvider ?? ((): number => options.rate ?? 1.0);
+    this.engine = detectEngine(resolveVoice, resolveRate);
     this.playerPath = this.engine && !this.engine.playsDirectly ? detectPlayer() : null;
   }
 

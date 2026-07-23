@@ -11,19 +11,27 @@ import { MockTtsBackend } from './MockTtsBackend';
 import { SystemTtsBackend } from './SystemTtsBackend';
 
 export interface TtsCreateOptions {
-  /** The user-selected piper voice NAME (`agentNarrationVoice`); threaded to the real backend so the
-   *  chosen voice is used. Ignored by the mock. */
+  /** A FIXED voice NAME (`agentNarrationVoice`) for a one-shot caller (Test Voice). Ignored by the mock. */
   voice?: string;
-  /** Speech rate (`agentNarrationRate`, piper length_scale; lower = faster). Ignored by the mock. */
+  /** A FIXED rate (`agentNarrationRate`). Ignored by the mock. */
   rate?: number;
+  /** LIVE voice — read per utterance so a settings change applies to ongoing narration. */
+  voiceProvider?: () => string;
+  /** LIVE rate — read per utterance so a settings change applies to ongoing narration. */
+  rateProvider?: () => number;
 }
 
 /** Pick the TTS backend. `INVAR_TTS_BACKEND=mock` → the silent recording double (CI/tests). Otherwise
- *  the real SystemTtsBackend, which auto-detects an engine (in the selected voice + rate) and no-ops
- *  when none is installed. */
+ *  the real SystemTtsBackend, which auto-detects an engine and resolves the voice + rate per utterance
+ *  (live) and no-ops when no engine is installed. */
 function $createBackend(options: TtsCreateOptions = {}): TtsBackend {
   if (process.env.INVAR_TTS_BACKEND === 'mock') return new MockTtsBackend.Class();
-  return new SystemTtsBackend.Class({ voice: options.voice, rate: options.rate });
+  return new SystemTtsBackend.Class({
+    voice: options.voice,
+    rate: options.rate,
+    voiceProvider: options.voiceProvider,
+    rateProvider: options.rateProvider,
+  });
 }
 
 class $TtsFactory {

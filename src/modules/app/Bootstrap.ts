@@ -265,7 +265,12 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       narration = new NarrationProjection.Class(
         agentPane.agentSession,
         settings.agentAudioNarration,
-        TtsFactory.Class.createBackend({ voice: settings.agentNarrationVoice.value, rate: settings.agentNarrationRate.value }),
+        // LIVE voice + rate: read per utterance so changing them in settings applies to ongoing narration
+        // without recreating the backend or restarting.
+        TtsFactory.Class.createBackend({
+          voiceProvider: () => settings.agentNarrationVoice.value,
+          rateProvider: () => settings.agentNarrationRate.value,
+        }),
       );
     }
   };

@@ -206,3 +206,36 @@ picker cannot select; a hardcoded voice list.
 **Status:** provisional
 
 **Last refined:** 2026-07-23
+
+### Narration speaks prose, not markdown syntax
+
+**Invariant:** The text handed to the TTS backend is PROSE, never raw markdown. An assistant turn is run
+through a pure transform before `speak()`: markdown syntax is stripped (backticks, emphasis, headings,
+bullets, blockquotes, links → their text), fenced code blocks become a spoken "code block" placeholder,
+and filesystem paths collapse to their last segment (`/tmp/wt-voice` → "wt-voice"). Otherwise piper/espeak
+spell paths and punctuation letter-by-letter — the "bebebe" babble. A single-slash word ("and/or") is not
+a path and is left intact.
+
+**Scope:** `SpeakableText.forSpeech` (pure string→string), called by `NarrationProjection` immediately
+before `tts.speak()`.
+
+**Mechanism:** `NarrationProjection.onTranscriptChanged` computes `SpeakableText.Class.forSpeech(entry.text)`
+and speaks THAT (also recording it as `lastSpoken`). `forSpeech` applies ordered regex/token passes:
+fenced blocks → placeholder, inline code → content (paths simplified), links → text, line markers
+(#/-/>) dropped, emphasis unwrapped, bare path tokens → last segment, whitespace collapsed.
+
+**Generates:** natural-sounding narration of an assistant's markdown reply; no spelled-out slashes,
+backticks, or asterisks; code blocks announced rather than read.
+
+**Evidence:** `src/modules/narration/SpeakableText.test.ts` (fenced block, inline-code path vs word,
+bare path, and/or preserved, headings/bullets/quotes, emphasis, links, the reported babble case,
+whitespace normalization, empty input).
+
+**Impossible if true:** narration reading a backtick or asterisk aloud; an absolute path spoken
+slash-by-slash; a fenced code block read as source.
+
+**Verification:** `bun test src/modules/narration/SpeakableText.test.ts`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23
