@@ -3,7 +3,44 @@
 Full authority to build the whole thing to completion (brief Definition of Done + the §5.1 gate).
 Files on disk survive context compaction; this file + `project.progress.md` are the durable memory.
 
-## RESUME ANCHOR — 2026-07-21 (compaction checkpoint) — FULL-POWER build in flight
+## RESUME ANCHOR — 2026-07-23 (CURRENT) — UI-task orchestration (conductor + fork + workers)
+
+**Session shape:** conductor (main loop) directing a background FORK (`a0f12abb2a300d596`) + scoped
+workers over a list of Invar UI tasks. Verify by DRIVING (tmux harness + FrameProbe). Follow the
+`/conductor` skill; lessons in `project.conductor.md`. Read the /conductor "Instantiating a fresh
+conductor" section first if resuming cold. **Ground-truth against git — this anchor lags.**
+
+- **Status: 10/11 UI tasks merged to `origin/main`.** Only **task 0.5 (two-line workspace tabs)**
+  is integrating: fork is gating `feat-two-line-tabs-v2` (@ ~`213289e`, task-6 merged in + the
+  height-robust smoke patch). On ALL-PASS it pushes → 11/11, tags `finished/feat-two-line-tabs-v2`
+  (does NOT delete), bumps demo. `origin/main` was `20349a1` at this writing (advances).
+- **pull-diagnostics DONE, awaiting serialized gate + merge:** branch `feat-pull-diagnostics`
+  @ `93e9c3d` (off 20349a1, +400/−55). Capability-guarded `textDocument/diagnostic` PULL so tsgo
+  (default, pull-model) surfaces diagnostics into the task-4 render; push path intact for tsserver.
+  Drive-verified on BOTH servers. HONEST FLAG: tsgo reds deep nested types correctly, but there is
+  **no evidence of a tsserver false-positive that tsgo fixes** (probe artifact). Conductor gates it
+  after 0.5 (one gate at a time), then merges + `finished/` tag.
+- **Queued (conductor self-does):** type-tooltip bundle — (a) drag-select can't grab the LAST char
+  of a line in the type tooltip (likely a shared selection off-by-one — may fix the editor too);
+  (b) word-wrap the type signature, leave the doc-comment below UNwrapped. Then the **7 UI-polish
+  requests**, then **task 7 activity bar** (build FRESH — the `conductor-activitybar` branch is a
+  stale ancient fork with NO committed `ActivityBar.ts`; the prior art referenced below was never
+  committed and is gone).
+- **Guardrails added this session (durable):** `/conductor` skill + `AGENTS.md` agent-priming
+  (delegated agents load IBR + conventions from the `/ibr`,`/ivue`,`/invariants` skills, not relay);
+  branch/worktree PRESERVATION rule (never delete/force-remove/force-overwrite; "done" = a
+  `finished/<branch>` tag + `project.delegation-log.md` line); `.claude/settings.json` deny-lists
+  (git destructive ops + `rm -rf` family) in BOTH tui-editor and ibr.
+- **EPHEMERAL fleet (re-establish on resume — do NOT assume alive):** crons `e4de2d1a` (loop-check,
+  10min) + `4e2da192` (hourly orchestration); fork `a0f12abb2a300d596`; workers are one-shot. Demo
+  dir `/tmp/tui-demo` may be absent. The scratchpad HANDOFF (session-local) mirrors this anchor.
+- **Uncommitted in primary (batch-commit after 0.5 lands, to avoid racing the fork's push):**
+  edits to `.claude/skills/conductor/SKILL.md`, `project.conductor.md`, this file, and new
+  `.claude/settings.json`.
+
+---
+
+## RESUME ANCHOR — 2026-07-21 (compaction checkpoint, SUPERSEDED — historical) — FULL-POWER build in flight
 
 - **2 INVARIANTS WORKERS IN FLIGHT (mine, spawned post-checkpoint):** general-purpose agents bootstrapping
   `src/modules/theme/theme.invariants.md` (agent a30a1f3d79bafd368) + `src/modules/commands/commands.invariants.md`

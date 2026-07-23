@@ -107,6 +107,26 @@ This delegate-when-blocked rule is wired into the hourly orchestration loop.
 - **Untracked files don't travel with `git merge`.** Before merging an agent branch,
   `git status` its worktree + `git add -A` — a SKIP is not a PASS.
 
+## Never destroy recovery points (branches, worktrees, files)
+Destructive git ops are irreversible and have already caused real data loss here (a
+`git worktree remove --force` on an uncommitted tree discarded a whole task). **Preservation is
+the DEFAULT; destruction requires explicit, per-instance user authorization.**
+- **Never delete a branch** (`git branch -d/-D`) without the user explicitly OK'ing that specific
+  branch. Not as cleanup, not because "it's merged", never as a side effect of finishing.
+- **Never `git worktree remove --force`.** Plain `git worktree remove` (which refuses on a dirty
+  tree) is allowed ONLY after verifying the branch's work is committed AND merged (tip reachable
+  from `origin/main`) — and even then the BRANCH stays; you only reclaim the worktree's disk.
+- **Never force-overwrite work:** no `git push --force[-with-lease]`; no `git reset --hard` /
+  `git checkout -f` / `git clean` that discards uncommitted or unmerged changes; no `update-ref`
+  that rewinds a branch. (A `reset --hard` to SYNC onto a commit that already contains all the
+  work — zero loss — is fine; verify with `git status` first. When in doubt, `git stash`, don't
+  discard.)
+- **"Done" is a MARK, not a delete.** When a worktree/branch's task merges, record it finished and
+  LEAVE it in place: `git tag finished/<branch> <merge-hash>` (an immutable recovery point,
+  greppable via `git tag -l 'finished/*'`) and add a line to `project.delegation-log.md`
+  (branch · tip · merged-into · date). Cleanup of accumulated finished branches happens ONLY in an
+  explicit, user-authorized sweep — never inline, never automatic.
+
 ## Liveness & visibility
 - **Verify, don't assume.** Key on fork-specific evidence only: worktree writes in the last
   cycle, gate-log transitions, new branch/main commits, builder tmux sessions. NEVER treat the
@@ -127,6 +147,28 @@ disk** (git log, gate logs, worktree state), not from the dropped summary. A par
 child's context %; detection is behavioral (re-reads, re-litigation) or self-reported. A parent
 CAN force-compact a child on a chosen boundary by sending a message whose content *begins with*
 `/compact <focus>` (a background agent can't self-invoke it).
+
+## Instantiating a fresh conductor (resume after context loss)
+This skill (doctrine) + `project.conductor.md` (lessons) transfer the METHOD — but NOT the live
+build state or the fleet. A clone needs all three. Read in this order:
+1. `CLAUDE.md` → `AGENTS.md` → this skill → `project.conductor.md` (conventions, doctrine, lessons).
+2. `project.handoff.md` (its TOP resume anchor = current status) → `project.progress.md` (task ledger).
+3. Project frame: `project.brief.md`, `project.requirements.md` (the north star), `project.architecture.md`, and the `/ibr`, `/ivue`, `/invariants` skills.
+4. **Ground-truth the docs against reality** — docs lag, git is authoritative: `git log --oneline -15 --all`, `git tag -l 'finished/*'`, `git worktree list`, `git status`.
+
+**DURABLE vs EPHEMERAL — the load-bearing distinction for resume:**
+- DURABLE (survives context loss, lives in the repo): commits, branches, `finished/*` tags, the
+  `project.*.md` docs, the skills, `.claude/settings.json` guardrails.
+- EPHEMERAL (dies with the session — must be RE-ESTABLISHED, never assumed alive): background
+  agents (the fork + workers — their agent-IDs are gone; you cannot reattach, only respawn an
+  equivalent for genuinely unfinished work), crons (loop-check + hourly — recreate via CronCreate),
+  tmux harness sessions, and the session-local scratchpad HANDOFF.
+
+On resume: read the anchor for what was in flight → verify each in-flight branch/worktree by git →
+respawn missing crons → respawn a worker ONLY for unfinished work (never duplicate a live one) →
+refresh `project.handoff.md`'s top anchor from disk every few turns so the NEXT clone starts from
+truth. The scratchpad HANDOFF is a convenience mirror; the committed `project.handoff.md` is the
+one a clone will actually find.
 
 ## Verify by driving
 Verify EVERYTHING by driving the real user path (tmux harness + frame probe), never internal

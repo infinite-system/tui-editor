@@ -288,3 +288,57 @@ Six new operational lessons, every one from real friction this run.
   `git pull --ff-only` / `git merge --ff-only` in that worktree so the files move with the pointer.**
   The conductor owns syncing the primary's local main; workers push merges to ORIGIN and never touch
   the primary checkout.
+- **Branch/worktree PRESERVATION guardrail (2026-07-23, user-requested).** Never delete a branch,
+  force-remove a worktree, or force-overwrite work without explicit per-branch user authorization —
+  destructive git ops are irreversible and already cost a lost task this session (`worktree remove
+  --force` on uncommitted work). The user saw branches being deleted before/around commit and asked
+  to guard-rail it. **"Done" = MARK finished (`git tag finished/<branch> <merge-hash>` + a
+  `project.delegation-log.md` line), never delete.** Deletion happens only in an explicit
+  user-authorized sweep. Codified in the /conductor skill's "Never destroy recovery points" section;
+  relayed to the fork as a standing rule.
+- **Agents kill their OWN gate's tmux while "cleaning up" (2026-07-23).** The fork, deciding that
+  process-counting was "unreliable" (its own smoke processes self-match its `pgrep`), moved to
+  "kill ALL smoke tmux sessions" — while its own gate was mid-run driving smokes in tmux. That
+  produces spurious failures whose signature is *app did not open / vanished mid-drive* (here:
+  smoke-shortcut-help "quit-drive session did not open a document"). **Rule: never kill
+  tmux/processes to resolve a liveness or counting confusion.** The gate owns its smoke-tmux
+  lifecycle and cleans up itself; the authoritative liveness signal is gate-LOG step activity, not
+  process/tmux counts. And never kill unknown/stale sessions (the 2-day-old `diff-manual*` here) —
+  they may be adjacent to the user's env. Reinforces "process topology lies; the log is truth."
+
+---
+
+## Live cron prompts (verbatim — the editable source of truth)
+
+These are the exact prompts driving the orchestration loop this session. **Improve them HERE, then
+recreate the cron** — crons are session-only, in-memory snapshots (`CronDelete <id>` +
+`CronCreate`), so editing this doc does NOT change a running cron, and a running cron does NOT read
+this doc. Both auto-expire after 7 days. IDs drift each time we recreate; the text is what matters.
+
+### Hourly orchestration loop — cron `4e2da192` (every hour at :07, `7 * * * *`)
+
+```
+Hourly orchestration loop (bounded per fire). Follow the `/conductor` skill (tui-editor/.claude/skills/conductor/SKILL.md). Do in order:
+
+(1) BACKLOG FIRST — before ANY creative experiment, read the active task list and drain real work. Sources of truth, in order: (a) the scratchpad HANDOFF.md task list; (b) any TodoWrite/goal list still open; (c) the fork's (a0f12abb2a300d596) reported remaining tasks. The original 11 Invar UI tasks come first; after them the 7 UI-polish requests, then the pull-diagnostics follow-up. For each UNFINISHED real task: confirm the fork is actively driving it (worktree writes / gate activity / branch commits in the last cycle). If the fork is dormant or stalled, nudge it via SendMessage with a precise fix, OR take it over and drive it yourself. Do NOT start a creative experiment while any original-11 UI task is unmerged.
+
+(2) IF BLOCKED on a task (fork stuck, ambiguous fix, or a hard problem) — do NOT default to deferring to the user. Spin up a codex or fable subagent and have it reach a solution creatively; only escalate to the user if the subagents also can't resolve it or the call is genuinely the user's (naming, scope, publish consent).
+
+(3) ONLY once the real backlog is drained — invent + execute ONE creative IDE-parity experiment: reduce a real user need to its invariant, plan it, build on an experiment-* branch forked off LATEST main, gate it. NEVER merge experiments to main.
+
+(4) Append any orchestrator lessons learned this fire to /home/parallels/dev/tui-editor/project.conductor.md (the running lessons log; the /conductor skill is the stable doctrine).
+
+(5) Keep yourself, the fork, and its builder agents in working order — verify alive by fork-specific evidence, resume attack. Cap builders ~2-3, ONE gate at a time. Verify by DRIVING the real user path. Keep local main synced to origin/main (clean ff). Report concisely.
+```
+
+### 10-minute liveness check — cron `e4de2d1a` (every 10 min, `3,13,23,33,43,53 * * * *`)
+
+```
+Loop check (every 10 min): VERIFY — do not assume — that the fork orchestrator (agent a0f12abb2a300d596) and its builder agents are actually progressing on the 11 Invar UI tasks. IMPORTANT: the USER runs their OWN interactive Invar instances (from /home/parallels/dev/tui-editor and /tmp/tui-demo) — do NOT treat raw `src/main.ts` process count or instance age as a fork-liveness or hang signal, and NEVER kill a process from those paths. Key ONLY on FORK-SPECIFIC evidence: (1) writes in the fork's worktrees `/tmp/conductor-*` and `.claude/worktrees/agent-*` in the last ~10 min (`find /tmp/conductor-* /home/parallels/dev/tui-editor/.claude/worktrees/agent-* -newermt '10 minutes ago' -not -path '*/.git/*'`); (2) gate-log transitions in /tmp/*gate*.log (ALL-PASS / FAILURES / running); (3) new commits on main (past f64e15e), or on agent-*/conductor-* branches (`git -C /home/parallels/dev/tui-editor log --oneline --all --since='12 minutes ago'`); (4) tmux harness sessions with builder/conductor/agent-ish names (NOT diff-manual*, which are stale). If the fork is DORMANT with a red or finished gate: read the gate log, diagnose the specific failing step, and nudge it via SendMessage with the precise fix. If genuinely STALLED (no worktree writes, no gate activity, no branch commits across a FULL cycle): take over — diagnose, fix, gate, merge. If progressing, note it briefly. Also flag if the fork over-spawned builders (CPU contention flakes smoke-wrap) — tell it to cap at ~2. Report concisely.
+```
+
+**Due for refresh (drift noted 2026-07-23):** both prompts hardcode "the 11 Invar UI tasks" and the
+hourly one names "the 7 UI-polish requests, then the pull-diagnostics follow-up" — with 11/11 done
+and pull-diagnostics landing, the next edit should re-point the backlog to the polish/tooltip/activity-bar
+queue and generalize the fork's task framing. The `past f64e15e` and agent-id references are also
+session-specific and should be reviewed on reuse.
