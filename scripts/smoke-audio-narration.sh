@@ -85,12 +85,16 @@ case "$last" in
   *) echo "  FAIL  spoken text not the assistant reply (got '${last:0:48}')"; fail=1;;
 esac
 
-echo "== barge-in: a keystroke stops narration (interruptibility) =="
+echo "== barge-in: typing does NOT stop narration; Escape does (intentional interruptibility) =="
 barge_before="$(f "$S" narrationBargeInCount)"
-"$H" send "$S" -l "x" >/dev/null
+"$H" send "$S" -l "x" >/dev/null   # ordinary typing must NOT barge in — listen while you work
+sleep 0.15; "$H" settle "$S" >/dev/null 2>&1
+barge_typed="$(f "$S" narrationBargeInCount)"
+if [ "$barge_typed" = "$barge_before" ]; then echo "  PASS  typing did NOT barge in ($barge_typed)"; else echo "  FAIL  typing barged in ($barge_before -> $barge_typed)"; fail=1; fi
+"$H" send "$S" Escape >/dev/null   # Escape is the EXPLICIT stop
 sleep 0.15; "$H" settle "$S" >/dev/null 2>&1
 barge_after="$(f "$S" narrationBargeInCount)"
-gt "a keystroke barged in on narration" "$barge_after" "$barge_before"
+gt "Escape barged in on narration" "$barge_after" "$barge_typed"
 
 echo "== idle quiescence with narration ON + agent open (demand-driven; frame delta <= 1) =="
 "$H" settle "$S" >/dev/null 2>&1

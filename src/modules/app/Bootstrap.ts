@@ -1150,7 +1150,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
 
   const keyTick = (key: KeyEvent): void => {
     tooltip.clear(); // any keypress hides the tooltip (display-only affordance)
-    narration?.bargeIn(); // any keystroke barges in on narration audio (interruptibility applied to speech)
+    if (key.name === 'escape') narration?.bargeIn(); // Escape is the EXPLICIT "stop narration"; ordinary typing/paste/navigation lets it play on, so you can read/compose/work while listening (barge-in should be intentional, not a side effect of every keystroke)
     // Escape always closes the hover card; any other key closes it too UNLESS the pointer is engaged
     // with it (over the card / dragging a selection) — so a sticky card lets Ctrl+C copy its selection.
     if (key.name === 'escape') view.dismissHover();
@@ -1394,7 +1394,6 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   // keyTick's dispatch order so paste lands exactly where typing would.
   const pasteTick = (text: string): void => {
     if (!text) return;
-    narration?.bargeIn();
     if (panelHost.visible.value && panelHost.focused.value) {
       panelHost.handlePaste(text);
       return; // a focused panel owns paste even if its pane has no sink — never leak to the editor
