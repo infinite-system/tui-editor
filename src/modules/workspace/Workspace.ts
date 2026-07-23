@@ -397,7 +397,17 @@ class $Workspace {
   }
   private workingFileText(filePath: string): string {
     const absolute = Files.Class.join(this.root, filePath);
-    return Files.Class.exists(absolute) ? Files.Class.read(absolute) : '';
+    // Git lists an untracked DIRECTORY (e.g. node_modules/, including a symlink-to-dir — statSync
+    // follows symlinks) as a single entry that GitRows classifies as kind:'file'. Reading it as a file
+    // throws EISDIR, and the throw escapes through OpenTUI's mouse dispatch and crashes the app. Guard
+    // the read against directories, and try/catch so any non-regular file (fifo/socket/broken symlink)
+    // degrades to an empty diff instead of taking the app down.
+    if (!Files.Class.exists(absolute) || Files.Class.isDir(absolute)) return '';
+    try {
+      return Files.Class.read(absolute);
+    } catch {
+      return '';
+    }
   }
   private openDiffView(request: Omit<DiffRequest, 'token'>): void {
     this.diffRequest.value = { token: ++this.diffRequestToken, ...request };

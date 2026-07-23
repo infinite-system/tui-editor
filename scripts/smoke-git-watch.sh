@@ -46,5 +46,30 @@ echo "== reverting the external changes clears them too =="
 cleared="$(wait_for_count -eq 5)"
 if [ "${cleared:-9}" = "0" ]; then echo "  PASS  panel returned to 0 after external revert"; else echo "  FAIL  panel stuck at $cleared after revert"; fail=1; fi
 
+echo "== opening an untracked DIRECTORY row (e.g. node_modules/) must NOT crash (EISDIR guard) =="
+# The user's exact case: node_modules is a SYMLINK-to-directory (worktree setups symlink it). git lists
+# the symlink as an untracked FILE ('?? node_modules'), which the git panel makes a clickable file row.
+# Opening it read the symlink target (a directory, since exists/read follow symlinks) -> EISDIR -> the
+# throw escaped OpenTUI's mouse dispatch and crashed the app. Target lives OUTSIDE the repo so the
+# symlink is the ONLY untracked entry (row 0).
+SYMLINK_TARGET="$(mktemp -d /tmp/tui-nm-target.XXXXXX)"; printf 'module.exports={};\n' > "$SYMLINK_TARGET/pkg.js"
+ln -s "$SYMLINK_TARGET" "$REPO/node_modules"
+trap '"$H" kill "$S" >/dev/null 2>&1; rm -rf "$REPO" "$SYMLINK_TARGET"' EXIT INT TERM
+dir_count="$(wait_for_count -gt 0 8)"
+if [ "${dir_count:-0}" -ge 1 ] 2>/dev/null; then
+  "$H" send "$S" C-g >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1   # focus the git panel (row 0 = node_modules/)
+  "$H" send "$S" o >/dev/null                                                  # open the change at the selected directory row — the crash trigger
+  sleep 0.6; "$H" settle "$S" >/dev/null 2>&1
+  # Liveness: a crashed app can't answer the side-channel probe. It must still respond AND still see the change.
+  alive="$(f gitChangedCount)"
+  if [ -n "$alive" ] && [ "${alive:-0}" -ge 1 ] 2>/dev/null; then
+    echo "  PASS  opening the untracked-directory row did not crash the app (EISDIR guarded, empty diff)"
+  else
+    echo "  FAIL  app died opening a directory row (gitChangedCount='$alive')"; fail=1
+  fi
+else
+  echo "  FAIL  untracked directory not reflected in the panel (setup)"; fail=1
+fi
+
 echo "== RESULT: $([ "$fail" = 0 ] && echo ALL-PASS || echo FAILURES) =="
 exit "$fail"
