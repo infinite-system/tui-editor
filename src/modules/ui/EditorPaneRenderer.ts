@@ -10,11 +10,12 @@
 // invariant: Word wrap is a pure view mapping (src/modules/editor/editor.invariants.md)
 // invariant: The editor gutter reflects HEAD changes (src/modules/diff/diff.invariants.md)
 // invariant: Cost tracks the actively observed set (project.invariants.md)
-import { StyledText, fg, bg, underline, type TextChunk } from '@opentui/core';
+import { StyledText, fg, bg, bold, underline, type TextChunk } from '@opentui/core';
 import { Static } from 'ivue/extras';
 import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
 import { Highlighter, type Role } from '../syntax/Highlighter';
+import type { BracketCell } from '../editor/BracketMatch';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import type { Palette } from '../theme/ThemePalettes';
 import type { Workspace } from '../workspace/Workspace';
@@ -31,6 +32,10 @@ export interface EditorPaneRenderContext {
   showIndentGuides: boolean;
   /** The guide glyph at the current glyph tier — box-drawing bar `│` degrading to ascii `|`. */
   indentGuideGlyph: string;
+  /** Cells (line, grapheme column) to paint with the bracket-match background — the cursor's bracket
+   *  and its balanced partner. Off-screen cells are never in a rendered line, so "highlight only when
+   *  visible" is automatic. Empty/omitted when the cursor is not on a bracket. */
+  bracketHighlights?: readonly BracketCell[];
 }
 
 export interface EditorPaneRender {
@@ -135,6 +140,15 @@ function $renderEditor(context: EditorPaneRenderContext): EditorPaneRender | nul
       boundaries.add(Math.max(0, Math.min(windowGraphemeCount, diagnosticMark.startColumn - windowStartGrapheme)));
       boundaries.add(Math.max(0, Math.min(windowGraphemeCount, diagnosticMark.endColumn - windowStartGrapheme)));
     }
+    // Bracket-match cells on this line become their own single-cell segments (a boundary at the column
+    // and the next), so the match background paints exactly the bracket cell.
+    const lineBracketColumns = (context.bracketHighlights ?? [])
+      .filter((cell) => cell.line === lineIndex)
+      .map((cell) => cell.column);
+    for (const bracketColumn of lineBracketColumns) {
+      boundaries.add(Math.max(0, Math.min(windowGraphemeCount, bracketColumn - windowStartGrapheme)));
+      boundaries.add(Math.max(0, Math.min(windowGraphemeCount, bracketColumn + 1 - windowStartGrapheme)));
+    }
     // Severity of the diagnostic covering [absoluteStart, absoluteEnd), or null when uncovered.
     const diagnosticSeverityOver = (absoluteStart: number, absoluteEnd: number): number | null => {
       let worst: number | null = null;
@@ -159,6 +173,10 @@ function $renderEditor(context: EditorPaneRenderContext): EditorPaneRender | nul
           match.startColumn < windowStartGrapheme + segmentEnd &&
           match.endColumn > windowStartGrapheme + segmentStart,
       );
+      const bracketHighlighted = lineBracketColumns.some(
+        (bracketColumn) =>
+          bracketColumn >= windowStartGrapheme + segmentStart && bracketColumn < windowStartGrapheme + segmentEnd,
+      );
       const diagnosticSeverity = diagnosticSeverityOver(
         windowStartGrapheme + segmentStart,
         windowStartGrapheme + segmentEnd,
@@ -174,7 +192,12 @@ function $renderEditor(context: EditorPaneRenderContext): EditorPaneRender | nul
         codeChunks.push(fg(palette.indentGuide)(context.indentGuideGlyph));
         continue;
       }
-      if (diagnosticSeverity !== null) {
+      if (bracketHighlighted) {
+        // Bracket match highlights the cursor's bracket + its partner by recolouring the FOREGROUND
+        // (accent + bold) — a deliberate style choice (the classic matching-bracket look, e.g. Vim's
+        // MatchParen), kept distinct from the find-match background so the two never read the same.
+        codeChunks.push(bold(fg(palette.accent)(segmentText)));
+      } else if (diagnosticSeverity !== null) {
         // A diagnostic range renders as a coloured UNDERLINE in the severity colour (red for errors) —
         // the terminal's "red squiggly": the text stays but is underlined and recoloured to signal it.
         const diagnosticChunk = underline(fg(severityColor(diagnosticSeverity))(segmentText));

@@ -41,6 +41,8 @@ import { PanelHost } from '../ui/PanelHost';
 import { TerminalFactory } from '../terminal/TerminalFactory';
 import { AgentFactory } from '../agent/AgentFactory';
 import { GitBlame } from '../git/GitBlame';
+import { BracketMatch } from '../editor/BracketMatch';
+import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { AgentPaneContent } from '../agent/AgentPaneContent';
 import { TtsFactory } from '../narration/TtsFactory';
 import type { TtsBackend } from '../narration/TtsBackend';
@@ -506,6 +508,32 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
             documentPath: editor.document.path,
             lineNumber: editor.cursor.line.value,
           })?.author ?? ''
+        );
+      })(),
+      // Bracket match: the matched partner cell for the cursor's bracket (line,col 0-based), or -1/-1
+      // when the cursor is not on a bracket — the driving smoke reads this alongside the frame bg.
+      matchingBracketLine: (() => {
+        const editor = workspaceSet.active.editor;
+        if (!editor.hasDocument.value || workspaceSet.active.showingDiff.value) return -1;
+        return (
+          BracketMatch.Class.findInDocument(
+            editor.document,
+            editor.cursor.line.value,
+            editor.cursor.col.value,
+            LanguageRegistry.Class.forPath(editor.document.path),
+          )?.match.line ?? -1
+        );
+      })(),
+      matchingBracketColumn: (() => {
+        const editor = workspaceSet.active.editor;
+        if (!editor.hasDocument.value || workspaceSet.active.showingDiff.value) return -1;
+        return (
+          BracketMatch.Class.findInDocument(
+            editor.document,
+            editor.cursor.line.value,
+            editor.cursor.col.value,
+            LanguageRegistry.Class.forPath(editor.document.path),
+          )?.match.column ?? -1
         );
       })(),
       // Audio narration (third projection): the toggle, how many assistant turns have been spoken, and

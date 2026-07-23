@@ -11,6 +11,8 @@ import { Reactive } from 'ivue';
 import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
 import { EditorPaneRenderer } from './EditorPaneRenderer';
+import { BracketMatch } from '../editor/BracketMatch';
+import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { ScrollGesture } from './ScrollGesture';
 import { SelectionDragBehavior } from './SelectionDragBehavior';
 import { SelectableText } from './SelectableText';
@@ -60,6 +62,19 @@ class $EditorPane {
    *  for the empty state (diff shown / no document), leaving the stored window untouched. */
   renderEditor(): { gutter: StyledText; code: StyledText } | null {
     const { workspaceSet, readPalette, editorViewportHeight, editorViewportWidth, findBar, settings, theme } = this.deps;
+    const editor = workspaceSet.active.editor;
+    // Bracket match: computed ONCE per frame here (reading cursor + document makes the frame effect
+    // track them, so it recomputes on a move/edit and clears when the cursor leaves a bracket). The
+    // renderer paints only the cells that fall in a visible line.
+    const bracketMatch =
+      editor.hasDocument.value && !workspaceSet.active.showingDiff.value
+        ? BracketMatch.Class.findInDocument(
+            editor.document,
+            editor.cursor.line.value,
+            editor.cursor.col.value,
+            LanguageRegistry.Class.forPath(editor.document.path),
+          )
+        : null;
     const result = EditorPaneRenderer.Class.render({
       workspace: workspaceSet.active,
       palette: readPalette(),
@@ -69,6 +84,7 @@ class $EditorPane {
       showIndentGuides: settings.showIndentGuides.value,
       // Box-drawing bar in nerd/unicode tiers; plain pipe where only ascii glyphs render.
       indentGuideGlyph: theme.glyphLevel.value === 'ascii' ? '|' : '│',
+      bracketHighlights: bracketMatch ? [bracketMatch.bracket, bracketMatch.match] : [],
     });
     if (!result) return null;
     this.wrapRowsWindow = result.wrapRowsWindow;
