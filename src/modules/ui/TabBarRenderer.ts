@@ -98,6 +98,10 @@ export interface BufferTabBarRenderContext {
   strip: TabStrip.Instance;
   palette: Palette;
   barWidth: number;
+  /** Active workspace root — the breadcrumb renders each tab's path relative to it. */
+  projectRoot: string;
+  /** Tier-aware powerline separator glyph drawn between crumbs/tabs (nerd  → unicode ❯ → ascii >). */
+  separatorGlyph: string;
   hover: TabBarHover;
   closePressed: number | null;
   previewPressed: boolean;
@@ -325,10 +329,19 @@ function $renderBufferTabBar(context: BufferTabBarRenderContext): BufferTabBarRe
   if (tabs.length === 0) return { text: new StyledText([fg(palette.dim)('  no open files')]), segments, revealedIndex };
   const barWidth = Math.max(1, context.barWidth);
 
-  // Each tab lays out as ` name <dirty> ✕ ` — the ✕ has a space BEFORE and AFTER so it is never
-  // flush against the tab edge, and the padding is identical regardless of label length.
+  // Each tab lays out as ` breadcrumb <dirty> ✕ ` — the ✕ has a space BEFORE and AFTER so it is never
+  // flush against the tab edge, and the padding is identical regardless of label length. The label is
+  // a path BREADCRUMB (project › dir › file) capped per tab: leading dirs collapse to an ellipsis, the
+  // filename always survives.
+  const CRUMB_SEPARATOR = ' › ';
+  const MAX_TAB_BREADCRUMB_WIDTH = 28;
   const measured = tabs.map((tab) => {
-    const name = tab.label;
+    const crumbs = fitBreadcrumb(
+      breadcrumbSegments(tab.identifier, context.projectRoot),
+      MAX_TAB_BREADCRUMB_WIDTH,
+      CRUMB_SEPARATOR.length,
+    );
+    const name = crumbs.join(CRUMB_SEPARATOR);
     const labelWidth = 1 + EditorCoordinates.Class.lineWidth(name) + 1 + 1 + 1; // ' ' + name + ' ' + dirtyGlyph + ' '
     return { tab, name, labelWidth, width: labelWidth + 2 }; // + '✕' + trailing ' '
   });
