@@ -72,8 +72,16 @@ check_equal "$(field workspaceCount)" "1" "booted one workspace"
 check_frame_contains "$FIRST_NAME" "first workspace tab paints"
 PLUS_COLUMN="$($BUN -e 'const frame=JSON.parse(require("fs").readFileSync(process.argv[1]));process.stdout.write(String(Array.from(frame.rows[0].text).lastIndexOf("+")));' "$FRAME_PATH")"
 "$HARNESS" click "$SESSION_NAME" "$PLUS_COLUMN" 0 >/dev/null
-sleep 0.2
-tmux send-keys -t "$SESSION_NAME" -l "$SECOND_ROOT"
+sleep 0.3
+"$HARNESS" settle "$SESSION_NAME" >/dev/null 2>&1
+PARENT_DIRECTORY="$(dirname "$FIRST_ROOT")"
+check_frame_contains "+ $PARENT_DIRECTORY" "picker prefills the parent directory of the current root"
+tmux send-keys -t "$SESSION_NAME" -l "$SECOND_NAME"
+sleep 0.4
+"$HARNESS" settle "$SESSION_NAME" >/dev/null 2>&1
+# The typed query is PARENT+NAME (no slash between), so the full absolute path below can only come
+# from the painted match list — the selection marker glyph is font-substituted in the frame dump.
+check_frame_contains "$SECOND_ROOT" "typing fuzzy-filters the sibling folders to the target"
 "$HARNESS" send "$SESSION_NAME" Enter >/dev/null
 sleep 0.8
 "$HARNESS" settle "$SESSION_NAME" >/dev/null 2>&1
