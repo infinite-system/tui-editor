@@ -32,6 +32,7 @@ import { Sidebar } from './Sidebar';
 import { ActivityBar } from './ActivityBar';
 import { EditorPane } from './EditorPane';
 import { EditorContentMount } from './EditorContentMount';
+import { ImagePreview } from '../image/ImagePreview';
 import { ScrollbarSync } from './ScrollbarSync';
 import { OverlayLayer } from './OverlayLayer';
 import { HoverCard } from './HoverCard';
@@ -724,8 +725,22 @@ function $buildRootView(
 
     sidebarBody.content = gitView ? renderGitPanel() : extensionsView ? EXTENSIONS_PLACEHOLDER : renderTree();
     sidebarBody.fg = palette.fg;
-    const rendered = editorController.renderEditor();
-    if (rendered) {
+    // When the active buffer is an image, the code body shows the half-block preview (no gutter, no
+    // syntax text). Non-image files are untouched — the editor render path below is unchanged.
+    // invariant: A raster image renders as half-block cells sized to the pane (src/modules/image/image.invariants.md)
+    // invariant: An image buffer replaces the code text and leaves other files untouched (src/modules/image/image.invariants.md)
+    const activeFileIsImage = workspaceSet.active.activeFileIsImage;
+    const rendered = activeFileIsImage ? null : editorController.renderEditor();
+    if (activeFileIsImage) {
+      gutterBody.width = 0;
+      gutterBody.content = '';
+      codeBody.content = imagePreview.render(
+        workspaceSet.active.editor.document.path,
+        Math.max(1, editorViewportWidth()),
+        Math.max(1, editorViewportHeight()),
+        palette.panel,
+      );
+    } else if (rendered) {
       gutterBody.width = gutterWidth();
       gutterBody.content = rendered.gutter;
       codeBody.content = rendered.code;
@@ -793,7 +808,7 @@ function $buildRootView(
       // tmux's own #{cursor_x},#{cursor_y}.
       // invariant: The caret renders at the cursor display column (ui.invariants.md)
       const caretPosition =
-        editor.hasDocument.value && workspaceSet.active.focus.value === 'editor' && !editorContentMount.markdownSplitView?.previewFocused && !commands.open.value
+        editor.hasDocument.value && !activeFileIsImage && workspaceSet.active.focus.value === 'editor' && !editorContentMount.markdownSplitView?.previewFocused && !commands.open.value
           ? editorController.wrapVisualPosition(cursorLine, editor.cursor.col.value)
           : null;
       if (caretPosition && typeof caretPosition === 'object') {
@@ -810,7 +825,7 @@ function $buildRootView(
         editor.viewport.scrollLeft.value &&
       EditorCoordinates.Class.displayColumn(editor.document.line(Math.min(cursorLine, editor.document.lineCount - 1)), editor.cursor.col.value) <
         editor.viewport.scrollLeft.value + editorViewportWidth();
-    if (editor.hasDocument.value && workspaceSet.active.focus.value === 'editor' && !editorContentMount.markdownSplitView?.previewFocused && !commands.open.value && cursorLine >= scrollTop && cursorLine < scrollTop + viewportHeight && caretVisibleHorizontally) {
+    if (editor.hasDocument.value && !activeFileIsImage && workspaceSet.active.focus.value === 'editor' && !editorContentMount.markdownSplitView?.previewFocused && !commands.open.value && cursorLine >= scrollTop && cursorLine < scrollTop + viewportHeight && caretVisibleHorizontally) {
       const cursorDisplayColumn = EditorCoordinates.Class.displayColumn(editor.document.line(cursorLine), editor.cursor.col.value);
       // Anchor the caret to the code renderable's ACTUAL laid-out screen cell (codeBody.x/y from
       // yoga), not hand-derived layout constants — the constants drifted from the real layout (the
@@ -914,6 +929,10 @@ function $buildRootView(
     diagnosticsAt: (position) => workspaceSet.active.diagnosticsAt(position),
     languageForActive: () => LanguageRegistry.Class.forPath(workspaceSet.active.editor.document.path),
   });
+
+  // Half-block image preview for the active buffer when it is an image file. Memoises decode + render
+  // so the frame effect that reads it pays a map lookup, never a re-decode.
+  const imagePreview = new ImagePreview.Class();
 
   const editorController = new EditorPane.Class({
     renderer,
