@@ -138,6 +138,33 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     panelHost.toggle();
   };
 
+  // Reveal through the bound pane target: source, Markdown preview, and each diff side keep their own
+  // scroll/selection writer while FindBar retains independent engines for all of them.
+  const revealFindMatch = (): void => {
+    const match = findBar.engine?.currentMatch;
+    if (!match || !findBar.target) return;
+    findBar.target.revealMatch(match);
+  };
+
+  // Quick-open activation — the SINGLE path shared by the Enter key and a mouse click on a result row,
+  // so the two can never diverge. Files mode opens the selected file; the path-navigator opens the
+  // CURRENT input path as a workspace (folder rows are drilled into by a click, not opened here).
+  const activateQuickOpenSelection = (): void => {
+    const path = quickOpen.activate(); // files: a project-ROOT-relative path; workspacePath: an absolute path
+    if (quickOpen.mode.value === 'workspacePath') {
+      if (!path || !Files.Class.isDir(path)) {
+        quickOpen.setError('Enter an existing folder path');
+        return;
+      }
+      quickOpen.close();
+      workspaceSet.open(path);
+    } else {
+      quickOpen.close();
+      // Resolve against the workspace root — openFileInTab (like the tree) reads an ABSOLUTE path.
+      if (path) workspaceSet.active.openFileInTab(Files.Class.join(workspaceSet.active.root, path));
+    }
+  };
+
   const view = RootView.Class.buildRootView(
     renderer,
     workspaceSet,
@@ -156,6 +183,8 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     overlayCoordinator,
     panelHost,
     toggleTerminal,
+    activateQuickOpenSelection,
+    revealFindMatch,
   );
 
   // Lazily create + register the terminal PaneContent on first toggle (idle cost is zero until then).
@@ -172,14 +201,6 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     panelHost.register(content);
   };
   app.onDispose(() => panelHost.dispose());
-
-  // Reveal through the bound pane target: source, Markdown preview, and each diff side keep their own
-  // scroll/selection writer while FindBar retains independent engines for all of them.
-  const revealFindMatch = (): void => {
-    const match = findBar.engine?.currentMatch;
-    if (!match || !findBar.target) return;
-    findBar.target.revealMatch(match);
-  };
 
   // Theme + glyph mode are settings-driven (single source): the panel edits settings.theme /
   // settings.glyphMode, and these reactive hooks PUSH the change into the Theme so it live-applies with
@@ -272,6 +293,8 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       findTarget: findBar.target?.identifier ?? null,
       findQuery: findBar.engine?.query.value ?? '',
       findMatchCount: findBar.engine?.matchCount ?? 0,
+      findCurrentMatchIndex: findBar.engine?.currentMatchIndex.value ?? -1,
+      findCaseSensitive: findBar.caseSensitive,
       sourceFindQuery: editor.hasDocument.value
         ? findBar.engineFor(`source:${editor.document.path}`)?.query.value ?? ''
         : '',
@@ -279,6 +302,12 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
         ? findBar.engineFor(markdownSplitView.previewFindTargetIdentifier())?.query.value ?? ''
         : '',
       quickOpenOpen: quickOpen.open.value,
+      quickOpenSelected: quickOpen.selectedIndex.value,
+      quickOpenHovered: quickOpen.hoveredIndex.value,
+      quickOpenQuery: quickOpen.query.value,
+      quickOpenMatches: quickOpen.matches.value.length,
+      quickOpenMode: quickOpen.mode.value,
+      quickOpenPathOpenable: quickOpen.workspacePathOpenable.value,
       paletteOpen: commands.open.value,
       paletteQuery: commands.open.value ? commands.query.value : '',
       paletteMatches: commands.open.value ? commands.filtered.length : 0,
@@ -431,12 +460,16 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     view.observeHoverRepaint(); // the LSP hover card projects on its reactive paint signal (async landing)
     void commands.open.value;
     void commands.query.value;
-    void quickOpen.open.value; // repaint the quick-open modal on open/query/selection change
+    void quickOpen.open.value; // repaint the quick-open modal on open/query/selection/hover change
     void quickOpen.query.value;
     void quickOpen.selectedIndex.value;
+    void quickOpen.hoveredIndex.value;
+    void quickOpen.workspacePathOpenable.value; // repaint the path-alert glyph live as the path changes
     void findBar.open.value;
     void findBar.engine?.query.value;
     void findBar.engine?.matches.value;
+    void findBar.engine?.currentMatchIndex.value; // repaint the match counter on next/prev
+    void findBar.caseSensitive; // repaint the case toggle on flip
     void shortcutHelp.open.value; // repaint the cheat-sheet on open/close and scroll
     void shortcutHelp.scrollTop.value;
     void commands.selectedIndex.value;
@@ -702,6 +735,10 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'quickopen.eraseWord': () => quickOpen.deletePreviousWord(),
     'find.eraseWord': () => {
       findBar.deletePreviousWord();
+      revealFindMatch();
+    },
+    'find.toggleCaseSensitive': () => {
+      findBar.toggleCaseSensitive();
       revealFindMatch();
     },
     'focus.toggle': () => workspaceSet.active.toggleFocus(),
@@ -1082,19 +1119,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
         return;
       }
       if (key.name === 'return') {
-        const path = quickOpen.activate(); // a project-ROOT-relative path (rg/git ls-files)
-        if (quickOpen.mode.value === 'workspacePath') {
-          if (!path || !Files.Class.isDir(path)) {
-            quickOpen.setError('Enter an existing folder path');
-            return;
-          }
-          quickOpen.close();
-          workspaceSet.open(path);
-        } else {
-          quickOpen.close();
-          // Resolve against the workspace root — openFileInTab (like the tree) reads an ABSOLUTE path.
-          if (path) workspaceSet.active.openFileInTab(Files.Class.join(workspaceSet.active.root, path));
-        }
+        activateQuickOpenSelection(); // the SAME path a click on a result row runs
         return;
       }
       if (key.name === 'backspace') {

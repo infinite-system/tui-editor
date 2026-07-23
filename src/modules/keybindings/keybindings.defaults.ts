@@ -103,6 +103,8 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 'delete', alt: true }, action: 'quickopen.eraseWord', context: 'quickopen' },
   { chord: { key: 'backspace', alt: true }, action: 'find.eraseWord', context: 'find' },
   { chord: { key: 'delete', alt: true }, action: 'find.eraseWord', context: 'find' },
+  // Case-sensitivity toggle (VS Code's Alt+C in the find widget) — flips the engine + re-runs the query.
+  { chord: { key: 'c', alt: true }, action: 'find.toggleCaseSensitive', context: 'find' },
 
   // --- context menu (modal while open: Bootstrap resolves ONLY in this context and consumes
   //     everything unbound by closing the menu — see the modal block in Bootstrap.onKey) ---

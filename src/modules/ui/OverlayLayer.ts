@@ -14,6 +14,8 @@ import { Reactive } from 'ivue';
 import { HitTransparentText } from './HitTransparentText';
 import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { Files } from '../system/Files';
+import { QuickOpenRenderer } from './QuickOpenRenderer';
+import { FindBarRenderer, type FindBarButtonZone, type FindBarButtonAction } from './FindBarRenderer';
 import type { Palette } from '../theme/ThemePalettes';
 import type { CommandRegistry } from '../commands/CommandRegistry';
 import type { FindBar } from '../search/FindBar';
@@ -36,6 +38,11 @@ export interface OverlayLayerDeps {
   tooltip: Tooltip.Instance;
   theme: Theme.Instance;
   workspaceSet: WorkspaceSet.Instance;
+  /** Activate the current quick-open selection (open the file / project folder + close the modal) — the
+   *  SAME path the Enter key runs, so a click and Enter never diverge. */
+  activateQuickOpen: () => void;
+  /** Reveal the find bar's current match through the bound pane (the sole scroll/selection writer). */
+  revealFindMatch: () => void;
 }
 
 class $OverlayLayer {
@@ -59,8 +66,13 @@ class $OverlayLayer {
   private readonly contextMenuList: TextRenderable;
   private readonly tooltipText: HitTransparentText;
 
+  // Hit geometry the renderers drew this frame, read by the pointer handlers so a drawn cell and its
+  // hit-rect never disagree (the one-geometry-source rule). Written in update(), read on mouse events.
+  private findBarButtonZones: FindBarButtonZone[] = [];
+  private quickOpenRowCount = 0;
+
   constructor(private readonly deps: OverlayLayerDeps) {
-    const { renderer, shortcutHelp, contextMenu } = deps;
+    const { renderer, shortcutHelp, contextMenu, quickOpen } = deps;
     const root = renderer.root;
 
     // Command palette — added last so it renders on top; shown only when open.
@@ -145,11 +157,71 @@ class $OverlayLayer {
     this.contextMenuBox.onMouseOut = () => contextMenu.hover(-1);
     this.contextMenuBox.onMouseDown = (event) => contextMenu.runAt(contextMenuItemAt(event.y));
 
+    // Quick-open results: hover highlights a row, click selects+opens it. Row maps 1:1 to a match (the
+    // list has no independent scroll), so the row is the pointer offset from the list's own top.
+    // invariant: Search results are click-set and highlight-shown (src/modules/search/search.invariants.md)
+    const quickOpenRowAt = (screenY: number): number => screenY - this.quickOpenList.y;
+    this.quickOpenList.onMouseMove = (event) => {
+      const row = quickOpenRowAt(event.y);
+      quickOpen.setHoveredIndex(row >= 0 && row < this.quickOpenRowCount ? row : -1);
+    };
+    this.quickOpenList.onMouseOut = () => quickOpen.setHoveredIndex(-1);
+    this.quickOpenList.onMouseDown = (event) => {
+      const row = quickOpenRowAt(event.y);
+      if (row < 0 || row >= this.quickOpenRowCount) return;
+      quickOpen.setSelectedIndex(row);
+      // Files mode: a click opens the file. Path-navigator mode: a click DRILLS INTO the folder
+      // (completes the path + re-lists); Enter opens the current path (activateQuickOpen).
+      if (quickOpen.mode.value === 'workspacePath') quickOpen.navigateIntoSelected();
+      else this.deps.activateQuickOpen();
+    };
+
+    // Find bar action buttons: hit-test the pointer against the zones the renderer drew this frame.
+    // invariant: Find bar controls are mouse-clickable buttons (src/modules/search/search.invariants.md)
+    this.findBarText.onMouseDown = (event) => {
+      const localRow = event.y - this.findBarText.y;
+      const localColumn = event.x - this.findBarText.x;
+      const button = this.findBarButtonZones.find(
+        (zone) => zone.row === localRow && localColumn >= zone.startColumn && localColumn < zone.endColumn,
+      );
+      if (button) this.runFindButton(button.action);
+    };
+
     // Tooltip — display-only + hit-transparent.
     this.tooltipText = new HitTransparentText(renderer, {
       id: 'tooltip', content: '', position: 'absolute', visible: false, zIndex: 140, selectable: false,
     });
     root.add(this.tooltipText);
+  }
+
+  /** Dispatch a find-bar button click to the same FindBar action its keyboard chord runs. */
+  private runFindButton(action: FindBarButtonAction): void {
+    const { findBar, revealFindMatch } = this.deps;
+    switch (action) {
+      case 'previous':
+        findBar.previous();
+        revealFindMatch();
+        break;
+      case 'next':
+        findBar.next();
+        revealFindMatch();
+        break;
+      case 'toggleCase':
+        findBar.toggleCaseSensitive();
+        revealFindMatch();
+        break;
+      case 'replace':
+        findBar.replaceCurrent();
+        revealFindMatch();
+        break;
+      case 'replaceAll':
+        findBar.replaceAll();
+        revealFindMatch();
+        break;
+      case 'toggleMode':
+        findBar.switchMode();
+        break;
+    }
   }
 
   private shortcutHelpBoxHeight(): number {
@@ -180,25 +252,20 @@ class $OverlayLayer {
       this.commandPaletteList.fg = palette.dim;
     }
 
-    // Find/replace bar overlay.
+    // Find/replace bar overlay. The renderer draws the query/replacement lines plus the clickable
+    // button row and hands back the button hit-zones the pointer handler reads.
     this.findBarBox.visible = findBar.open.value;
     if (findBar.open.value) {
-      const engine = findBar.engine;
       const replaceMode = findBar.mode.value === 'replace';
-      const queryFocused = !(replaceMode && findBar.replaceFocused.value);
-      const count = engine ? engine.matchCount : 0;
-      const position = engine && engine.currentMatchIndex.value >= 0 ? engine.currentMatchIndex.value + 1 : 0;
-      const counter = count > 0 ? `${position} of ${count}` : engine && engine.query.value ? 'no results' : '';
       this.findBarBox.title = replaceMode ? 'Find / Replace' : 'Find';
       this.findBarBox.borderColor = palette.borderActive;
       this.findBarBox.titleColor = palette.accent;
       this.findBarBox.backgroundColor = palette.panel;
-      const lines: string[] = [];
-      lines.push(`⌕ ${engine?.query.value ?? ''}${queryFocused ? '▏' : ''}   ${counter}`);
-      if (replaceMode) lines.push(`⇄ ${engine?.replacement.value ?? ''}${queryFocused ? '' : '▏'}`);
-      lines.push(replaceMode ? '↵ next · ⇧↵ prev · ⌃↵ replace · ⌃⇧↵ all · ⇥ field · esc' : '↵ next · ⇧↵ prev · esc close');
-      this.findBarText.content = lines.join('\n');
-      this.findBarText.fg = palette.fg;
+      const findResult = FindBarRenderer.Class.render({ findBar, palette, findIcons: theme.findIcons });
+      this.findBarText.content = findResult.text;
+      this.findBarButtonZones = findResult.buttons;
+    } else {
+      this.findBarButtonZones = [];
     }
 
     // Quick-open (Ctrl+P) overlay.
@@ -209,21 +276,26 @@ class $OverlayLayer {
       this.quickOpenBox.borderColor = palette.borderActive;
       this.quickOpenBox.titleColor = palette.accent;
       this.quickOpenBox.backgroundColor = palette.panel;
-      this.quickOpenInput.content = `${openingWorkspace ? '+' : theme.actionIcons.open} ${quickOpen.query.value}▏`;
-      this.quickOpenInput.fg = palette.fg;
-      const matches = quickOpen.matches.value.slice(0, 14);
-      const selectedIndex = quickOpen.selectedIndex.value;
-      this.quickOpenList.content =
-        openingWorkspace && quickOpen.errorMessage.value
-          ? `  ${quickOpen.errorMessage.value}\n  Enter opens · Esc cancels`
-          : matches.length
-            ? matches.map((match, index) => `${index === selectedIndex ? '›' : ' '} ${match.path}`).join('\n')
-            : openingWorkspace
-              ? '  Type an existing folder path\n  Enter opens · Esc cancels'
-              : quickOpen.query.value
-                ? '  (no matching files)'
-                : '  (type to filter project files)';
-      this.quickOpenList.fg = palette.dim;
+      // In the path navigator, flag an un-openable current path with a live warning glyph (⚠ ladder,
+      // theme warning colour) — a valid/openable path shows none.
+      // invariant: An un-openable open-project path is flagged live (src/modules/search/search.invariants.md)
+      const showPathAlert = openingWorkspace && !quickOpen.workspacePathOpenable.value;
+      const inputPrefix = `${openingWorkspace ? '+' : theme.actionIcons.open} ${quickOpen.query.value}▏`;
+      const inputChunks: TextChunk[] = [fg(palette.fg)(inputPrefix)];
+      if (showPathAlert) inputChunks.push(fg(palette.warning)(`  ${theme.alertIcon}`));
+      this.quickOpenInput.content = new StyledText(inputChunks);
+      // The result list renders through the renderer: row-background selection/hover (no arrow marker),
+      // and it reports the hit-testable row count for the pointer handler.
+      const quickOpenResult = QuickOpenRenderer.Class.render({
+        quickOpen,
+        palette,
+        innerWidth: Math.max(1, Math.floor((renderer.width * 0.6)) - 2),
+        maxRows: 14,
+      });
+      this.quickOpenList.content = quickOpenResult.text;
+      this.quickOpenRowCount = quickOpenResult.rowCount;
+    } else {
+      this.quickOpenRowCount = 0;
     }
 
     // Confirmation overlay (discard changes / close a dirty tab).

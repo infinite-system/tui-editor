@@ -6,7 +6,7 @@ import { Reactive } from 'ivue';
 import { ref } from 'vue';
 import { TerminalCapabilities, type ColorDepth, type GlyphLevel } from './TerminalCapabilities';
 import { PALETTES, DARK, ThemePalettes, type Palette } from './ThemePalettes';
-import { ThemeIcons, type IconSet, type ActionIconSet, type CheckboxIconSet, type ActivityIconSet } from './ThemeIcons';
+import { ThemeIcons, type IconSet, type ActionIconSet, type CheckboxIconSet, type ActivityIconSet, type FindIconSet } from './ThemeIcons';
 
 class $Theme {
   get paletteName() {
@@ -49,6 +49,14 @@ class $Theme {
    *  (auto-detected via TerminalCapabilities, or forced) — so swapping tiers is one config, not per-icon. */
   get activityIcons(): ActivityIconSet {
     return ThemeIcons.Class.activityIconsFor(this.glyphLevel.value);
+  }
+  /** Find-bar action-button glyphs (prev/next/replace/replace-all/mode) at the current glyph level. */
+  get findIcons(): FindIconSet {
+    return ThemeIcons.Class.findIconsFor(this.glyphLevel.value);
+  }
+  /** Alert glyph (⚠ ladder) painted in the warning colour to flag an un-openable path. */
+  get alertIcon(): string {
+    return ThemeIcons.Class.alertIconFor(this.glyphLevel.value);
   }
 
   icon(name: string, isDir: boolean, open = false): string {

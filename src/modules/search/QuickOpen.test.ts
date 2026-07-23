@@ -92,20 +92,22 @@ describe('QuickOpen', () => {
     expect(quickOpen.open.value).toBe(true);
   });
 
-  test('workspace-path mode prefills the parent path and lists fuzzy-searchable sibling folders', () => {
-    const enumeratedParentDirectories: string[] = [];
+  test('workspace-path mode opens listing the parent folder and filters its subfolders by the last segment', () => {
+    const enumeratedDirectories: string[] = [];
     const quickOpen = new QuickOpen.Class({
-      enumerateSiblingFolders: (parentDirectory) => {
-        enumeratedParentDirectories.push(parentDirectory);
+      enumerateSiblingFolders: (directory) => {
+        enumeratedDirectories.push(directory);
         return ['/projects/alpha', '/projects/beta', '/projects/gamma'];
       },
     });
 
     quickOpen.showWorkspacePath('/projects/alpha');
 
-    expect(enumeratedParentDirectories).toEqual(['/projects']);
+    // Prefill lists the parent's subfolders (siblings), with a trailing slash so the input shows it is
+    // browsing INSIDE /projects.
+    expect(enumeratedDirectories).toEqual(['/projects']);
     expect(quickOpen.mode.value).toBe('workspacePath');
-    expect(quickOpen.query.value).toBe('/projects');
+    expect(quickOpen.query.value).toBe('/projects/');
     expect(quickOpen.matches.value.map((match) => match.path)).toEqual([
       '/projects/alpha',
       '/projects/beta',
@@ -113,11 +115,42 @@ describe('QuickOpen', () => {
     ]);
     expect(quickOpen.selectedIndex.value).toBe(0);
 
+    // Typing a segment filters the SAME directory's subfolders by that segment (fuzzy) — no re-read.
     quickOpen.setQuery('/projects/gm');
     expect(quickOpen.matches.value.map((match) => match.path)).toEqual(['/projects/gamma']);
+    expect(enumeratedDirectories).toEqual(['/projects']);
 
-    quickOpen.moveSelection(0);
+    // A click/keyboard drill navigates INTO the highlighted folder: the path completes and re-lists.
+    quickOpen.navigateIntoSelected();
+    expect(quickOpen.query.value).toBe('/projects/gamma/');
+    expect(enumeratedDirectories).toEqual(['/projects', '/projects/gamma']);
+
+    // Enter opens the CURRENT path (the folder navigated to), trailing slash stripped.
     expect(quickOpen.activate()).toBe('/projects/gamma');
+  });
+
+  test('workspace-path mode re-roots the listing live as the directory part of the input changes', () => {
+    const enumeratedDirectories: string[] = [];
+    const quickOpen = new QuickOpen.Class({
+      enumerateSiblingFolders: (directory) => {
+        enumeratedDirectories.push(directory);
+        if (directory === '/home/user') return ['/home/user/dev', '/home/user/desktop', '/home/user/music'];
+        if (directory === '/home/user/dev') return ['/home/user/dev/invar', '/home/user/dev/ibr'];
+        return [];
+      },
+    });
+
+    quickOpen.showWorkspacePath('/home/user/dev'); // parent = /home/user
+    expect(quickOpen.query.value).toBe('/home/user/');
+
+    // Filter /home/user by "de" → desktop + dev (equal fuzzy score, alphabetical tiebreak), not music.
+    quickOpen.setQuery('/home/user/de');
+    expect(quickOpen.matches.value.map((match) => match.path)).toEqual(['/home/user/desktop', '/home/user/dev']);
+
+    // Extend to a new directory → the listing re-roots to /home/user/dev's contents.
+    quickOpen.setQuery('/home/user/dev/');
+    expect(enumeratedDirectories).toEqual(['/home/user', '/home/user/dev']);
+    expect(quickOpen.matches.value.map((match) => match.path)).toEqual(['/home/user/dev/ibr', '/home/user/dev/invar']);
   });
 
   test('workspace-path mode returns the typed path when it matches no sibling folder', () => {

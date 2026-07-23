@@ -138,6 +138,28 @@ class $FindBar {
     if (this.mode.value === 'replace') this.replaceFocused.value = !this.replaceFocused.value;
   }
 
+  /** True while the active engine matches case exactly — read by the renderer for the toggle state. */
+  get caseSensitive(): boolean {
+    return this.engine?.caseSensitive.value ?? false;
+  }
+
+  /** Flip case-sensitivity on the active engine and re-run the query so matches reflect it at once. */
+  // invariant: Case sensitivity is a live toggle that re-runs the query (src/modules/search/search.invariants.md)
+  toggleCaseSensitive(): void {
+    const engine = this.engine;
+    if (!engine) return;
+    engine.caseSensitive.value = !engine.caseSensitive.value;
+    engine.findAll();
+  }
+
+  /** Switch between find and replace modes (only where the bound pane allows replacement) — the mode
+   *  toggle button. Leaving replace mode returns typing focus to the query field. */
+  switchMode(): void {
+    if (!this.target?.replaceAllowed) return;
+    this.mode.value = this.mode.value === 'find' ? 'replace' : 'find';
+    if (this.mode.value === 'find') this.replaceFocused.value = false;
+  }
+
   next(): void {
     this.engine?.next();
   }

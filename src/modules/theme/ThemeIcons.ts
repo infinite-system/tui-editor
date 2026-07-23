@@ -38,6 +38,16 @@ export interface ActivityIconSet {
   accentBar: string;
 }
 
+/** Find-bar action-button glyphs — SINGLE-CELL each so the button hit-zone columns align (the
+ *  case-sensitivity affordance keeps its VS Code `Aa` two-letter label, not a glyph). */
+export interface FindIconSet {
+  previous: string;
+  next: string;
+  replace: string;
+  replaceAll: string;
+  toggleMode: string;
+}
+
 const NERD: IconSet = {
   ext: {
     ts: '', tsx: '', js: '', jsx: '',
@@ -116,6 +126,14 @@ const TERMINAL_ICON: Record<GlyphLevel, string> = {
   ascii: '>',
 };
 
+// Find-bar action glyph ladder. nerd = nerd-font glyphs; unicode = single-cell symbols; ascii = the
+// letter/arrow fallback so a no-nerd-font terminal still reads. Each glyph is exactly one cell.
+const FIND_ICONS: Record<GlyphLevel, FindIconSet> = {
+  nerd: { previous: '\u{f062}', next: '\u{f063}', replace: '\u{f021}', replaceAll: '\u{f051}', toggleMode: '\u{f0ec}' }, // fa up / down / refresh / step-forward / exchange
+  unicode: { previous: '↑', next: '↓', replace: '⟳', replaceAll: '⇊', toggleMode: '⇅' },
+  ascii: { previous: '^', next: 'v', replace: 'r', replaceAll: 'R', toggleMode: 'x' },
+};
+
 function $iconSetFor(level: GlyphLevel): IconSet {
   return SETS[level];
 }
@@ -140,6 +158,22 @@ function $activityIconsFor(level: GlyphLevel): ActivityIconSet {
   return ACTIVITY_ICONS[level];
 }
 
+function $findIconsFor(level: GlyphLevel): FindIconSet {
+  return FIND_ICONS[level];
+}
+
+// Alert / warning glyph ladder (single cell): nerd = fa exclamation-triangle; unicode = ⚠; ascii = !.
+// Used to flag an un-openable path in the open-project navigator, painted in the theme warning colour.
+const ALERT_ICONS: Record<GlyphLevel, string> = {
+  nerd: '\u{f071}',
+  unicode: '⚠',
+  ascii: '!',
+};
+
+function $alertIconFor(level: GlyphLevel): string {
+  return ALERT_ICONS[level];
+}
+
 /** Resolve an icon for a filename against a set (extension keyed, with folder/file default). */
 // invariant: The glyph ladder degrades icons single-cell and legible (src/modules/theme/theme.invariants.md)
 function $iconFor(set: IconSet, name: string, isDirectory: boolean, open = false): string {
@@ -157,6 +191,8 @@ class $ThemeIcons {
   static actionIconsFor = $actionIconsFor;
   static checkboxIconsFor = $checkboxIconsFor;
   static activityIconsFor = $activityIconsFor;
+  static findIconsFor = $findIconsFor;
+  static alertIconFor = $alertIconFor;
   static iconFor = $iconFor;
 }
 
