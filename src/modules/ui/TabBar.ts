@@ -92,6 +92,9 @@ class $TabBar {
       activeFileIsMarkdown: workspaceSet.active.activeFileIsMarkdown,
       showingMarkdownPreview: workspaceSet.active.showingMarkdownPreview,
       previewIcon: theme.actionIcons.preview,
+      projectRoot: workspaceSet.active.root,
+      // Tier ladder for the between-tab powerline separator: solid nerd glyph → portable arrow → ascii.
+      separatorGlyph: { nerd: '\u{e0b0}', unicode: '❯', ascii: '>' }[theme.glyphLevel.value] ?? '❯',
     });
     this.bufferSegments = result.segments;
     this.lastRevealedActiveIndex = result.revealedIndex;

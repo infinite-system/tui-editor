@@ -14,6 +14,7 @@ import { Static } from 'ivue/extras';
 import { EditorCoordinates } from '../editor/EditorCoordinates';
 import type { Palette } from '../theme/ThemePalettes';
 import type { TabStrip } from './TabStrip';
+import { Breadcrumb } from './Breadcrumb';
 
 // Project name / branch on a workspace tab are capped so one long name cannot swallow the strip; the
 // cut is marked with an ellipsis rather than a silent hard truncation.
@@ -63,6 +64,10 @@ export interface BufferTabBarRenderContext {
   strip: TabStrip.Instance;
   palette: Palette;
   barWidth: number;
+  /** Active workspace root — the breadcrumb renders each tab's path relative to it. */
+  projectRoot: string;
+  /** Tier-aware powerline separator glyph drawn between crumbs/tabs (nerd  → unicode ❯ → ascii >). */
+  separatorGlyph: string;
   hover: TabBarHover;
   closePressed: number | null;
   previewPressed: boolean;
@@ -290,10 +295,19 @@ function $renderBufferTabBar(context: BufferTabBarRenderContext): BufferTabBarRe
   if (tabs.length === 0) return { text: new StyledText([fg(palette.dim)('  no open files')]), segments, revealedIndex };
   const barWidth = Math.max(1, context.barWidth);
 
-  // Each tab lays out as ` name <dirty> ✕ ` — the ✕ has a space BEFORE and AFTER so it is never
-  // flush against the tab edge, and the padding is identical regardless of label length.
+  // Each tab lays out as ` breadcrumb <dirty> ✕ ` — the ✕ has a space BEFORE and AFTER so it is never
+  // flush against the tab edge, and the padding is identical regardless of label length. The label is
+  // a path BREADCRUMB (project › dir › file) capped per tab: leading dirs collapse to an ellipsis, the
+  // filename always survives.
+  const CRUMB_SEPARATOR = ' › ';
+  const MAX_TAB_BREADCRUMB_WIDTH = 28;
   const measured = tabs.map((tab) => {
-    const name = tab.label;
+    const crumbs = Breadcrumb.Class.fitBreadcrumb(
+      Breadcrumb.Class.breadcrumbSegments(tab.identifier, context.projectRoot),
+      MAX_TAB_BREADCRUMB_WIDTH,
+      CRUMB_SEPARATOR.length,
+    );
+    const name = crumbs.join(CRUMB_SEPARATOR);
     const labelWidth = 1 + EditorCoordinates.Class.lineWidth(name) + 1 + 1 + 1; // ' ' + name + ' ' + dirtyGlyph + ' '
     return { tab, name, labelWidth, width: labelWidth + 2 }; // + '✕' + trailing ' '
   });
@@ -349,14 +363,27 @@ function $renderBufferTabBar(context: BufferTabBarRenderContext): BufferTabBarRe
   const chunks: TextChunk[] = [];
   let column = 0;
   let endIndex = startIndex;
+  const separatorWidth = EditorCoordinates.Class.lineWidth(context.separatorGlyph);
   for (let index = startIndex; index < measured.length; index += 1) {
     const entry = measured[index];
-    if (!entry || column + entry.width > tabsAreaWidth) break;
+    // A 1-cell gap sets the FIRST tab off the splitter; between tabs a powerline separator divides
+    // them. Both are accounted for in the fit check so a tab never half-renders past the edge.
+    const isFirstRendered = index === startIndex;
+    const leadWidth = isFirstRendered ? 1 : separatorWidth;
+    if (!entry || column + leadWidth + entry.width > tabsAreaWidth) break;
+    if (isFirstRendered) {
+      chunks.push(fg(palette.fg)(' '));
+    } else {
+      chunks.push(fg(palette.border)(context.separatorGlyph));
+    }
+    column += leadWidth;
     const isActive = entry.tab.active;
     const isTabHover = hover?.kind === 'tab' && hover.index === index;
     const isCloseHover = hover?.kind === 'close' && hover.index === index;
     const rowBackground = isActive ? palette.selection : isTabHover ? palette.cursorLine : null;
-    const labelColor = isActive ? palette.fg : palette.dim;
+    // The FIRST buffer tab (index 0) takes a distinct accent tint when idle so it reads as the anchor
+    // tab; the active tab always wins with the bright fg.
+    const labelColor = isActive ? palette.fg : index === 0 ? palette.accent : palette.dim;
     const paint = (text: string, color: string) =>
       rowBackground ? bg(rowBackground)(fg(color)(text)) : fg(color)(text);
     const start = column;

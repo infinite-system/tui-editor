@@ -171,3 +171,16 @@ checker + `bun test` before merging. Deprecate sub-par output (don't patch aroun
 ## Rules
 - Never block on a question — pick the best contract-consistent default, record it in `project.decisions.md`, keep going. Surface only a TRUE hard blocker (missing credential / ambiguous product call with no safe default).
 - Commit frequently. Keep `project.progress.md` + this file current every few turns. codex not trusted with deletions; commit before delegating.
+
+## Deferred: buffer-tab de-fieldset (part 4) — decouple find-source identity from the display title
+The buffer-tab restyle shipped 3 parts (breadcrumb, powerline separator, first-tab gap/color). Part 4
+— removing the redundant filename BORDER LEGEND on the editor pane (blank `editorArea.title`) — is
+DEFERRED because it deterministically breaks `scripts/smoke-markdown.sh`: with the title blanked
+(`''` or `' '`) the markdown find pane reports `source=''` and a source paste no-op (`revision 1 -> 1`);
+restoring the filename title makes it ALL-PASS (bisected — not a flake).
+ROOT CAUSE (the bug under the bug): the find/paste pane's SOURCE IDENTITY is derived from
+`editorArea.title`, a DISPLAY string — identity must never key off a display value (expression ≠
+essence). PROPER FIX (not "put the title back"): DECOUPLE — give the pane a stable source identifier
+(the document PATH) independent of the visible title, so the border legend can be blanked/restyled
+freely. Likely bundled with the status-bar terminal-toggle button (same RootView/editor-pane region).
+See memory reference-editorarea-title-markdown-coupling.
