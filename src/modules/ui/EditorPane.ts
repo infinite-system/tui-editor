@@ -344,7 +344,7 @@ class $EditorPane {
     codeBody.onMouseDragEnd = () => this.drag.end();
     // Mouse-move over a code cell arms the LSP hover card for the symbol there (a >0.5s dwell shows
     // the language server's type/docs). Moving off any document, or over an empty cell, clears it.
-    // invariant: A hover card reflects the language server's type at the pointed symbol (src/modules/ui/ui.invariants.md)
+    // invariant: A hover card reflects the language server type at the pointed symbol (src/modules/ui/ui.invariants.md)
     codeBody.onMouseMove = (event) => {
       if (!workspaceSet.active.editor.hasDocument.value) {
         hover.clear();

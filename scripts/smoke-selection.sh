@@ -2,7 +2,7 @@
 # Driven list-selection contract: click chooses an item, wheel and hover move only their own state,
 # blur preserves a dim highlight, and refocused keyboard movement resumes from the same item.
 # FrameProbe is authoritative for paint; the per-session status channel is authoritative for state.
-# invariant: Selection is item-anchored, click-set, keyboard-moved, and stays (src/modules/ui/ui.invariants.md)
+# invariant: Selection is item-anchored click-set keyboard-moved and stays (src/modules/ui/ui.invariants.md)
 set -uo pipefail
 
 script_directory="$(cd "$(dirname "$0")" && pwd)"

@@ -216,7 +216,7 @@ class $Workspace {
    * resolves null (never throws) when no document, an unsupported file, a missing server, or the
    * server returns nothing. The client applies its own revision-staleness guard on the response.
    *
-   * invariant: A hover card reflects the language server's type at the pointed symbol (src/modules/ui/ui.invariants.md)
+   * invariant: A hover card reflects the language server type at the pointed symbol (src/modules/ui/ui.invariants.md)
    */
   async hoverAt(position: TextPosition): Promise<LanguageHover | null> {
     if (this.showingDiff.value) return null;

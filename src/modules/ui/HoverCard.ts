@@ -6,7 +6,7 @@
 // own vertical scroll so long content is reachable. This is the StatusBar/OverlayLayer idiom (a
 // Reactive class holding plain renderable fields), instantiated `new HoverCard.Class(deps)`.
 //
-// invariant: A hover card reflects the language server's type at the pointed symbol (src/modules/ui/ui.invariants.md)
+// invariant: A hover card reflects the language server type at the pointed symbol (src/modules/ui/ui.invariants.md)
 import {
   BoxRenderable,
   StyledText,
@@ -339,7 +339,7 @@ class $HoverCard {
     this.selectionFocus = null;
     if (this.visible) {
       this.visible = false;
-      // invariant: An overlay's dismissal clears its cells in the same frame (src/modules/ui/ui.invariants.md)
+      // invariant: An overlay dismissal clears its cells in the same frame (src/modules/ui/ui.invariants.md)
       // Hide the renderables IMMEDIATELY here — do NOT rely on a subsequent reactive update() call.
       // The show path runs while the dwell tick keeps frames coming, so update() re-runs each frame;
       // but once the card is shown the tick loop goes idle, so a dismiss (keypress/click) has no

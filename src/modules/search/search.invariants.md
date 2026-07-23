@@ -3,7 +3,7 @@
 Load-bearing rules for `src/modules/search/` (QuickOpen, FindBar, FindInBuffer) and the overlay
 renderers that project them (`src/modules/ui/QuickOpenRenderer.ts`, `FindBarRenderer.ts`,
 `OverlayLayer.ts`). Stands on `project.invariants.md` and the UI contract's
-[Selection is item-anchored, click-set, keyboard-moved, and stays](../ui/ui.invariants.md#selection-is-item-anchored-click-set-keyboard-moved-and-stays)
+[Selection is item-anchored click-set keyboard-moved and stays](../ui/ui.invariants.md#selection-is-item-anchored-click-set-keyboard-moved-and-stays)
 and [Renderables hold no model state](../ui/ui.invariants.md#renderables-hold-no-model-state).
 
 ## Reality-based invariants

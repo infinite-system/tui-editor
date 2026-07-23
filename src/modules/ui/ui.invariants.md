@@ -288,7 +288,7 @@ tmux — with the tooltip visible, click through it and assert the underlying ac
 
 **Last refined:** 2026-07-21
 
-### A hover card reflects the language server's type at the pointed symbol
+### A hover card reflects the language server type at the pointed symbol
 
 **Invariant:** The hover card shows content that came from `client.hover` for the exact document
 position the pointer dwelled on, and it appears ONLY after the pointer rests on ONE document
@@ -331,7 +331,7 @@ move-through does not); grep — `HoverCard.tick` gates on `requestedGeneration`
 
 **Last refined:** 2026-07-22
 
-### An overlay's dismissal clears its cells in the same frame
+### An overlay dismissal clears its cells in the same frame
 
 **Invariant:** Hiding an absolutely-positioned overlay must set its renderables invisible
 SYNCHRONOUSLY, inside the handler that dismisses it — never deferred to a later reactive `update()`.
@@ -649,7 +649,7 @@ same configured vertical thumb; two bars deriving placement from different math.
 
 **Last refined:** 2026-07-21
 
-### Selection is item-anchored, click-set, keyboard-moved, and stays
+### Selection is item-anchored click-set keyboard-moved and stays
 
 **Invariant:** In every selectable list — the file tree, git changes/staging, the commit log, stashes,
 and any future list — the SELECTION is persistent state anchored to an ITEM, mutated ONLY by a click
