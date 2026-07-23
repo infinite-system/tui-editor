@@ -1358,6 +1358,38 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   renderer.keyInput.on('keypress', onKey);
   app.onDispose(() => renderer.keyInput.off('keypress', onKey));
 
+  // Bracketed paste. A clipboard paste or a dictation tool (e.g. Hex) injects text framed as
+  // \e[200~…\e[201~; OpenTUI PARSES that framing into a single `paste` event but never ENABLES the
+  // mode itself, so we request DECSET 2004 here (clipboard pastes then arrive framed too) and disable
+  // it on teardown. Without this, framed paste bursts vanish — captured by OpenTUI's paste channel
+  // that nothing listened to. A framed paste yields NO keypresses, so this is the ONLY delivery path.
+  // invariant: A focused panel routes keystrokes to its active pane content (src/modules/terminal/terminal.invariants.md)
+  process.stdout.write('\x1b[?2004h');
+  app.onDispose(() => process.stdout.write('\x1b[?2004l'));
+  // Route a paste to the same target the keyboard has: the focused panel pane (terminal PTY / agent
+  // composer), else a focused single-line modal input (quick-open / find), else the editor. Mirrors
+  // keyTick's dispatch order so paste lands exactly where typing would.
+  const pasteTick = (text: string): void => {
+    if (!text) return;
+    narration?.bargeIn();
+    if (panelHost.visible.value && panelHost.focused.value) {
+      panelHost.handlePaste(text);
+      return; // a focused panel owns paste even if its pane has no sink — never leak to the editor
+    }
+    const singleLine = text.replace(/[\r\n]+/g, ' ');
+    if (quickOpen.open.value) { quickOpen.setQuery(quickOpen.query.value + singleLine); return; }
+    if (findBar.open.value) { findBar.append(singleLine); return; }
+    // Other overlays (palette, settings, help, menu) have no free-text paste target — consume it so a
+    // paste never drives the editor hidden beneath an open overlay.
+    if (commands.open.value || settingsPanel.open.value || shortcutHelp.open.value || contextMenu.open.value) return;
+    if (!view.activeMarkdownSplitView()?.previewFocused) workspaceSet.active.editor.pasteText(text);
+  };
+  const onPaste = (event: { bytes: Uint8Array }): void => {
+    HandlerGuard.Class.run('paste', () => pasteTick(new TextDecoder().decode(event.bytes)), () => app.requestRender());
+  };
+  renderer.keyInput.on('paste', onPaste);
+  app.onDispose(() => renderer.keyInput.off('paste', onPaste));
+
   // Global mouse capture: events bubble to the root renderable. Records the last event to the
   // status channel (verification) and repaints. Per-region handlers (tree, sidebar, dividers) are
   // attached on their own renderables and run before this via propagation.

@@ -228,6 +228,16 @@ class $AgentPaneContent implements PaneContent {
     this.viewRevision.value += 1;
   }
 
+  /** A paste into the composer: insert the text at the caret. Newlines collapse to spaces — the
+   *  single-line composer sends on Enter, so a literal newline must never be stored (it would break
+   *  the caret and could look like a pending send). */
+  handlePaste(text: string): boolean {
+    const flattened = text.replace(/\r\n?|\n/g, ' ');
+    if (!flattened) return false;
+    this.composer.value += flattened;
+    return true;
+  }
+
   caret(): { column: number; row: number } | null {
     // The composer sits on the last row, after the '❯ ' prompt (2 cells).
     return { column: 2 + [...this.composer.value].length, row: Math.max(0, this.lastHeight - 1) };

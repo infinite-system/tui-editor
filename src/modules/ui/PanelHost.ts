@@ -283,6 +283,12 @@ class $PanelHost {
     return this.focusedContent?.handleKey(key) ?? false;
   }
 
+  /** Route a bulk-text paste to the focused pane content, mirroring handleKey. Returns false when the
+   *  focused content has no paste sink (the caller consumes it regardless — a focused panel owns paste). */
+  handlePaste(text: string): boolean {
+    return this.focusedContent?.handlePaste?.(text) ?? false;
+  }
+
   /** Converge the slot's region size onto every visible cell — each content sees only its sub-region. */
   setViewportSize(columns: number, rows: number): void {
     for (const span of this.cellSpans(columns)) span.content.onResize(span.columns, rows);

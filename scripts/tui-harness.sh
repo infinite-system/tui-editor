@@ -98,6 +98,14 @@ case "$cmd" in
     tmux send-keys -t "$session" "$@"
     sleep 0.25
     ;;
+  paste)
+    # paste <session> <text> — inject a BRACKETED PASTE (\e[200~<text>\e[201~), exactly how a
+    # clipboard paste or a dictation tool (Hex) delivers bulk text once DECSET 2004 is enabled. The
+    # app must surface this as ONE paste event (no per-char keypresses). Text is sent literally.
+    session="$1"; text="$2"
+    tmux send-keys -t "$session" -l "$(printf '\033[200~%s\033[201~' "$text")"
+    sleep 0.3
+    ;;
   click)
     # click <session> <x> <y> [button]  — send an SGR left-button press+release at 0-based (x,y).
     # SGR mouse is 1-based, so add 1; the app reports the 0-based (x,y) back.

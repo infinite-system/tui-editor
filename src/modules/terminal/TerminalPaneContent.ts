@@ -45,6 +45,14 @@ class $TerminalPaneContent implements PaneContent {
     return true;
   }
 
+  /** A paste while the terminal is focused: deliver the text to the child as raw input — the same
+   *  bytes as if the user had typed the pasted/dictated text. */
+  handlePaste(text: string): boolean {
+    if (!text) return false;
+    this.instance.sendInput(text);
+    return true;
+  }
+
   caret(): { column: number; row: number } | null {
     if (this.instance.exited.value) return null;
     return { column: this.instance.cursorColumn, row: this.instance.cursorRow };

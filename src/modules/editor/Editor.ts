@@ -363,10 +363,15 @@ class $Editor {
   }
 
   async pasteClipboard(): Promise<void> {
-    if (this.readOnly.value || !this.hasDocument.value) return;
-    const text = await Clipboard.Class.paste();
-    if (!text) return;
-    this.captureBefore('insert');
+    this.pasteText(await Clipboard.Class.paste());
+  }
+
+  /** Insert bulk text at the caret as ONE paste edit (replacing any selection, multiline-aware). Shared
+   *  by clipboard paste and terminal bracketed-paste (dictation / Ctrl+V), so both coalesce identically
+   *  under undo. */
+  pasteText(text: string): void {
+    if (this.readOnly.value || !this.hasDocument.value || !text) return;
+    this.captureBefore('paste');
     this.removeSelection();
     const position = this.document.insertMultiline(this.cursor.line.value, this.cursor.col.value, text);
     this.placeCursor(position.line, position.col);

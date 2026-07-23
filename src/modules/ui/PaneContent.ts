@@ -50,6 +50,9 @@ export interface PaneContent {
   /** Optional: a pointer-down inside this cell at content-local (column, row) — for click hit-testing
    *  (e.g. toggling a collapsed row). True if it was consumed (a repaint is requested for it). */
   onPointerDown?(column: number, row: number): boolean;
+  /** Consume a bulk-text paste (clipboard / dictation) while the panel is focused; return true if it
+   *  was handled. Optional — a content that has no text sink (a read-only log) omits it. */
+  handlePaste?(text: string): boolean;
   /** The panel's region resized to this many cell columns × rows. */
   onResize(columns: number, rows: number): void;
   /** The panel gained keyboard focus. */
