@@ -466,6 +466,43 @@ split-capability; I built the agent stack + did the split integration. Hard less
 
 ---
 
+## Part 9 — A false invariant from a flawed verification method (2026-07-23)
+
+A builder flagged a possible pre-existing bug (find-match highlighting maybe not rendering) and had
+captured a supporting invariant: *"the editor code body ignores `bg()` chunks — OpenTUI mis-positions
+background chunks in a multi-line StyledText."* It even reshaped a feature around it (bracket-match
+pivoted from a bg highlight to fg accent+bold "because bg doesn't render there").
+
+Independent drive-verification refuted BOTH — but only once driven with the RIGHT method:
+
+- Find-match uses `bg(palette.cursorLine)` per-cell in the code body. Driven WITH `COLORTERM=truecolor`,
+  the matched cells render a distinct bg (`69,71,90` vs editor `30,30,46`). Multi-cell AND the decisive
+  single-cell case (a 1-char match) both render. bg() works fine in the code body.
+- The builder's original "bg doesn't render" observation was a **verification artifact**: it had checked
+  colors *without* `COLORTERM=truecolor`, so FrameProbe couldn't distinguish the backgrounds — it LOOKED
+  like no bg. It later learned truecolor was required, but the false invariant it had already written
+  down persisted (in memory + a branch's `editor.invariants.md`).
+
+Lessons (doctrine):
+
+- **A false invariant can be born from a flawed verification method, then propagate.** The reduce-break
+  step only removes what you actually test; if the *test* is broken (wrong env, wrong probe), a false
+  candidate survives as if confirmed. When a flagged constraint reshapes a design, **independently
+  re-drive it with a correct method before trusting it** — don't inherit a peer's "confirmed" constraint.
+- **Provenance-quarantine limited the blast radius.** Because the false invariant lived only in the
+  builder's memory + an *unmerged experiment branch* (invented-experiments-stay-on-branches), it never
+  reached main's contracts. The provenance rule paid off as a containment boundary for bad invariants,
+  not just for features.
+- **Color frame-assertions require `COLORTERM=truecolor`** — without it FrameProbe collapses colors and
+  bg/fg differences vanish. A gotcha, but the deeper point is the first lesson: a broken probe manufactures
+  false structure.
+
+Outcome: the feature was never broken (find highlights fine; bracket-match fg is a valid style); only the
+"why" was wrong. Builder tasked to correct its memory + the branch's justification (keep fg, fix the false
+reasoning). No main change needed.
+
+---
+
 ## Live cron prompts (canonical copy now in the /conductor SKILL.md "Live cron prompts" section — edit THERE; the copy below may lag)
 
 These are the exact prompts driving the orchestration loop this session. **Improve them HERE, then
