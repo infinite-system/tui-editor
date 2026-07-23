@@ -10,7 +10,7 @@
 // invariant: Word wrap is a pure view mapping (src/modules/editor/editor.invariants.md)
 // invariant: The editor gutter reflects HEAD changes (src/modules/diff/diff.invariants.md)
 // invariant: Cost tracks the actively observed set (project.invariants.md)
-import { StyledText, fg, bg, type TextChunk } from '@opentui/core';
+import { StyledText, fg, bg, underline, type TextChunk } from '@opentui/core';
 import { Static } from 'ivue/extras';
 import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { EditorWrap, type VisualRow } from '../editor/EditorWrap';
@@ -65,9 +65,23 @@ function $renderEditor(context: EditorPaneRenderContext): EditorPaneRender | nul
   const currentLineIndex = editor.cursor.line.value;
   const focused = workspace.focus.value === 'editor';
   const gutterDiffByLine = workspace.gutterDiffByLine.value;
+  const diagnosticsByLine = workspace.diagnosticsByLine.value;
   const gutterChunks: TextChunk[] = [];
   const codeChunks: TextChunk[] = [];
+  // Severity → colour (1 = error, 2 = warning, 3 = info, 4 = hint).
+  const severityColor = (severity: number): string =>
+    severity === 1 ? palette.error : severity === 2 ? palette.warning : palette.info;
+  const mostSevere = (marks: readonly { severity: number }[]): number =>
+    marks.reduce((worst, mark) => Math.min(worst, mark.severity), 4);
+  // invariant: TS diagnostics render as a gutter mark and an underline (src/modules/ui/ui.invariants.md)
   const pushGutterMarker = (lineIndex: number, isCurrentLine: boolean): void => {
+    // A diagnostic on the line takes precedence over the git-change mark — a red/amber '▎' matching
+    // the git marks' shape (the "red paint on the side"), coloured by the most severe diagnostic.
+    const diagnosticMarks = diagnosticsByLine.get(lineIndex);
+    if (diagnosticMarks && diagnosticMarks.length > 0) {
+      gutterChunks.push(fg(severityColor(mostSevere(diagnosticMarks)))('▎'));
+      return;
+    }
     const gutterDiffStatus = gutterDiffByLine.get(lineIndex);
     if (gutterDiffStatus === 'added') {
       gutterChunks.push(fg(palette.added)('▎'));
@@ -86,12 +100,27 @@ function $renderEditor(context: EditorPaneRenderContext): EditorPaneRender | nul
     windowStartGrapheme = 0,
   ): void => {
     const lineMatches = sourceFindEngine?.matches.value.filter((match) => match.line === lineIndex) ?? [];
+    const lineDiagnostics = diagnosticsByLine.get(lineIndex) ?? [];
     const windowGraphemeCount = EditorCoordinates.Class.graphemeCount(windowText);
     const boundaries = new Set<number>([0, windowGraphemeCount]);
     for (const match of lineMatches) {
       boundaries.add(Math.max(0, Math.min(windowGraphemeCount, match.startColumn - windowStartGrapheme)));
       boundaries.add(Math.max(0, Math.min(windowGraphemeCount, match.endColumn - windowStartGrapheme)));
     }
+    for (const diagnosticMark of lineDiagnostics) {
+      boundaries.add(Math.max(0, Math.min(windowGraphemeCount, diagnosticMark.startColumn - windowStartGrapheme)));
+      boundaries.add(Math.max(0, Math.min(windowGraphemeCount, diagnosticMark.endColumn - windowStartGrapheme)));
+    }
+    // Severity of the diagnostic covering [absoluteStart, absoluteEnd), or null when uncovered.
+    const diagnosticSeverityOver = (absoluteStart: number, absoluteEnd: number): number | null => {
+      let worst: number | null = null;
+      for (const diagnosticMark of lineDiagnostics) {
+        if (diagnosticMark.startColumn < absoluteEnd && diagnosticMark.endColumn > absoluteStart) {
+          worst = worst === null ? diagnosticMark.severity : Math.min(worst, diagnosticMark.severity);
+        }
+      }
+      return worst;
+    };
     const orderedBoundaries = [...boundaries].sort((first, second) => first - second);
     for (let boundaryIndex = 0; boundaryIndex < orderedBoundaries.length - 1; boundaryIndex += 1) {
       const segmentStart = orderedBoundaries[boundaryIndex]!;
@@ -106,7 +135,16 @@ function $renderEditor(context: EditorPaneRenderContext): EditorPaneRender | nul
           match.startColumn < windowStartGrapheme + segmentEnd &&
           match.endColumn > windowStartGrapheme + segmentStart,
       );
-      if (editor.document.binary.value || language === 'plain') {
+      const diagnosticSeverity = diagnosticSeverityOver(
+        windowStartGrapheme + segmentStart,
+        windowStartGrapheme + segmentEnd,
+      );
+      if (diagnosticSeverity !== null) {
+        // A diagnostic range renders as a coloured UNDERLINE in the severity colour (red for errors) —
+        // the terminal's "red squiggly": the text stays but is underlined and recoloured to signal it.
+        const diagnosticChunk = underline(fg(severityColor(diagnosticSeverity))(segmentText));
+        codeChunks.push(findHighlighted ? bg(palette.cursorLine)(diagnosticChunk) : diagnosticChunk);
+      } else if (editor.document.binary.value || language === 'plain') {
         const textChunk = fg(palette.fg)(segmentText);
         codeChunks.push(findHighlighted ? bg(palette.cursorLine)(textChunk) : textChunk);
       } else {
