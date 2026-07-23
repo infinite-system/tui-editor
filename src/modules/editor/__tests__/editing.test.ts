@@ -92,6 +92,30 @@ test('undo reverts an edit; redo re-applies it', () => {
   expect(editor.document.line(0)).toBe('ab');
 });
 
+test('undo back to the saved content reads as UNCHANGED (dirty clears, redo re-dirties)', () => {
+  const editor = openWith('a'); // loaded content "a" is the clean baseline
+  editor.cursor.set(0, 1);
+  editor.insertText('b'); // "ab"
+  expect(editor.document.dirty.value).toBe(true);
+  editor.performUndo(); // back to "a" — exactly the loaded content
+  expect(editor.document.line(0)).toBe('a');
+  expect(editor.document.dirty.value).toBe(false); // matches the baseline → not dirty
+  editor.performRedo(); // "ab" again — differs from the baseline
+  expect(editor.document.dirty.value).toBe(true);
+});
+
+test('markSaved rebaselines: matchesSaved tracks the last saved content, not the original', () => {
+  const editor = openWith('a');
+  expect(editor.document.matchesSaved()).toBe(true); // fresh load is clean
+  editor.cursor.set(0, 1);
+  editor.insertText('b'); // "ab"
+  expect(editor.document.matchesSaved()).toBe(false);
+  editor.document.markSaved(); // the saved baseline is now "ab"
+  expect(editor.document.matchesSaved()).toBe(true);
+  editor.insertText('c'); // "abc" — differs from the new baseline
+  expect(editor.document.matchesSaved()).toBe(false);
+});
+
 test('undo coalesces a run of typed characters into one step', () => {
   let time = 1000;
   Clock.Class.freeze(() => time);
