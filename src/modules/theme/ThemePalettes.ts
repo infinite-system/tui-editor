@@ -21,6 +21,12 @@ export interface Palette {
   added: string;
   modified: string;
   deleted: string;
+  /** Diff ROW backgrounds — subtle, theme-fitting fills (distinct from the bright added/modified/deleted
+   *  accents, which stay the gutter-marker foreground). Bright accents as row fills read as harsh neon
+   *  on a near-black editor; these are muted so the code text on top stays legible. */
+  diffAddedBg: string;
+  diffModifiedBg: string;
+  diffDeletedBg: string;
   // syntax roles
   keyword: string;
   string: string;
@@ -43,6 +49,7 @@ export const DARK: Palette = {
   fg: '#cdd6f4', dim: '#6c7086', accent: '#89b4fa',
   selection: '#45475a', selectionMuted: '#33415e', cursorLine: '#292c3c',
   added: '#a6e3a1', modified: '#f9e2af', deleted: '#f38ba8',
+  diffAddedBg: '#1c3a52', diffModifiedBg: '#3a341e', diffDeletedBg: '#4a2530',
   keyword: '#cba6f7', string: '#a6e3a1', number: '#fab387',
   comment: '#6c7086', func: '#89b4fa', type: '#f9e2af',
   variable: '#cdd6f4', operator: '#94e2d5',
@@ -56,6 +63,7 @@ export const LIGHT: Palette = {
   fg: '#4c4f69', dim: '#8c8fa1', accent: '#1e66f5',
   selection: '#bcc0cc', selectionMuted: '#c9d6f2', cursorLine: '#e6e9ef',
   added: '#40a02b', modified: '#df8e1d', deleted: '#d20f39',
+  diffAddedBg: '#d0e2f2', diffModifiedBg: '#f0ecd4', diffDeletedBg: '#f4d4dc',
   keyword: '#8839ef', string: '#40a02b', number: '#fe640b',
   comment: '#8c8fa1', func: '#1e66f5', type: '#df8e1d',
   variable: '#4c4f69', operator: '#179299',

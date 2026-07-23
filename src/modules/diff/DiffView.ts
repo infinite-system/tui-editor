@@ -88,11 +88,24 @@ interface DiffPaneRenderables {
   code: SelectableText;
 }
 
+/** The bright accent for a changed row's GUTTER MARKER (line number tint) — the same hues the git
+ *  panel uses for add/modify/delete. Distinct from the row's background fill below. */
 function changedRowColor(kind: AlignedRowKind, palette: Palette): string | null {
   switch (kind) {
     case 'added': return palette.added;
     case 'deleted': return palette.deleted;
     case 'modified': return palette.modified;
+    case 'equal': return null;
+  }
+}
+
+/** The muted BACKGROUND fill for a changed row — theme-fitting (not the neon accent), so code text on
+ *  top stays legible on a near-black editor. Null for unchanged rows (no fill). */
+function changedRowBackground(kind: AlignedRowKind, palette: Palette): string | null {
+  switch (kind) {
+    case 'added': return palette.diffAddedBg;
+    case 'deleted': return palette.diffDeletedBg;
+    case 'modified': return palette.diffModifiedBg;
     case 'equal': return null;
   }
 }
@@ -596,11 +609,13 @@ class $DiffView {
     visibleAlignedRows.forEach((alignedRow, visibleAlignedRowIndex) => {
       const lineNumber = side === 'previous' ? alignedRow.leftLineNumber : alignedRow.rightLineNumber;
       const isFillerRow = lineNumber === null;
-      const rowBackgroundColor = changedRowColor(alignedRow.kind, palette);
+      // Marker = bright accent for the gutter line-number tint; background = the muted row fill.
+      const rowMarkerColor = changedRowColor(alignedRow.kind, palette);
+      const rowBackgroundColor = changedRowBackground(alignedRow.kind, palette);
       const gutterText = isFillerRow
         ? ' '.repeat(gutterWidth)
         : `${String(lineNumber).padStart(gutterWidth - 1, ' ')} `;
-      const gutterChunk = fg(isFillerRow ? palette.dim : rowBackgroundColor ?? palette.dim)(gutterText);
+      const gutterChunk = fg(isFillerRow ? palette.dim : rowMarkerColor ?? palette.dim)(gutterText);
       gutterChunks.push(
         isFillerRow
           ? dim(rowBackgroundColor ? bg(rowBackgroundColor)(gutterChunk) : gutterChunk)
