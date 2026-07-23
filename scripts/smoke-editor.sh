@@ -93,13 +93,24 @@ chkne "selection range published" "$(f selection)"
 "$H" send "$S" Escape >/dev/null
 chk "selection cleared after Escape" "$(f hasSelection)" "false"
 
-echo "== undo back to the saved content reads UNCHANGED (dirty clears, not sticky) =="
+echo "== undo back to the saved content reads UNCHANGED (dirty clears — flag AND the rendered ● dot) =="
 # The buffer is dirty from the X typed earlier. Undo every edit back to the on-disk content: dirty
 # must CLEAR — a buffer undone all the way to its saved state is not modified (it used to stay dirty
-# forever after the first edit). Loop is teeth-checked: if dirty never clears, the chk below fails.
-chk "buffer dirty from the earlier edit" "$(f dirty)" "true"
+# forever after the first edit). We assert BOTH the internal flag AND the RENDERED tab dot, because the
+# user's symptom is the visible ● (the field could clear while the dot stays). FrameProbe remaps the ●
+# glyph into its opaque plane, so we assert the dot CELL is non-space (dirty) vs a space (clean). The
+# tab row shows " <name> " (leading space); the pane-border legend row shows "─<name>", so the
+# leading-space search picks the tab, not the border.
+dot_state() { BASE="$(basename "$(f activeBuffer)")" FRAME_FILE="$FRAME" "$BUN" -e '
+const f=JSON.parse(require("fs").readFileSync(process.env.FRAME_FILE));const needle=" "+process.env.BASE+" ";
+let out="notab";
+for(const row of f.rows){const t=row.text||"";const i=t.indexOf(needle);if(i>=0){out=(t[i+needle.length]||" ")===" "?"clean":"dot";break;}}
+process.stdout.write(out);'; }
+chk "buffer dirty from the earlier edit (flag)" "$(f dirty)" "true"
+chk "the tab shows the ● dirty dot while dirty" "$(dot_state)" "dot"
 for _ in 1 2 3 4 5; do [ "$(f dirty)" = "false" ] && break; "$H" send "$S" C-z >/dev/null; sleep 0.25; "$H" settle "$S" >/dev/null 2>&1; done
-chk "undo all the way to the saved content cleared dirty" "$(f dirty)" "false"
+chk "undo to the saved content cleared the flag" "$(f dirty)" "false"
+chk "undo to the saved content cleared the RENDERED ● dot" "$(dot_state)" "clean"
 "$H" send "$S" -l X >/dev/null; sleep 0.2; "$H" settle "$S" >/dev/null 2>&1   # restore a dirty edit for the later close-tab step
 
 echo "== mouse drag-select persists + Ctrl+C copies (human-QA regression) =="
