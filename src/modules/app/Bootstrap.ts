@@ -40,6 +40,7 @@ import { TerminalSession } from './TerminalSession';
 import { PanelHost } from '../ui/PanelHost';
 import { TerminalFactory } from '../terminal/TerminalFactory';
 import { AgentFactory } from '../agent/AgentFactory';
+import { GitBlame } from '../git/GitBlame';
 import { AgentPaneContent } from '../agent/AgentPaneContent';
 import { TtsFactory } from '../narration/TtsFactory';
 import type { TtsBackend } from '../narration/TtsBackend';
@@ -493,6 +494,20 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       panelCellColumns: panelHost.cellSpans(view.panelViewportColumns()).map((span) => span.columns),
       // Active buffer is an image the editor renders as half-block cells (drives smoke-image-preview).
       activeFileIsImage: workspaceSet.active.activeFileIsImage,
+      // Current-line git blame author (GitLens parity) — the driving smoke reads this to prove a tracked
+      // line shows its author and a non-git file shows none. '' when no document / not blamed.
+      currentLineBlameAuthor: (() => {
+        const editor = workspaceSet.active.editor;
+        if (!editor.hasDocument.value || !editor.document.path) return '';
+        return (
+          GitBlame.Class.lineBlame({
+            repoRoot: workspaceSet.active.root,
+            isRepo: workspaceSet.active.git.value !== null,
+            documentPath: editor.document.path,
+            lineNumber: editor.cursor.line.value,
+          })?.author ?? ''
+        );
+      })(),
       // Audio narration (third projection): the toggle, how many assistant turns have been spoken, and
       // the last spoken text — the driving smoke reads these to prove it speaks completed turns when ON
       // and NOTHING when off, all through the silent mock backend (no audio in CI).

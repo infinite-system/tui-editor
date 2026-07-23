@@ -24,6 +24,17 @@ class $Files {
     return existsSync(path);
   }
 
+  /** Last-modification time in epoch milliseconds, or 0 when the path cannot be stat'd. Used as a cheap
+   *  freshness key: a save bumps mtime, so a cache keyed on it invalidates exactly when the file changes
+   *  on disk (and a cursor move — no disk change — is a pure cache hit). */
+  static mtimeMs(path: string): number {
+    try {
+      return statSync(path).mtimeMs;
+    } catch {
+      return 0;
+    }
+  }
+
   static isDir(path: string): boolean {
     try {
       return statSync(path).isDirectory();
