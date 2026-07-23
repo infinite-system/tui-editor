@@ -173,15 +173,17 @@ class $QuickOpen {
 
   /** Move the active match without wrapping beyond either end of the list. */
   moveSelection(delta: number): void {
-    if (this.matches.value.length === 0) {
+    const total = this.matches.value.length;
+    if (total === 0) {
       this.selectedIndex.value = -1;
       return;
     }
 
-    this.selectedIndex.value = Math.max(
-      0,
-      Math.min(this.selectedIndex.value + delta, this.matches.value.length - 1),
-    );
+    // Wrap around at both ends (VS Code quick-open parity): arrowing past the last item jumps back to
+    // the FIRST ('starts from the top') and past the first wraps to the last — so you never dead-end
+    // beyond the visible list. A -1 (no) selection + Down lands on 0. The euclidean modulo keeps the
+    // index in [0, total) for any delta sign.
+    this.selectedIndex.value = ((this.selectedIndex.value + delta) % total + total) % total;
   }
 
   /** Click-set the active match to a pointed row (mouse selection); ignored when the row has no match. */

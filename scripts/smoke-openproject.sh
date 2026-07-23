@@ -101,22 +101,33 @@ fi
 # The window scrolled: folder-00 (the original top) is now OFF-SCREEN — the highlight did not strand.
 expect_equal "$(row_of "folder-00")" "-1" "the list scrolled — the original top row (folder-00) is off-screen"
 
-echo "== 3. Arrow to the LAST element and beyond: it clamps, stays visible, never freezes =="
-for _ in $(seq 1 40); do "$harness" send "$session_name" Down >/dev/null; sleep 0.02; done
+echo "== 3. Arrow to the LAST element (stays visible), then one MORE WRAPS back to the top =="
+# Step 2 left the selection at index 20; 20 more Downs reach the last of the 41 folders (index 40).
+for _ in $(seq 1 20); do "$harness" send "$session_name" Down >/dev/null; sleep 0.02; done
 sleep 0.3; settle
-expect_equal "$(field quickOpenSelected)" "40" "the selection clamped at the last folder (index 40)"
+expect_equal "$(field quickOpenSelected)" "40" "reached the last folder (index 40), visible, never froze"
 last_row="$(row_of "proj")"
 if [ "$last_row" != "-1" ] && [ "$(bg_at 31 "$last_row")" != "none" ]; then
   pass "the last folder (proj) is visible with a selection background at the bottom of the window"
 else
   fail "the last folder (proj) is not visible with a selection background (row=$last_row)"
 fi
+# One more Down past the last WRAPS to the top ('starts from the top'), never dead-ends beyond the list.
+"$harness" send "$session_name" Down >/dev/null; sleep 0.25; settle
+expect_equal "$(field quickOpenSelected)" "0" "arrowing past the last wraps back to the top (index 0)"
+top_row="$(row_of "folder-00")"
+if [ "$top_row" != "-1" ] && [ "$(bg_at 31 "$top_row")" != "none" ]; then
+  pass "after wrap the top folder (folder-00) is visible again with the selection background"
+else
+  fail "after wrap the top folder is not the visible selection (row=$top_row)"
+fi
 
-echo "== 4. Click-drill into a scrolled-visible folder: the navigator re-enumerates without freezing =="
-drill_row="$(row_of "folder-38")"
+echo "== 4. Click-drill into a visible folder: the navigator re-enumerates without freezing =="
+# After the wrap the window is back at the top (folder-00..), so drill into a near-top folder that is on-screen.
+drill_row="$(row_of "folder-05")"
 if [ "$drill_row" != "-1" ]; then
   "$harness" click "$session_name" 33 "$drill_row" >/dev/null; sleep 0.4; settle
-  expect_contains "$(field quickOpenQuery)" "folder-38/" "clicking a folder drilled into it (path completed)"
+  expect_contains "$(field quickOpenQuery)" "folder-05/" "clicking a folder drilled into it (path completed)"
   expect_equal "$(field quickOpenOpen)" "true" "the navigator stayed open and responsive after drilling in"
 else
   fail "could not locate a visible folder row to drill into"

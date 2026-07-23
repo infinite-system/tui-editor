@@ -62,15 +62,24 @@ describe('QuickOpen', () => {
     expect(quickOpen.selectedIndex.value).toBe(0);
   });
 
-  test('moveSelection clamps at both ends and stays unselected when there are no matches', async () => {
+  test('moveSelection wraps at both ends and stays unselected when there are no matches', async () => {
     const quickOpen = new QuickOpen.Class({
       enumerateProjectFiles: fixedProjectFileEnumerator(),
     });
     await quickOpen.show('/project');
+    const total = FIXED_PROJECT_FILES.length;
 
-    quickOpen.moveSelection(100);
-    expect(quickOpen.selectedIndex.value).toBe(FIXED_PROJECT_FILES.length - 1);
-    quickOpen.moveSelection(-100);
+    // Post-show the selection sits at the top (0). Arrowing UP past the first wraps to the LAST;
+    // arrowing DOWN past the last wraps back to the top ('starts from the top').
+    expect(quickOpen.selectedIndex.value).toBe(0);
+    quickOpen.moveSelection(-1);
+    expect(quickOpen.selectedIndex.value).toBe(total - 1);
+    quickOpen.moveSelection(1);
+    expect(quickOpen.selectedIndex.value).toBe(0);
+    // A large delta of either sign stays in range (euclidean modulo), never running off the end.
+    quickOpen.moveSelection(total * 2 + 3);
+    expect(quickOpen.selectedIndex.value).toBe(3);
+    quickOpen.moveSelection(-(total * 5 + 3));
     expect(quickOpen.selectedIndex.value).toBe(0);
 
     quickOpen.setQuery('no-matching-file');
