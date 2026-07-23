@@ -84,6 +84,48 @@ assert the same switch; confirm a glyph renders in the default (no-Nerd-Font) fa
 
 **Last refined:** 2026-07-23
 
+### Indent guides mark leading whitespace without shifting columns
+
+**Invariant:** If indent guides are on (`settings.showIndentGuides`, default true), then the editor
+body draws a faint vertical bar at each indentation level — display columns 0, tabWidth, 2*tabWidth,
+... up to a line's leading-whitespace width — by REPLACING the space at that column with the guide
+glyph, never by inserting a cell. The guide occupies the same one cell the space did, so the
+grapheme-to-cell mapping, the caret column, and the selection range are identical whether guides are
+on or off. Turning the setting off restores plain spaces.
+
+**Scope:** `EditorPaneRenderer` code-body segment emission, `EditorPane` (supplies `showIndentGuides`
+from settings and the tier glyph from `theme.glyphLevel`), and `settings.showIndentGuides`.
+
+**Mechanism:** the guide columns are scanned over the leading run of spaces only, and each is added as
+a one-grapheme boundary so the segment loop emits it as its own cell. That cell renders the guide glyph
+(box-drawing bar, degrading to a plain pipe in the ascii glyph tier) in the dim border colour instead
+of the space — same column, same width. A find highlight or a diagnostic underline over the cell is
+checked FIRST and wins, so a guide never overrides meaning. Guides draw only on a line's first visual
+row (window start grapheme zero), so word-wrap continuation rows are untouched and the physical-line
+indentation is what shows.
+
+**Generates:** scannable nesting depth (VS Code parity) at zero cost to selection/caret correctness; a
+single settings toggle that fully removes them; clean degradation without a Nerd Font.
+
+**Evidence:** `src/modules/ui/EditorPaneRenderer.ts` (leading-space guide scan plus in-place glyph in
+the code-body loop); `src/modules/ui/EditorPane.ts` (`showIndentGuides` + `indentGuideGlyph` passed to
+the render context); `src/modules/settings/Settings.ts` + `src/modules/settings/SettingsPanel.ts` (the
+setting and its boolean panel row); `scripts/smoke-indent-guides.sh`.
+
+**Impossible if true:** a guide that changes a line's character columns (a caret or selection landing
+one cell off when guides are on vs off); a guide drawn past the leading whitespace or over a
+non-whitespace character; guides still visible after the setting is turned off; a guide overriding a
+diagnostic underline or find highlight on the same cell.
+
+**Verification:** `bash scripts/smoke-indent-guides.sh` — open a nested-indent fixture and assert the
+guide glyph renders in the dim colour at the expected indent columns (FrameProbe cells), that the
+caret column at a clicked position matches with guides on and off, and that the guides DISAPPEAR when
+`showIndentGuides` is toggled off.
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23
+
 ### Input overlays share one modal slot
 
 **Invariant:** If an input-capturing overlay opens, then it is the only input-capturing overlay

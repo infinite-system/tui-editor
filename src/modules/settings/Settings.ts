@@ -52,6 +52,7 @@ export interface SettingsValues {
   theme: string;
   wordWrap: boolean;
   showActivityBar: boolean;
+  showIndentGuides: boolean;
   workspaceTabPosition: WorkspaceTabPosition;
   // Language intelligence.
   typescriptServer: TypeScriptServer;
@@ -162,6 +163,9 @@ class $Settings {
   get showActivityBar(): Ref<boolean> {
     return ref(true);
   }
+  get showIndentGuides(): Ref<boolean> {
+    return ref(true);
+  }
   get workspaceTabPosition(): Ref<WorkspaceTabPosition> {
     return ref<WorkspaceTabPosition>('top');
   }
@@ -218,6 +222,7 @@ class $Settings {
       theme: this.theme,
       wordWrap: this.wordWrap,
       showActivityBar: this.showActivityBar,
+      showIndentGuides: this.showIndentGuides,
       workspaceTabPosition: this.workspaceTabPosition,
       typescriptServer: this.typescriptServer,
       lspFileSizeLimitKb: this.lspFileSizeLimitKb,
@@ -369,6 +374,7 @@ class $Settings {
       theme: 'dark',
       wordWrap: false,
       showActivityBar: true,
+      showIndentGuides: true,
       workspaceTabPosition: 'top',
       typescriptServer: 'tsgo',
       lspFileSizeLimitKb: 2048,
@@ -414,6 +420,7 @@ class $Settings {
     if (typeof record.theme === 'string') result.theme = record.theme;
     if (typeof record.wordWrap === 'boolean') result.wordWrap = record.wordWrap;
     if (typeof record.showActivityBar === 'boolean') result.showActivityBar = record.showActivityBar;
+    if (typeof record.showIndentGuides === 'boolean') result.showIndentGuides = record.showIndentGuides;
     if (
       typeof record.workspaceTabPosition === 'string' &&
       ALLOWED_WORKSPACE_TAB_POSITIONS.has(record.workspaceTabPosition as WorkspaceTabPosition)

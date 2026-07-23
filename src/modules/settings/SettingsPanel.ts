@@ -55,6 +55,7 @@ const SETTING_DESCRIPTORS: readonly SettingDescriptor[] = [
   { key: 'glyphMode', label: 'Glyph mode', section: 'Appearance', spec: { kind: 'enum', options: GLYPH_MODE_OPTIONS } },
   { key: 'theme', label: 'Theme', section: 'Appearance', spec: { kind: 'enum', options: ['dark', 'light'] } },
   { key: 'wordWrap', label: 'Word wrap', section: 'Editor', spec: { kind: 'boolean' } },
+  { key: 'showIndentGuides', label: 'Indent guides', section: 'Editor', spec: { kind: 'boolean' } },
   { key: 'workspaceTabPosition', label: 'Workspace tabs', section: 'Editor', spec: { kind: 'enum', options: WORKSPACE_TAB_POSITION_OPTIONS } },
   { key: 'typescriptServer', label: 'TypeScript server', section: 'Language', spec: { kind: 'enum', options: TYPESCRIPT_SERVER_OPTIONS } },
   { key: 'lspFileSizeLimitKb', label: 'LSP file size limit (KB, 0 = no limit)', section: 'Language', spec: { kind: 'number', step: 512, minimum: 0, maximum: 51200, decimals: 0 } },
