@@ -3,40 +3,49 @@
 Full authority to build the whole thing to completion (brief Definition of Done + the §5.1 gate).
 Files on disk survive context compaction; this file + `project.progress.md` are the durable memory.
 
-## RESUME ANCHOR — 2026-07-23 (CURRENT) — UI-task orchestration (conductor + fork + workers)
+## RESUME ANCHOR — 2026-07-23 (CURRENT) — OVERNIGHT AUTONOMOUS RUN (user asleep)
 
 **Session shape:** conductor (main loop) directing a background FORK (`a0f12abb2a300d596`) + scoped
-workers over a list of Invar UI tasks. Verify by DRIVING (tmux harness + FrameProbe). Follow the
-`/conductor` skill; lessons in `project.conductor.md`. Read the /conductor "Instantiating a fresh
-conductor" section first if resuming cold. **Ground-truth against git — this anchor lags.**
+workers. **USER IS ASLEEP → full autonomy: make ALL calls yourself, do NOT ask/defer. The fork has
+STANDING AUTHORITY to merge on a clean ALL-PASS gate** (guardrails: finished/ tag, main-advance via
+origin only, never touch the primary checkout, verify by driving) without per-merge approval. Follow
+the `/conductor` skill; read its "Instantiating a fresh conductor" section if resuming cold.
+**Ground-truth against git — this anchor lags.** `origin/main` was `05108bd` at this writing.
 
-- **Status: 10/11 UI tasks merged to `origin/main`.** Only **task 0.5 (two-line workspace tabs)**
-  is integrating: fork is gating `feat-two-line-tabs-v2` (@ ~`213289e`, task-6 merged in + the
-  height-robust smoke patch). On ALL-PASS it pushes → 11/11, tags `finished/feat-two-line-tabs-v2`
-  (does NOT delete), bumps demo. `origin/main` was `20349a1` at this writing (advances).
-- **pull-diagnostics DONE, awaiting serialized gate + merge:** branch `feat-pull-diagnostics`
-  @ `93e9c3d` (off 20349a1, +400/−55). Capability-guarded `textDocument/diagnostic` PULL so tsgo
-  (default, pull-model) surfaces diagnostics into the task-4 render; push path intact for tsserver.
-  Drive-verified on BOTH servers. HONEST FLAG: tsgo reds deep nested types correctly, but there is
-  **no evidence of a tsserver false-positive that tsgo fixes** (probe artifact). Conductor gates it
-  after 0.5 (one gate at a time), then merges + `finished/` tag.
-- **Queued (conductor self-does):** type-tooltip bundle — (a) drag-select can't grab the LAST char
-  of a line in the type tooltip (likely a shared selection off-by-one — may fix the editor too);
-  (b) word-wrap the type signature, leave the doc-comment below UNwrapped. Then the **7 UI-polish
-  requests**, then **task 7 activity bar** (build FRESH — the `conductor-activitybar` branch is a
-  stale ancient fork with NO committed `ActivityBar.ts`; the prior art referenced below was never
-  committed and is gone).
-- **Guardrails added this session (durable):** `/conductor` skill + `AGENTS.md` agent-priming
-  (delegated agents load IBR + conventions from the `/ibr`,`/ivue`,`/invariants` skills, not relay);
-  branch/worktree PRESERVATION rule (never delete/force-remove/force-overwrite; "done" = a
-  `finished/<branch>` tag + `project.delegation-log.md` line); `.claude/settings.json` deny-lists
-  (git destructive ops + `rm -rf` family) in BOTH tui-editor and ibr.
-- **EPHEMERAL fleet (re-establish on resume — do NOT assume alive):** crons `e4de2d1a` (loop-check,
-  10min) + `4e2da192` (hourly orchestration); fork `a0f12abb2a300d596`; workers are one-shot. Demo
-  dir `/tmp/tui-demo` may be absent. The scratchpad HANDOFF (session-local) mirrors this anchor.
-- **Uncommitted in primary (batch-commit after 0.5 lands, to avoid racing the fork's push):**
-  edits to `.claude/skills/conductor/SKILL.md`, `project.conductor.md`, this file, and new
-  `.claude/settings.json`.
+- **DONE + merged:** all 11 UI tasks · pull-diagnostics (tsgo now surfaces red diagnostics) · diff
+  batch (tasks 1+6: +/− prefixes, no tabs in diff) · all conductor docs/tooling. Tags:
+  `finished/feat-diff-batch`, `finished/feat-pull-diagnostics`, `finished/feat-two-line-tabs-v2`.
+- **REMAINING backlog (fork drives autonomously, in order):**
+  1. **Tooltip bundle** — MERGING on clean re-gate (was `b2h3ze016`): hover-diagnostic surfacing
+     (hover over a TS error shows the message, not `any`) + its smoke. Merge on green + finished/ tag.
+  2. **Last-char off-by-one** — own gated batch (shared `SelectionDragBehavior`, drags N copies N−1;
+     affects editor+diff). Ratchet a smoke.
+  3. **Activity bar** — CHERRY-PICK `feat-activity-bar` @ `2723f28` onto post-tooltip main (NOT a
+     branch merge; stale base). Conflicts RootView+Workspace keep-both. +4-col shift needs +4 on
+     smoke-scrollbars/find/hover/diff (subagent already did smoke-editor). Then TOGGLE: `showActivityBar`
+     setting + `Ctrl+Shift+B` + palette "View: Toggle Activity Bar".
+  4. **Two-line-tabs refinement** — FLIP the logic: line1 = PROJECT name (a worktree shows its PARENT
+     project, via git-common-dir parent, not its own folder); line2 = current BRANCH, REACTIVE to
+     `git checkout` (watch HEAD), detached → short SHA; + char-cap with `…` on both lines. Edits
+     Workspace.ts (sequence after activity-bar — Workspace overlap).
+  5. **#5 undo-reads-unchanged** — file-changes: undo-to-original reads as UNCHANGED (dirty-tracking).
+  6. **Follow-ups:** macOS-Terminal mouse investigation (below) · invariant↔smoke coverage checker ·
+     add the smoke-coverage line to the merge-gate ALL-PASS reminder.
+- **DRAG-SELECT "regression" — RESOLVED as NOT a HoverCard bug.** The fork drive-proved the card's
+  drag-select works in-harness + is smoked (smoke-hover:159–183 green); do NOT fabricate a fix. The
+  user saw it break in **macOS Terminal.app** — almost certainly a MOUSE-PROTOCOL path the SGR harness
+  can't exercise (Terminal.app may not honor SGR mode 1006 → X10 fallback, coords capped 223). Fix
+  DEFENSIVELY in TerminalSession/TerminalCapabilities; CAN'T drive-verify here (needs macOS) — user
+  verifies when awake.
+- **Doctrine/tooling shipped this session (durable):** `/conductor` skill (agent-priming, never-destroy-
+  recovery-points, fresh-conductor bootstrap, smoke-coverage ratchet, verbatim cron prompts, hourly loop
+  may refine the skill) · `AGENTS.md` priming · branch END-STATES active/`finished/`/`orphaned/` (never
+  delete) · `.claude/settings.json` deny-lists (git-destructive + rm-rf) in BOTH repos · `check_invariants
+  --refs-for '<name>'` (retirement-sweep primitive).
+- **EPHEMERAL fleet (re-establish on resume — do NOT assume alive):** crons `e4de2d1a` (loop-check 10min)
+  + `43217ab5` (hourly; can now refine SKILL.md); fork `a0f12abb2a300d596`. Demo: `/tmp/tui-demo` (user's
+  running, detached worktree) + `/tmp/tui-demo-main` (fresh clone on main, for testing). Primary checkout
+  is CLEAN + synced to origin.
 
 ---
 

@@ -296,6 +296,12 @@ Six new operational lessons, every one from real friction this run.
   `project.delegation-log.md` line), never delete.** Deletion happens only in an explicit
   user-authorized sweep. Codified in the /conductor skill's "Never destroy recovery points" section;
   relayed to the fork as a standing rule.
+- **Branch END-STATES (2026-07-23, user-requested completion of the preservation rule).** Every branch
+  ends ACTIVE (untagged; a live worktree/agent drives it), FINISHED (merged → `finished/<branch>` tag),
+  or ORPHANED (abandoned/superseded/dead-end → `git tag -a orphaned/<branch> -m '<reason>'` if it has
+  unique commits worth preserving; a delegation-log line alone if empty/DOA). Both terminal states are
+  MARKED, never deleted; pruning happens only in an explicit user-authorized sweep. Makes branch status
+  legible at a glance and keeps every recovery point.
 - **Agents kill their OWN gate's tmux while "cleaning up" (2026-07-23).** The fork, deciding that
   process-counting was "unreliable" (its own smoke processes self-match its `pgrep`), moved to
   "kill ALL smoke tmux sessions" — while its own gate was mid-run driving smokes in tmux. That
