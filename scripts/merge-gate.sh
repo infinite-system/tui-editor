@@ -86,6 +86,9 @@ step "behavioral-contracts (felt invariants)" bash scripts/behavioral-contracts.
 if [ "${FAST:-0}" != "1" ]; then
   # 4) Driving SMOKES — the real user paths.
   step "smoke: editor"      bash scripts/smoke-editor.sh
+  # Move-line / duplicate-line (pure model op): drive the palette commands, assert the document reordered
+  # + cursor followed + one undo restored (via the probe, not the frame).
+  step "smoke: move-line"   bash scripts/smoke-move-line.sh
   step "smoke: tabs"        bash scripts/smoke-tabs.sh
   step "smoke: workspace tabs" bash scripts/smoke-workspace-tabs.sh
   step "smoke: tree-scroll" bash scripts/smoke-tree-scroll.sh

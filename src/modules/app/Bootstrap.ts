@@ -378,6 +378,12 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       cursor: editor.hasDocument.value
         ? { line: editor.cursor.line.value, col: editor.cursor.col.value }
         : null,
+      // Flat cursor line + the first few document lines — the move-line smoke reads these to assert the
+      // lines reordered and the cursor followed (a pure-model op; no frame needed).
+      cursorLineIndex: editor.hasDocument.value ? editor.cursor.line.value : -1,
+      editorLines: editor.hasDocument.value
+        ? Array.from({ length: Math.min(editor.document.lineCount, 8) }, (_unused, index) => editor.document.line(index))
+        : [],
       hasSelection: editor.cursor.hasSelection,
       selection: editor.cursor.selectionRange(),
       openBuffers: editor.hasDocument.value ? [editor.document.path] : [],
@@ -1180,6 +1186,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       if (!view.activeMarkdownSplitView()?.previewFocused) workspaceSet.active.editor.performRedo();
     },
     'editor.toggleWordWrap': () => workspaceSet.active.editor.toggleWordWrap(),
+    'editor.moveLineUp': () => workspaceSet.active.editor.moveLineUp(),
+    'editor.moveLineDown': () => workspaceSet.active.editor.moveLineDown(),
+    'editor.duplicateLine': () => workspaceSet.active.editor.duplicateLine(),
     // Toggle the bottom panel (terminal). Reserved so it fires from ANY mode — including from within a
     // focused terminal (to hide it) — exactly like the quit escape hatch. Same closure the status-bar
     // terminal button runs, so chord and click are one action.
