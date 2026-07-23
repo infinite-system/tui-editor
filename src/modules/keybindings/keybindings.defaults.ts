@@ -145,6 +145,9 @@ export const canonicalBindings: Keybinding[] = [
   // delete+option; Bootstrap normalizes either modifier to this `alt` slot. Both delete a word.
   { chord: { key: 'backspace', alt: true }, action: 'edit.deletePreviousWord', context: 'editor' },
   { chord: { key: 'delete', alt: true }, action: 'edit.deletePreviousWord', context: 'editor' },
+  // Cmd/Ctrl+Backspace deletes from the cursor to the LINE START (text right of the cursor stays).
+  { chord: { key: 'backspace', ctrl: true }, action: 'editor.deleteToLineStart', context: 'editor' },
+  { chord: { key: 'backspace', super: true }, action: 'editor.deleteToLineStart', context: 'editor' },
   { chord: { key: 'escape' }, action: 'editor.escape', context: 'editor' },
   // --- editor: chords ---
   { chord: { key: 's', ctrl: true }, action: 'editor.save', context: 'editor' },

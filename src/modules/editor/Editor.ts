@@ -182,6 +182,42 @@ class $Editor {
     this.placeCursor(last, EditorCoordinates.Class.graphemeCount(this.document.line(last)));
   }
 
+  /** Select the word (run of word characters) at a document position — the double-click gesture. */
+  selectWord(line: number, column: number): void {
+    if (!this.hasDocument.value) return;
+    const bounds = EditorCoordinates.Class.wordBounds(this.document.line(line), column);
+    this.placeCursor(line, bounds.start);
+    this.cursor.setAnchorHere();
+    this.placeCursor(line, bounds.end);
+  }
+
+  /** Select the entire line (start → end) — the triple-click / click-again-on-selected-word gesture. */
+  selectLine(line: number): void {
+    if (!this.hasDocument.value) return;
+    this.placeCursor(line, 0);
+    this.cursor.setAnchorHere();
+    this.placeCursor(line, EditorCoordinates.Class.graphemeCount(this.document.line(line)));
+  }
+
+  /** Delete from the cursor to the LINE START (text to the right of the cursor stays). With an active
+   *  selection, delete the selection instead. Cmd/Ctrl+Backspace. */
+  deleteToLineStart(): void {
+    if (!this.hasDocument.value) return;
+    if (this.hasSelection) {
+      this.captureBefore('delete');
+      this.removeSelection();
+      this.scrollLineIntoView(this.cursor.line.value);
+      return;
+    }
+    const line = this.cursor.line.value;
+    const column = this.cursor.col.value;
+    if (column === 0) return; // already at line start — nothing to the left on this line
+    this.captureBefore('delete');
+    this.document.deleteRange({ line, col: 0 }, { line, col: column });
+    this.placeCursor(line, 0);
+    this.scrollLineIntoView(line);
+  }
+
   /** Delete the active selection (no undo capture — caller captures). Returns whether it removed. */
   private removeSelection(): boolean {
     const range = this.cursor.selectionRange();
