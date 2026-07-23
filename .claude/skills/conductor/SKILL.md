@@ -126,6 +126,14 @@ the DEFAULT; destruction requires explicit, per-instance user authorization.**
   greppable via `git tag -l 'finished/*'`) and add a line to `project.delegation-log.md`
   (branch · tip · merged-into · date). Cleanup of accumulated finished branches happens ONLY in an
   explicit, user-authorized sweep — never inline, never automatic.
+- **Abandoned ≠ deleted — mark it ORPHANED.** A branch that will NEVER merge (superseded, a dead-end
+  experiment, otherwise abandoned) is NOT deleted either. If it has unique commits worth keeping as a
+  recovery point: `git tag -a orphaned/<branch> -m '<why abandoned>'` + a `project.delegation-log.md`
+  line. If it's empty / DOA (no unique commits vs main — nothing to preserve): a log line alone is
+  enough, no tag. This completes the model — every branch is ACTIVE (untagged; a live worktree/agent),
+  FINISHED (`finished/`), or ORPHANED (`orphaned/`); the two terminal states are MARKED, never deleted,
+  and greppable (`git tag -l 'finished/*'` / `'orphaned/*'`). Pruning orphaned branches happens only in
+  an explicit, user-authorized sweep.
 
 ## Liveness & visibility
 - **Verify, don't assume.** Key on fork-specific evidence only: worktree writes in the last
