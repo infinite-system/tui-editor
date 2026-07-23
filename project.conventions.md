@@ -92,8 +92,11 @@ Change a convention → change it HERE (and note the why in decisions.md).
   Every INVARIANT must (a) BLOCK — assert with a non-zero exit on violation, never print-FAIL-and-
   exit-0 — and (b) ride the ALWAYS-RUN gate above, not a separate on-demand script. Corollary: pick
   the AUTHORITATIVE signal, not a cheap proxy that happens to pass. (Idle quiescence is the frame
-  COUNTER == 0 at rest, in smoke — not idle CPU, which stays low even while the loop ticks because
-  empty frames are cheap; a CPU-only spot check shipped a live idle loop as a false-green.)
+  COUNTER holding at rest, in smoke — delta ≤ 1 over a few-second window, since the status-bar
+  minute-clock is the ONE legitimate periodic wake and repaints exactly once per minute; a busy loop
+  is dozens-to-hundreds of frames/window, so ≤1 cleanly separates them. Not idle CPU, which stays low
+  even while the loop ticks because empty frames are cheap; a CPU-only spot check shipped a live idle
+  loop as a false-green.)
 
 ## Contracts (invariants)
 - Contract-first for new modules; records follow the /invariants schema (both section headings;

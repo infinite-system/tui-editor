@@ -154,6 +154,11 @@ function $buildRootView(
     id: 'main-row',
     flexDirection: 'row',
     flexGrow: 1,
+    // minHeight:0 lets the main row SHRINK below its content's natural height so the fixed-height
+    // bottom panel (terminal) gets its full rows ON SCREEN instead of overflowing under the status
+    // bar. Without it a flex item's min-height defaults to its content size and never yields the
+    // rows a fixed sibling needs. (The *scrollable pane height is an input* invariant's shrink fix.)
+    minHeight: 0,
     width: '100%',
   });
 
@@ -284,6 +289,8 @@ function $buildRootView(
     overlayCoordinator,
     keybindings,
     tooltip,
+    theme,
+    settingsPanel,
   });
 
   // --- bottom panel slot (the composable PanelHost region) --------------------------------------
@@ -299,6 +306,7 @@ function $buildRootView(
   const panelStack = new BoxRenderable(renderer, {
     id: 'panel-stack',
     flexDirection: 'column',
+    flexShrink: 0, // keep the panel's full height on screen; the main row (flexGrow) yields instead
     width: '100%',
   });
   const panelDivider = new BoxRenderable(renderer, {

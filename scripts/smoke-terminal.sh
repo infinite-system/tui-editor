@@ -91,11 +91,20 @@ else
   echo "  FAIL  shell did not reflow to ${rows1} ${cols1}"; "$H" capture "$S" | grep -E '[0-9]+ [0-9]+' | tail -3; fail=1
 fi
 
-echo "== idle quiescence with the terminal open (demand-driven; frame delta == 0 at rest) =="
+echo "== status-bar minute-clock renders HH:MM (bottom-right) =="
+if "$H" capture "$S" | tail -1 | grep -qE '[0-2][0-9]:[0-5][0-9]'; then
+  echo "  PASS  clock shows HH:MM in the status bar ($("$H" capture "$S" | tail -1 | grep -oE '[0-2][0-9]:[0-5][0-9]' | head -1))"
+else
+  echo "  FAIL  no HH:MM clock in the status bar"; "$H" capture "$S" | tail -1; fail=1
+fi
+
+echo "== idle quiescence with the terminal open (demand-driven; frame delta <= 1: minute-clock only) =="
+# The only legitimate periodic wake at rest is the status-bar minute-clock (once/min). A 4s window
+# sees 0 frames between ticks, at most 1 at a minute boundary; a busy loop would be ~120 (30fps×4s).
 "$H" settle "$S" >/dev/null 2>&1
 idle_start="$(f frame)"; sleep 4; idle_end="$(f frame)"
 idle_delta=$(( idle_end - idle_start ))
-if [ "$idle_delta" -eq 0 ]; then echo "  PASS  idle frame delta == 0 over 4s with terminal open (frame $idle_start)"; else
+if [ "$idle_delta" -le 1 ]; then echo "  PASS  idle frame delta <= 1 over 4s with terminal open (frame $idle_start -> $idle_end; clock tick at most)"; else
   echo "  FAIL  idle loop ticking with terminal open: +$idle_delta over 4s"; fail=1; fi
 
 echo "== Ctrl+Q quits from the focused terminal (reserved global escape hatch) =="
