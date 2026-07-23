@@ -6,6 +6,8 @@ export type TabStripOrientation = 'horizontal' | 'vertical';
 export interface TabStripItem {
   identifier: string;
   label: string;
+  /** Optional second display line (the workspace strip shows worktree/branch under the name). */
+  detailLabel?: string;
   active: boolean;
   dirty?: boolean;
   closable?: boolean;

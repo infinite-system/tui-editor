@@ -150,6 +150,15 @@ case "$cmd" in
     session="$1"
     tmux capture-pane -t "$session" -p
     ;;
+  content-offset)
+    # content-offset <session> — how many rows the layout below the workspace tab strip has shifted
+    # DOWN relative to the 1-row-strip layout the smokes were authored for (0 when the strip is 1 row,
+    # 1 for the two-line workspace tabs). Add it to any hardcoded content/tab-bar click y so the smoke
+    # is height-robust: it never breaks again on a workspace-strip height change. Derived from the
+    # rendered frame (the first box-drawing row = the strip height), never a compiled-in constant.
+    session="$1"
+    "$BUN" "$ROOT/scripts/frame-content-offset.mjs" "$(frame_path "$session")"
+    ;;
   status)
     cat "$STATUS" 2>/dev/null || echo "(no status)"
     ;;

@@ -79,3 +79,5 @@ NOT to touch. This reinforces the pre-existing "SERIALIZE RootView, PARALLELIZE 
 - **When to fan out (per the coordinator's full-power directive):** the DISJOINT judgment-heavy work — the
   5 invariants.md bootstraps (kernel/storage/syntax/theme/commands, Invar workers, gate via
   check_invariants.mjs) — is the prime fan-out candidate; RootView wiring stays serial/mine.
+
+- feat-two-line-tabs-v2 · tip d15b454 · merged-into main (d15b454) · 2026-07-23 · task 0.5 two-line workspace tabs (project name / worktree-or-branch); smoke height-robustness applied

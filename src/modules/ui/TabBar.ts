@@ -152,9 +152,10 @@ class $TabBar {
       const segment = this.workspaceSegmentAt(primaryCoordinate);
       if (!segment) return;
       if (segment.kind === 'tab') {
+        // Horizontal tabs are two rows; the close ✕ sits on row 0 only, so the cross axis gates it.
         const closeHit = vertical
           ? crossAxisCoordinate === segment.closeCrossAxisCoordinate
-          : primaryCoordinate === segment.closePrimaryCoordinate;
+          : primaryCoordinate === segment.closePrimaryCoordinate && crossAxisCoordinate === 0;
         if (closeHit && workspaceSet.count > 1) workspaceSet.close(segment.workspaceIndex);
         else workspaceSet.activate(segment.workspaceIndex);
       } else if (segment.kind === 'panBackward') {
@@ -175,9 +176,10 @@ class $TabBar {
       const segment = this.workspaceSegmentAt(primaryCoordinate);
       let nextHover: WorkspaceTabBarHover = null;
       if (segment?.kind === 'tab') {
+        // Horizontal tabs are two rows; the close ✕ sits on row 0 only, so the cross axis gates it.
         const closeHit = vertical
           ? crossAxisCoordinate === segment.closeCrossAxisCoordinate
-          : primaryCoordinate === segment.closePrimaryCoordinate;
+          : primaryCoordinate === segment.closePrimaryCoordinate && crossAxisCoordinate === 0;
         nextHover = { kind: closeHit ? 'close' : 'tab', workspaceIndex: segment.workspaceIndex };
         const workspaceTab = workspaceSet.tabs()[segment.workspaceIndex];
         tooltip.point(

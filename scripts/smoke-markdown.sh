@@ -38,16 +38,20 @@ settle() { "$HARNESS" settle "$SESSION_NAME" 8 >/dev/null 2>&1 || true; }
 pass() { echo "  PASS  $1"; }
 fail() { echo "  FAIL  $1"; FAILURE_COUNT=$((FAILURE_COUNT + 1)); }
 frame_value() {
-  FRAME_PATH="$PROJECT_ROOT/artifacts/frame-$SESSION_NAME.json" python3 - "$1" <<'PY'
+  FRAME_PATH="$PROJECT_ROOT/artifacts/frame-$SESSION_NAME.json" CONTENT_OFFSET="${content_offset:-0}" python3 - "$1" <<'PY'
 import json
 import os
 import sys
 
 rows = json.load(open(os.environ['FRAME_PATH'], encoding='utf-8'))['rows']
 texts = [row.get('text', '') for row in rows]
+# The buffer tab bar sits directly under the workspace tab strip; when the strip grows past 1 line
+# (two-line workspace tabs) the tab bar row shifts down by this offset.
+content_offset = int(os.environ.get('CONTENT_OFFSET', '0'))
+tab_bar_row = 1 + content_offset
 operation = sys.argv[1]
 if operation == 'preview-button-column':
-    print(texts[1].find('1/1') - 3)
+    print(texts[tab_bar_row].find('1/1') - 3)
 elif operation == 'preview-border-column':
     print(next((text.find('╭─Preview') for text in texts if '╭─Preview' in text), -1))
 elif operation == 'source-border-column':
@@ -77,6 +81,11 @@ PY
 echo '== launch and open Markdown source =='
 "$HARNESS" launch "$SESSION_NAME" 120x40 env TUI_FRAME_DUMP=1 bun run src/main.ts "$FIXTURE_ROOT" >/dev/null
 "$HARNESS" ready "$SESSION_NAME" 20 >/dev/null
+# Height-robust content offset: the buffer tab bar and the source/preview panes sit below the
+# workspace tab strip, so they shift down by this many rows when the strip grows past 1 line (two-line
+# workspace tabs -> offset 1). Every hardcoded tab-bar/pane-content y below adds it.
+content_offset="$("$HARNESS" content-offset "$SESSION_NAME" 2>/dev/null)"; content_offset="${content_offset:-0}"
+tab_bar_row=$((1 + content_offset))
 "$HARNESS" send "$SESSION_NAME" Enter >/dev/null
 sleep 0.7
 settle
@@ -88,7 +97,7 @@ fi
 
 echo '== click the tab-bar preview button and verify rendered Markdown =='
 preview_button_column="$(frame_value preview-button-column)"
-"$HARNESS" click "$SESSION_NAME" "$preview_button_column" 1 >/dev/null
+"$HARNESS" click "$SESSION_NAME" "$preview_button_column" "$tab_bar_row" >/dev/null
 sleep 0.8
 settle
 if [ "$(field markdownPreviewOpen)" = "true" ] && [ "$(frame_value rendered-heading)" = "yes" ]; then
@@ -96,10 +105,10 @@ if [ "$(field markdownPreviewOpen)" = "true" ] && [ "$(frame_value rendered-head
 else
   fail 'split did not render the heading without raw Markdown punctuation'
 fi
-"$HARNESS" click "$SESSION_NAME" "$preview_button_column" 1 >/dev/null
+"$HARNESS" click "$SESSION_NAME" "$preview_button_column" "$tab_bar_row" >/dev/null
 sleep 0.4
 if [ "$(field markdownPreviewOpen)" = "false" ]; then pass 'second click returned to source-only'; else fail 'second click did not close preview'; fi
-"$HARNESS" click "$SESSION_NAME" "$preview_button_column" 1 >/dev/null
+"$HARNESS" click "$SESSION_NAME" "$preview_button_column" "$tab_bar_row" >/dev/null
 sleep 0.7
 settle
 
@@ -136,13 +145,14 @@ else
 fi
 
 # Return to the Markdown tab by clicking its visible tab label; its per-path preview mode must return.
-readme_tab_column="$(FRAME_PATH="$PROJECT_ROOT/artifacts/frame-$SESSION_NAME.json" python3 - <<'PY'
+readme_tab_column="$(FRAME_PATH="$PROJECT_ROOT/artifacts/frame-$SESSION_NAME.json" CONTENT_OFFSET="${content_offset:-0}" python3 - <<'PY'
 import json, os
-text=json.load(open(os.environ['FRAME_PATH']))['rows'][1].get('text','')
+tab_bar_row = 1 + int(os.environ.get('CONTENT_OFFSET', '0'))
+text=json.load(open(os.environ['FRAME_PATH']))['rows'][tab_bar_row].get('text','')
 print(text.find('README.md') + 2)
 PY
 )"
-"$HARNESS" click "$SESSION_NAME" "$readme_tab_column" 1 >/dev/null
+"$HARNESS" click "$SESSION_NAME" "$readme_tab_column" "$tab_bar_row" >/dev/null
 sleep 0.8
 settle
 
@@ -155,7 +165,7 @@ if awk "BEGIN { exit !($ratio_before_drag <= 0.3) }"; then
 else
   divider_target_column=$((divider_column - 10))
 fi
-"$HARNESS" drag "$SESSION_NAME" "$divider_column" 8 "$divider_target_column" 8 >/dev/null
+"$HARNESS" drag "$SESSION_NAME" "$divider_column" $((8 + content_offset)) "$divider_target_column" $((8 + content_offset)) >/dev/null
 sleep 0.7
 settle
 persisted_ratio="$(field markdownSplitRatio)"
@@ -166,9 +176,9 @@ else
   fail "splitter did not resize panes (columns $preview_column_before -> $preview_column_after, ratio $persisted_ratio)"
 fi
 preview_button_column="$(frame_value preview-button-column)"
-"$HARNESS" click "$SESSION_NAME" "$preview_button_column" 1 >/dev/null
+"$HARNESS" click "$SESSION_NAME" "$preview_button_column" "$tab_bar_row" >/dev/null
 sleep 0.3
-"$HARNESS" click "$SESSION_NAME" "$preview_button_column" 1 >/dev/null
+"$HARNESS" click "$SESSION_NAME" "$preview_button_column" "$tab_bar_row" >/dev/null
 sleep 0.7
 settle
 if [ "$(field markdownSplitRatio)" = "$persisted_ratio" ] && [ "$(frame_value preview-border-column)" = "$preview_column_after" ]; then
@@ -180,7 +190,10 @@ fi
 echo '== drag preview selection past its edge, copy, then paste into source =='
 preview_border_column="$(frame_value preview-border-column)"
 selection_column=$((preview_border_column + 5))
-printf -v selection_press '\033[<0;%d;%dM' "$((selection_column + 1))" 4
+# Press near the top of the preview text (shifted down with the workspace strip); HOLD/RELEASE stay at
+# the terminal's last rows -- a fixed screen position at the pane bottom that the strip growth does not
+# move -- so the autoscroll keeps advancing before release.
+printf -v selection_press '\033[<0;%d;%dM' "$((selection_column + 1))" "$((4 + content_offset))"
 printf -v selection_drag_inside '\033[<32;%d;%dM' "$((selection_column + 1))" 35
 printf -v selection_drag_edge '\033[<32;%d;%dM' "$((selection_column + 1))" 40
 printf -v selection_release '\033[<0;%d;%dm' "$((selection_column + 1))" 40
@@ -208,7 +221,7 @@ else
 fi
 
 source_border_column="$(frame_value source-border-column)"
-"$HARNESS" click "$SESSION_NAME" "$((source_border_column + 8))" 4 >/dev/null
+"$HARNESS" click "$SESSION_NAME" "$((source_border_column + 8))" $((4 + content_offset)) >/dev/null
 revision_before_paste="$(field bufferRevision)"
 "$HARNESS" send "$SESSION_NAME" C-v >/dev/null
 sleep 1.0
@@ -225,7 +238,7 @@ echo '== Ctrl+F keeps independent source and preview state =='
 sleep 0.4
 "$HARNESS" send "$SESSION_NAME" Escape >/dev/null
 preview_border_column="$(frame_value preview-border-column)"
-"$HARNESS" click "$SESSION_NAME" "$((preview_border_column + 5))" 3 >/dev/null
+"$HARNESS" click "$SESSION_NAME" "$((preview_border_column + 5))" $((3 + content_offset)) >/dev/null
 "$HARNESS" send "$SESSION_NAME" C-f >/dev/null
 for character in R e n d e r e d; do "$HARNESS" send "$SESSION_NAME" "$character" >/dev/null; done
 sleep 0.5

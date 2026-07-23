@@ -69,11 +69,36 @@ print(rows[int(os.environ['ROW_INDEX'])].get('text', '').find(os.environ['NEEDLE
 PY
 }
 
+# The 'Current (working)' title column on the toolbar row, polled: a just-completed divider drag can
+# leave a single transient repaint frame where the toolbar row is momentarily unresolved, so re-settle
+# and re-read a few times instead of trusting one possibly-mid-repaint frame. The row itself is stable
+# (the toolbar sits at toolbar_title_row); only the read timing needs to be robust.
+current_working_column() {
+  local attempt column=-1
+  for attempt in 1 2 3 4 5 6; do
+    column="$(frame_text_column "$toolbar_title_row" 'Current (working)')"
+    if [ "${column:--1}" -ge 0 ] 2>/dev/null; then break; fi
+    sleep 0.25
+    settle
+  done
+  echo "$column"
+}
+
 echo '== open a real long working-tree diff =='
 "$HARNESS" launch "$SESSION_NAME" 120x40 \
   env HOME="$TEST_HOME" COLORTERM=truecolor TUI_FRAME_DUMP=1 \
   bun run src/main.ts "$FIXTURE_ROOT" >/dev/null
-if ! "$HARNESS" ready "$SESSION_NAME" 20 >/dev/null || ! open_diff; then
+if ! "$HARNESS" ready "$SESSION_NAME" 20 >/dev/null; then
+  echo '  FAIL  editor never booted'
+  exit 1
+fi
+# Height-robust content offset: the diff view (toolbar, titles, body) sits below the workspace tab
+# strip, so it shifts down by this many rows when the strip grows past 1 line (two-line workspace tabs
+# -> offset 1). Derived from the booted tree frame. Every hardcoded toolbar/body row below adds it.
+content_offset="$("$HARNESS" content-offset "$SESSION_NAME" 2>/dev/null)"; content_offset="${content_offset:-0}"
+toolbar_button_row=$((2 + content_offset))   # 'Open current' / 'Next' affordance row
+toolbar_title_row=$((3 + content_offset))    # 'Base (HEAD)' / 'Current (working)' title row
+if ! open_diff; then
   echo '  FAIL  git panel did not open the changed file in DiffView'
   exit 1
 fi
@@ -130,10 +155,10 @@ else
 fi
 
 echo '== toolbar: base/current labels, right-side Open current, clickable Next =='
-base_title_column="$(frame_text_column 3 'Base (HEAD)')"
-current_title_column="$(frame_text_column 3 'Current (working)')"
-open_current_column="$(frame_text_column 2 'Open current')"
-next_change_column="$(frame_text_column 2 'Next')"
+base_title_column="$(frame_text_column "$toolbar_title_row" 'Base (HEAD)')"
+current_title_column="$(frame_text_column "$toolbar_title_row" 'Current (working)')"
+open_current_column="$(frame_text_column "$toolbar_button_row" 'Open current')"
+next_change_column="$(frame_text_column "$toolbar_button_row" 'Next')"
 if [ "$base_title_column" -ge 0 ] && [ "$current_title_column" -gt "$base_title_column" ] && \
    [ "$open_current_column" -ge "$current_title_column" ]; then
   echo "  PASS  Base (HEAD) is left, Current (working) is right, Open current is over current ($open_current_column >= $current_title_column)"
@@ -143,7 +168,7 @@ else
 fi
 
 scroll_before_next="$(field diffScrollTop)"
-"$HARNESS" click "$SESSION_NAME" "$((next_change_column + 1))" 2 >/dev/null
+"$HARNESS" click "$SESSION_NAME" "$((next_change_column + 1))" "$toolbar_button_row" >/dev/null
 sleep 0.4
 settle
 scroll_after_next="$(field diffScrollTop)"
@@ -155,12 +180,12 @@ else
 fi
 
 echo '== draggable split: live width change and persistence to a second diff open =='
-current_column_before_drag="$(frame_text_column 3 'Current (working)')"
+current_column_before_drag="$(current_working_column)"
 divider_column=$((current_column_before_drag - 2))
-"$HARNESS" drag "$SESSION_NAME" "$divider_column" 10 "$((divider_column + 14))" 10 >/dev/null
+"$HARNESS" drag "$SESSION_NAME" "$divider_column" $((10 + content_offset)) "$((divider_column + 14))" $((10 + content_offset)) >/dev/null
 sleep 0.4
 settle
-current_column_after_drag="$(frame_text_column 3 'Current (working)')"
+current_column_after_drag="$(current_working_column)"
 persisted_ratio="$(field diffSplitRatio)"
 if [ "$current_column_after_drag" -gt "$current_column_before_drag" ] && \
    awk "BEGIN { exit !($persisted_ratio > 0.5) }"; then
@@ -176,7 +201,7 @@ if ! open_diff; then
   echo '  FAIL  second diff did not reopen'
   FAILURE_COUNT=$((FAILURE_COUNT + 1))
 else
-  current_column_after_reopen="$(frame_text_column 3 'Current (working)')"
+  current_column_after_reopen="$(current_working_column)"
   if [ "$current_column_after_reopen" = "$current_column_after_drag" ]; then
     echo "  PASS  second diff reused the persisted split column $current_column_after_reopen"
   else
@@ -186,11 +211,12 @@ else
 fi
 
 echo '== diff selection: held bottom-edge drag autoscrolls, paints, and copies exact text =='
-current_title_column="$(frame_text_column 3 'Current (working)')"
+current_title_column="$(frame_text_column "$toolbar_title_row" 'Current (working)')"
 selection_column=$((current_title_column + 7))
-# SGR coordinates are 1-based. Press near the top of current text, establish capture inside the
-# pane, then hold at the last code row so SelectionDragBehavior keeps advancing before release.
-printf -v selection_press '\033[<0;%d;%dM' "$((selection_column + 1))" 6
+# SGR coordinates are 1-based. Press near the top of current text (shifted down with the workspace
+# strip), establish capture inside the pane, then HOLD at the last code row -- a fixed screen position
+# at the pane bottom, which the strip growth does not move -- so SelectionDragBehavior keeps advancing.
+printf -v selection_press '\033[<0;%d;%dM' "$((selection_column + 1))" "$((6 + content_offset))"
 printf -v selection_drag_inside '\033[<32;%d;%dM' "$((selection_column + 1))" 31
 printf -v selection_drag_edge '\033[<32;%d;%dM' "$((selection_column + 1))" 38
 printf -v selection_release '\033[<0;%d;%dm' "$((selection_column + 1))" 38
@@ -270,9 +296,9 @@ else
 fi
 
 echo '== Open current: right-side affordance opens the working editable file =='
-open_current_column="$(frame_text_column 2 'Open current')"
+open_current_column="$(frame_text_column "$toolbar_button_row" 'Open current')"
 for _attempt in 1 2 3; do
-  "$HARNESS" click "$SESSION_NAME" "$((open_current_column + 2))" 2 >/dev/null
+  "$HARNESS" click "$SESSION_NAME" "$((open_current_column + 2))" "$toolbar_button_row" >/dev/null
   sleep 0.5
   if [ "$(field showingDiff)" = "false" ]; then break; fi
 done

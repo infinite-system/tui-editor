@@ -95,6 +95,11 @@ wait_for_buffer() {
 echo '== launch and open bar.ts from the file tree =='
 "$HARNESS" launch "$SESSION_NAME" 120x40 env TUI_FRAME_DUMP=1 bun run src/main.ts "$FIXTURE_ROOT" >/dev/null
 "$HARNESS" ready "$SESSION_NAME" 20 >/dev/null
+# Height-robust content offset: the buffer tab bar sits directly below the workspace tab strip, so its
+# row shifts down when the strip grows past 1 line (two-line workspace tabs -> offset 1). Tab clicks
+# below add it. Use-site rows come straight from the frame dump, so they need no adjustment.
+content_offset="$("$HARNESS" content-offset "$SESSION_NAME" 2>/dev/null)"; content_offset="${content_offset:-0}"
+tab_bar_row=$((1 + content_offset))
 # Tree rows sort directories first: node_modules, bar.ts, foo.ts, tsconfig.json.
 "$HARNESS" send "$SESSION_NAME" Down >/dev/null
 "$HARNESS" send "$SESSION_NAME" Enter >/dev/null
@@ -145,12 +150,13 @@ fi
 echo '== back on bar.ts, F12 at the cursor performs the same jump =='
 # Return to bar.ts by clicking its tab in the tab bar (row 1), then place the cursor on the use
 # site with a PLAIN click (no modifier — this must stay an ordinary cursor placement).
-bar_tab_column="$(FRAME_PATH="$PROJECT_ROOT/artifacts/frame-$SESSION_NAME.json" python3 -c "
+bar_tab_column="$(FRAME_PATH="$PROJECT_ROOT/artifacts/frame-$SESSION_NAME.json" CONTENT_OFFSET="${content_offset:-0}" python3 -c "
 import json, os
-text = json.load(open(os.environ['FRAME_PATH'], encoding='utf-8'))['rows'][1].get('text', '')
+tab_bar_row = 1 + int(os.environ.get('CONTENT_OFFSET', '0'))
+text = json.load(open(os.environ['FRAME_PATH'], encoding='utf-8'))['rows'][tab_bar_row].get('text', '')
 print(text.find('bar.ts') + 2)
 ")"
-"$HARNESS" click "$SESSION_NAME" "$bar_tab_column" 1 >/dev/null
+"$HARNESS" click "$SESSION_NAME" "$bar_tab_column" "$tab_bar_row" >/dev/null
 sleep 0.5
 "$HARNESS" settle "$SESSION_NAME" 8 >/dev/null 2>&1 || true
 if [ "$(field activeBuffer)" = "$FIXTURE_ROOT/bar.ts" ]; then

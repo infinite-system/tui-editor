@@ -10,6 +10,8 @@ export interface WorkspaceSetOptions {
 export interface WorkspaceTab {
   root: string;
   name: string;
+  /** Second tab line: the linked-worktree name when the root is one, else the checked-out branch. */
+  detail: string;
   active: boolean;
 }
 
@@ -48,6 +50,7 @@ class $WorkspaceSet {
     return this.entries.value.map((workspace, workspaceIndex) => ({
       root: workspace.root,
       name: workspace.name.value,
+      detail: workspace.tabDetail,
       active: workspaceIndex === activeWorkspaceIndex,
     }));
   }
