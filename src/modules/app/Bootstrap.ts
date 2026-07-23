@@ -37,6 +37,8 @@ import { Environment } from '../system/Environment';
 import { Logging } from '../system/Logging';
 import { HandlerGuard } from './HandlerGuard';
 import { TerminalSession } from './TerminalSession';
+import { PanelHost } from '../ui/PanelHost';
+import { TerminalFactory } from '../terminal/TerminalFactory';
 import { dirname, join } from 'node:path';
 
 export interface BootOptions {
@@ -114,6 +116,10 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   const findBar = new FindBar.Class();
   const quickOpen = new QuickOpen.Class();
   const shortcutHelp = new ShortcutHelp.Class(keybindings, commands);
+  // The bottom panel slot: a generic, content-agnostic host. Tier S registers ONE PaneContent (the
+  // terminal), lazily on first toggle so no shell spawns until the panel is opened.
+  const panelHost = new PanelHost.Class();
+
   const overlayCoordinator = new OverlayCoordinator.Class({
     findBar: () => findBar.close(),
     quickOpen: () => quickOpen.close(),
@@ -139,7 +145,23 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     quickOpen,
     shortcutHelp,
     overlayCoordinator,
+    panelHost,
   );
+
+  // Lazily create + register the terminal PaneContent on first toggle (idle cost is zero until then).
+  // The initial cols×rows seed from the laid-out panel region; the frame loop converges the true size.
+  let terminalRegistered = false;
+  const ensureTerminal = (): void => {
+    if (terminalRegistered) return;
+    terminalRegistered = true;
+    const content = TerminalFactory.Class.create({
+      columns: view.panelViewportColumns() || 80,
+      rows: view.panelViewportRows() || 24,
+      cwd: workspaceSet.active.root,
+    });
+    panelHost.register(content);
+  };
+  app.onDispose(() => panelHost.dispose());
 
   // Reveal through the bound pane target: source, Markdown preview, and each diff side keep their own
   // scroll/selection writer while FindBar retains independent engines for all of them.
@@ -301,6 +323,13 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       bufferLiveCount: workspaceSet.active.buffers.liveCount,
       activeBufferIndex: workspaceSet.active.buffers.activeIndex.value,
       pendingCloseTab: workspaceSet.active.pendingCloseTabIndex.value,
+      // Bottom panel / terminal state (drives smoke-terminal assertions without pane-scraping).
+      terminalVisible: panelHost.visible.value,
+      terminalFocused: panelHost.focused.value,
+      panelActiveContent: panelHost.activeId.value,
+      panelContentIds: panelHost.order.value,
+      terminalColumns: view.panelViewportColumns(),
+      terminalRows: view.panelViewportRows(),
     });
   };
 
@@ -400,6 +429,14 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     void theme.paletteName.value;
     void app.quitChordArmed.value;
     void app.copyNotice.value;
+    // Bottom panel: repaint on visibility/focus/switch AND on the active content's paint signal, so
+    // async terminal output (PTY bytes) repaints without a keypress (idle shell bumps nothing → the
+    // demand-driven loop stays at rest).
+    void panelHost.visible.value;
+    void panelHost.focused.value;
+    void panelHost.activeId.value;
+    void panelHost.order.value;
+    void panelHost.activeContent?.renderRevision.value;
     HandlerGuard.Class.run('paint', paint, () => renderer.requestRender());
   });
 
@@ -419,6 +456,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   // auto-scroll, tooltip dwell) we hold ONE live request so the render loop runs; at quiescence we
   // drop it and the loop STOPS (frames and status writes cease — 'idle CPU above ~zero is forbidden').
   let liveAnimationHeld = false;
+  // Last panel geometry pushed to the terminal — so the resize ioctl fires only on a real change.
+  let lastPanelColumns = 0;
+  let lastPanelRows = 0;
   const syncAnimationLiveness = (animating: boolean): void => {
     if (animating && !liveAnimationHeld) {
       renderer.requestLive();
@@ -463,6 +503,19 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     if (editorViewport.width.value !== laidOutWidth || editorViewport.height.value !== laidOutHeight) {
       editorViewport.setSize(laidOutWidth, laidOutHeight);
       renderer.requestRender(); // one-shot convergence (not an animation — no live request)
+    }
+    // Converge the terminal's cols×rows with the laid-out panel region (like the editor viewport):
+    // resize the emulator + child ONLY on a real change, so the ioctl fires on split/window resize,
+    // never per frame. Drives the child's SIGWINCH so `stty size` reflects the new geometry.
+    if (panelHost.visible.value) {
+      const panelColumns = view.panelViewportColumns();
+      const panelRows = view.panelViewportRows();
+      if (panelColumns > 0 && panelRows > 0 && (panelColumns !== lastPanelColumns || panelRows !== lastPanelRows)) {
+        lastPanelColumns = panelColumns;
+        lastPanelRows = panelRows;
+        panelHost.setViewportSize(panelColumns, panelRows);
+        renderer.requestRender();
+      }
     }
     StatusChannel.Class.settle(frame);
     // Exact per-cell visual snapshot for tests (env-gated; no-op otherwise).
@@ -870,6 +923,12 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       if (!view.activeMarkdownSplitView()?.previewFocused) workspaceSet.active.editor.performRedo();
     },
     'editor.toggleWordWrap': () => workspaceSet.active.editor.toggleWordWrap(),
+    // Toggle the bottom panel (terminal). Reserved so it fires from ANY mode — including from within a
+    // focused terminal (to hide it) — exactly like the quit escape hatch.
+    'panel.toggleTerminal': () => {
+      ensureTerminal();
+      panelHost.toggle();
+    },
     'menu.previous': () => contextMenu.moveSelection(-1),
     'menu.next': () => contextMenu.moveSelection(1),
     'menu.run': () => contextMenu.runSelected(),
@@ -919,6 +978,16 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     if (workspaceSet.active.pendingCloseTabIndex.value >= 0) {
       if (key.name === 'y') workspaceSet.active.confirmCloseTab();
       else workspaceSet.active.cancelCloseTab();
+      return;
+    }
+
+    // A focused bottom panel (the terminal) owns the keyboard: every non-reserved key is encoded to
+    // terminal bytes and delivered to the active PaneContent's handleKey. Reserved globals (quit, panel
+    // toggle) already fired above, so Ctrl+Q / F10 still quit and the toggle still hides the panel; an
+    // unencodable key is swallowed so it never drives the hidden editor beneath.
+    // invariant: A focused panel routes keystrokes to its active pane content (src/modules/terminal/terminal.invariants.md)
+    if (panelHost.visible.value && panelHost.focused.value) {
+      panelHost.handleKey(key);
       return;
     }
 
@@ -1126,6 +1195,12 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   const onMouse = (event: { type: string; x: number; y: number; button: number }): void => {
     HandlerGuard.Class.run('mouse', () => {
       lastMouse = { type: event.type, x: event.x, y: event.y, button: event.button };
+      // Focus-follows-click for the bottom panel: a down OUTSIDE the visible panel blurs it (a down
+      // inside is handled by the panel box, which focuses it). Keeps typing from going to a shell you
+      // clicked away from.
+      if (event.type === 'down' && panelHost.focused.value && !view.panelContainsPoint(event.x, event.y)) {
+        panelHost.blur();
+      }
       if (event.type === 'down') tooltip.clear(); // any click hides the tooltip, wherever it lands
       // A click hides the hover card UNLESS it lands ON the card (engaged): a down on the card begins a
       // drag-select and must not dismiss it; a down anywhere else closes it.

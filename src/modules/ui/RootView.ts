@@ -51,8 +51,10 @@ import type { FindBar, FindBarTarget } from '../search/FindBar';
 import type { KeybindingRegistry } from '../keybindings/KeybindingRegistry';
 import type { QuickOpen } from '../search/QuickOpen';
 import { PaneSplitters } from './PaneSplitters';
+import { SplitterModel } from '../layout/SplitterModel';
 import { Logging } from '../system/Logging';
 import type { TabStrip } from './TabStrip';
+import type { PanelHost } from './PanelHost';
 
 // roleColor moved to EditorPaneRenderer with the editor render that used it.
 
@@ -88,6 +90,12 @@ export interface RootView {
   /** Read the hover card's reactive paint signal inside the frame effect so an ASYNC hover landing
    *  (which no keypress/mouse-move accompanies) still triggers a repaint that projects the card. */
   observeHoverRepaint(): void;
+  /** The bottom panel slot's laid-out inner cell columns (0 when hidden) — the terminal's live cols. */
+  panelViewportColumns(): number;
+  /** The bottom panel slot's laid-out inner cell rows (0 when hidden) — the terminal's live rows. */
+  panelViewportRows(): number;
+  /** True when the screen cell (x,y) falls inside the visible panel box (focus-follows-click). */
+  panelContainsPoint(x: number, y: number): boolean;
   dispose(): void;
 }
 
@@ -114,6 +122,7 @@ function $buildRootView(
   quickOpen: QuickOpen.Instance,
   shortcutHelp: ShortcutHelp.Instance,
   overlayCoordinator: OverlayCoordinator.Instance,
+  panelHost: PanelHost.Instance,
 ): RootView {
   const root = renderer.root;
   const readPalette = () => theme.palette;
@@ -263,12 +272,119 @@ function $buildRootView(
     tooltip,
   });
 
+  // --- bottom panel slot (the composable PanelHost region) --------------------------------------
+  // A full-width region below the main row, above the status bar, hosting the active PaneContent
+  // (the terminal for tier S). It is a SLOT, not a hardwired terminal — RootView pulls
+  // panelHost.activeContent.render() and never names the terminal. mainRow uses flexGrow (not a fixed
+  // height), so a fixed-height panel here makes the main row shrink to fit — the panel height is an
+  // INPUT from the splitter, never derived from its content.
+  // invariant: A scrollable pane height is an input not an output (src/modules/ui/ui.invariants.md)
+  // INTEGRATOR NOTE: this bottom-panel mount is the ONE shared RootView touch for the terminal; it is
+  // independent of the activity-bar change landing in parallel (which touches the sidebar/left slot).
+  let panelHeightRows = 12;
+  const panelStack = new BoxRenderable(renderer, {
+    id: 'panel-stack',
+    flexDirection: 'column',
+    width: '100%',
+  });
+  const panelDivider = new BoxRenderable(renderer, {
+    id: 'panel-divider',
+    width: '100%',
+    height: 1,
+    flexShrink: 0,
+    backgroundColor: readPalette().border,
+  });
+  const panelBox = new BoxRenderable(renderer, {
+    id: 'panel-box',
+    width: '100%',
+    height: panelHeightRows,
+    flexShrink: 0,
+    border: true,
+    borderStyle: 'rounded',
+    title: 'Terminal',
+    backgroundColor: readPalette().panel,
+  });
+  const panelBody = new TextRenderable(renderer, { id: 'panel-body', content: '', wrapMode: 'none' });
+  panelBox.add(panelBody);
+  let panelMounted = false;
+
+  // Draggable panel height: a HORIZONTAL SplitterModel in cells. The grab strip sits ABOVE the panel,
+  // so dragging UP must GROW the panel — the pointer Y is negated before it reaches the model (up =
+  // smaller Y = larger negated position = larger height). Reuses the shared splitter (min 3 rows).
+  const panelSplitter = new SplitterModel.Class({
+    orientation: 'horizontal',
+    mode: 'cells',
+    initialSize: panelHeightRows,
+    minimumSize: 3,
+    maximumSize: 40,
+    onSizeChange: (height) => {
+      panelHeightRows = Math.round(height);
+      panelBox.height = panelHeightRows;
+      renderer.requestRender();
+    },
+  });
+  let panelDragActive = false;
+  panelDivider.onMouseDown = (event) => {
+    (panelDivider as unknown as { _ctx?: { setCapturedRenderable?: (renderable: unknown) => void } })._ctx?.setCapturedRenderable?.(panelDivider);
+    panelSplitter.size.value = panelHeightRows;
+    panelSplitter.beginDrag(-event.y);
+    panelDragActive = true;
+    renderer.requestRender();
+  };
+  panelDivider.onMouseDrag = (event) => {
+    panelSplitter.dragTo(-event.y);
+    renderer.requestRender();
+  };
+  const endPanelDrag = (): void => {
+    if (!panelDragActive) return;
+    panelDragActive = false;
+    panelSplitter.endDrag();
+    renderer.requestRender();
+  };
+  panelDivider.onMouseUp = endPanelDrag;
+  panelDivider.onMouseDragEnd = endPanelDrag;
+  // Clicking the panel focuses it (focus-follows-click). Blur-on-outside is handled in Bootstrap's
+  // global mouse handler via panelContainsPoint.
+  panelBox.onMouseDown = () => {
+    panelHost.focus();
+    renderer.requestRender();
+  };
+
+  function synchronizePanelMount(): void {
+    const visible = panelHost.visible.value;
+    if (visible === panelMounted) return;
+    if (visible) {
+      panelStack.add(panelDivider);
+      panelStack.add(panelBox);
+    } else {
+      panelStack.remove(panelDivider);
+      panelStack.remove(panelBox);
+    }
+    panelMounted = visible;
+  }
+
+  // Laid-out inner cell region of the panel box (border-inset). 0 when hidden. The frame loop reads
+  // these to converge the terminal's cols×rows (like the editor viewport), never inside the paint.
+  const panelViewportColumns = (): number =>
+    panelHost.visible.value ? Math.max(1, (panelBox.width as number) - 2) : 0;
+  const panelViewportRows = (): number =>
+    panelHost.visible.value ? Math.max(1, (panelBox.height as number) - 2) : 0;
+  const panelContainsPoint = (x: number, y: number): boolean => {
+    if (!panelHost.visible.value) return false;
+    const boxX = panelBox.x as number;
+    const boxY = panelBox.y as number;
+    const boxWidth = panelBox.width as number;
+    const boxHeight = panelBox.height as number;
+    return x >= boxX && x < boxX + boxWidth && y >= boxY && y < boxY + boxHeight;
+  };
+
   if (settings.workspaceTabPosition.value === 'left') {
     mainRow.add(workspaceTabBar, 0);
   } else {
     column.add(workspaceTabBar);
   }
   column.add(mainRow);
+  column.add(panelStack); // between the main row and the status bar
   column.add(statusBar.bar);
   root.add(column);
 
@@ -521,6 +637,7 @@ function $buildRootView(
   function update(): void {
     const palette = readPalette();
     synchronizeWorkspaceTabMount();
+    synchronizePanelMount();
     editorContentMount.sync();
     column.backgroundColor = palette.bg;
     const gitView = workspaceSet.active.sidebarView.value === 'git';
@@ -560,11 +677,47 @@ function $buildRootView(
     codeBody.fg = palette.fg;
     codeBody.selectionBg = palette.selection;
     editorController.applySelection(); // after content is set, so selection maps onto the current buffer
+    // Bottom panel slot: pull the active PaneContent's cells into the panel body (the terminal for
+    // tier S). The host is content-agnostic — RootView never names the terminal here.
+    // invariant: The panel renders exactly the active pane content cells each frame (src/modules/terminal/terminal.invariants.md)
+    if (panelHost.visible.value) {
+      const content = panelHost.activeContent;
+      const panelFocused = panelHost.focused.value;
+      panelBox.title = content?.title ?? 'Panel';
+      panelBox.backgroundColor = palette.panel;
+      panelBox.borderColor = panelFocused ? palette.borderActive : palette.border;
+      panelBox.titleColor = panelFocused ? palette.accent : palette.dim;
+      panelBox.height = panelHeightRows;
+      panelDivider.backgroundColor = panelFocused ? palette.accent : palette.border;
+      panelBody.fg = palette.fg;
+      panelBody.content = content
+        ? content.render({
+            width: panelViewportColumns(),
+            height: panelViewportRows(),
+            palette,
+            focused: panelFocused,
+          })
+        : new StyledText([fg(palette.dim)('  no panel content')]);
+    }
     statusBar.update(palette, editorContentMount.markdownSplitView?.previewFocused ?? false);
     overlayLayer.update(palette);
     hoverCard.update(palette);
 
     scrollbarSync.syncScrollbars();
+
+    // Native terminal caret in the focused panel: a real block caret at the emulator's cursor cell,
+    // anchored to the panel body's laid-out screen cell (+1 for the 1-based ANSI cursor). This wins
+    // over the editor caret below because a focused terminal owns the keyboard.
+    // invariant: The caret renders at the cursor display column (ui.invariants.md)
+    if (panelHost.visible.value && panelHost.focused.value) {
+      const caret = panelHost.activeContent?.caret?.() ?? null;
+      if (caret) {
+        renderer.setCursorPosition(panelBody.x + caret.column + 1, panelBody.y + caret.row + 1, true);
+      } else {
+        renderer.setCursorPosition(0, 0, false);
+      }
+      return;
+    }
 
     // Native terminal caret at the cursor's DISPLAY column (tab/wide aware). Shown only when the
     // editor is focused, has a document, no palette overlay, and the cursor line is on screen.
@@ -793,6 +946,9 @@ function $buildRootView(
     hoverHasSelection: () => hoverCard.hasSelection(),
     hoverCopySelection: () => hoverCard.copySelection(),
     observeHoverRepaint: () => { void hoverCard.paintRevision.value; },
+    panelViewportColumns,
+    panelViewportRows,
+    panelContainsPoint,
     dispose() {
       try {
         editorContentMount.dispose();
