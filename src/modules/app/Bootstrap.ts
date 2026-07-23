@@ -244,6 +244,21 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   };
   app.onDispose(() => panelHost.dispose());
 
+  // Toggle the bottom panel between one cell and two side-by-side cells — the AGENT pane on the LEFT,
+  // the terminal on the RIGHT — and back. Both are ensured (lazily registered) first, then the panel
+  // splits by id; F9 toggles split↔single. Proves the split slot end to end with the two real citizens:
+  // independent sub-region render, per-cell click-to-focus, divider re-flow.
+  const togglePanelSplit = (): void => {
+    ensureTerminal();
+    ensureAgent();
+    if (!panelHost.visible.value) panelHost.show();
+    if (panelHost.isSplit) {
+      panelHost.unsplit();
+      return;
+    }
+    panelHost.split(['agent', 'terminal']); // agent LEFT, terminal RIGHT
+  };
+
   // Theme + glyph mode are settings-driven (single source): the panel edits settings.theme /
   // settings.glyphMode, and these reactive hooks PUSH the change into the Theme so it live-applies with
   // no restart. GOTCHA reconciled here: the panel's theme option strings ('dark'/'light') are NOT the
@@ -418,6 +433,11 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       panelContentIds: panelHost.order.value,
       terminalColumns: view.panelViewportColumns(),
       terminalRows: view.panelViewportRows(),
+      // Split state: which cells occupy the slot, which one has the keyboard, and each cell's converged
+      // column width — the driving smoke reads this to prove 2-up render, focus routing, and re-flow.
+      panelCellIds: panelHost.resolvedCells.map((cell) => cell.content.id),
+      panelFocusedIndex: panelHost.focusedIndex.value,
+      panelCellColumns: panelHost.cellSpans(view.panelViewportColumns()).map((span) => span.columns),
       // Active buffer is an image the editor renders as half-block cells (drives smoke-image-preview).
       activeFileIsImage: workspaceSet.active.activeFileIsImage,
     });
@@ -533,7 +553,11 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     void panelHost.focused.value;
     void panelHost.activeId.value;
     void panelHost.order.value;
-    void panelHost.activeContent?.renderRevision.value;
+    void panelHost.layout.value;
+    void panelHost.focusedIndex.value;
+    // Repaint on ANY visible cell's paint signal — a split panel has two live panes, either of which
+    // can emit async output (PTY bytes) that must repaint without a keypress.
+    for (const content of panelHost.visibleContents()) void content.renderRevision.value;
     HandlerGuard.Class.run('paint', paint, () => renderer.requestRender());
   });
 
@@ -1046,6 +1070,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     // terminal button runs, so chord and click are one action.
     'panel.toggleTerminal': toggleTerminal,
     'panel.toggleAgent': toggleAgent,
+    'panel.toggleSplit': togglePanelSplit,
     'menu.previous': () => contextMenu.moveSelection(-1),
     'menu.next': () => contextMenu.moveSelection(1),
     'menu.run': () => contextMenu.runSelected(),

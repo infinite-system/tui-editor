@@ -364,12 +364,109 @@ function $buildRootView(
     flexShrink: 0,
     border: true,
     borderStyle: 'rounded',
+    flexDirection: 'row', // visible split cells lay out left-to-right; one cell = the degenerate case
     title: 'Terminal',
     backgroundColor: readPalette().panel,
   });
-  const panelBody = new TextRenderable(renderer, { id: 'panel-body', content: '', wrapMode: 'none' });
-  panelBox.add(panelBody);
   let panelMounted = false;
+
+  // Split-aware panel body: a reconciling POOL of cell views. Each visible cell is one TextRenderable
+  // body; adjacent cells are separated by a 1-column divider whose drag re-flows the two it sits
+  // between (a vertical ratio SplitterModel over the panel's inner width). ONE visible cell means no
+  // divider and a full-width body — pixel-identical to the pre-split single-pane panel. The pool is
+  // grown on demand and re-attached in order only when the visible-cell COUNT changes (rare), so steady
+  // frames just update widths and content.
+  interface PanelCellView {
+    readonly body: TextRenderable;
+    readonly dividerBox: BoxRenderable | null; // the divider that PRECEDES this body (null for cell 0)
+    readonly splitter: SplitterModel.Instance | null;
+  }
+  const panelCellViews: PanelCellView[] = [];
+  let mountedPanelCellCount = -1;
+
+  // Cumulative width share up to and including the divider's LEFT cell — the [0,1] boundary a ratio
+  // SplitterModel reports, so a drag anchors exactly where the divider currently sits.
+  const panelBoundaryFraction = (dividerIndex: number): number => {
+    const cells = panelHost.resolvedCells;
+    let fraction = 0;
+    for (let index = 0; index <= dividerIndex && index < cells.length; index += 1) fraction += cells[index]?.ratio ?? 0;
+    return fraction;
+  };
+
+  const ensurePanelCellView = (index: number): PanelCellView => {
+    const existing = panelCellViews[index];
+    if (existing) return existing;
+    const body = new TextRenderable(renderer, { id: `panel-cell-${index}`, content: '', wrapMode: 'none', flexShrink: 0 });
+    // Focus-follows-click at the CELL grain: clicking a cell body focuses the panel and that cell.
+    body.onMouseDown = () => {
+      panelHost.focus();
+      panelHost.focusCell(index);
+      renderer.requestRender();
+    };
+    let dividerBox: BoxRenderable | null = null;
+    let splitter: SplitterModel.Instance | null = null;
+    if (index >= 1) {
+      const dividerIndex = index - 1;
+      dividerBox = new BoxRenderable(renderer, {
+        id: `panel-cell-divider-${dividerIndex}`,
+        width: 1,
+        flexShrink: 0,
+        backgroundColor: readPalette().border,
+      });
+      splitter = new SplitterModel.Class({
+        orientation: 'vertical',
+        mode: 'ratio',
+        initialSize: 0.5,
+        extentCells: 1,
+        onSizeChange: (fraction) => {
+          panelHost.moveDivider(dividerIndex, fraction);
+          renderer.requestRender();
+        },
+      });
+      let dragging = false;
+      dividerBox.onMouseDown = (event) => {
+        (dividerBox as unknown as { _ctx?: { setCapturedRenderable?: (renderable: unknown) => void } })._ctx?.setCapturedRenderable?.(dividerBox);
+        panelHost.focus();
+        splitter!.setExtentCells(Math.max(1, panelViewportColumns()));
+        splitter!.size.value = panelBoundaryFraction(dividerIndex); // anchor at the current boundary
+        splitter!.beginDrag(event.x);
+        dragging = true;
+        renderer.requestRender();
+      };
+      dividerBox.onMouseDrag = (event) => {
+        if (!dragging) return;
+        splitter!.dragTo(event.x);
+        renderer.requestRender();
+      };
+      const endCellDrag = (): void => {
+        if (!dragging) return;
+        dragging = false;
+        splitter!.endDrag();
+        renderer.requestRender();
+      };
+      dividerBox.onMouseUp = endCellDrag;
+      dividerBox.onMouseDragEnd = endCellDrag;
+    }
+    const view: PanelCellView = { body, dividerBox, splitter };
+    panelCellViews[index] = view;
+    return view;
+  };
+
+  // Mount exactly `count` cell views in left-to-right order (divider before each body from cell 1 on).
+  // Only re-attaches when the count changes; unchanged frames skip all mount churn.
+  const syncPanelCellMount = (count: number): void => {
+    if (count === mountedPanelCellCount) return;
+    for (const view of panelCellViews) {
+      panelBox.remove(view.body);
+      if (view.dividerBox) panelBox.remove(view.dividerBox);
+    }
+    for (let index = 0; index < count; index += 1) {
+      const view = ensurePanelCellView(index);
+      if (view.dividerBox) panelBox.add(view.dividerBox);
+      panelBox.add(view.body);
+    }
+    mountedPanelCellCount = count;
+  };
 
   // Draggable panel height: a HORIZONTAL SplitterModel in cells. The grab strip sits ABOVE the panel,
   // so dragging UP must GROW the panel — the pointer Y is negated before it reaches the model (up =
@@ -782,27 +879,32 @@ function $buildRootView(
     codeBody.fg = palette.fg;
     codeBody.selectionBg = palette.selection;
     editorController.applySelection(); // after content is set, so selection maps onto the current buffer
-    // Bottom panel slot: pull the active PaneContent's cells into the panel body (the terminal for
-    // tier S). The host is content-agnostic — RootView never names the terminal here.
+    // Bottom panel slot: pull EACH visible cell's PaneContent into its own body (one body = the
+    // terminal for tier S; two = agent | terminal side by side). The host is content-agnostic — RootView
+    // never names the terminal here; it iterates the host's converged cell spans and paints each.
     // invariant: The panel renders exactly the active pane content cells each frame (src/modules/terminal/terminal.invariants.md)
+    // invariant: A split panel renders every visible cell into its own sub-region (src/modules/terminal/terminal.invariants.md)
     if (panelHost.visible.value) {
-      const content = panelHost.activeContent;
       const panelFocused = panelHost.focused.value;
-      panelBox.title = content?.title ?? 'Panel';
+      const focusedIndex = panelHost.focusedIndex.value;
+      const spans = panelHost.cellSpans(panelViewportColumns());
+      syncPanelCellMount(spans.length);
+      panelBox.title = panelHost.focusedContent?.title ?? 'Panel';
       panelBox.backgroundColor = palette.panel;
       panelBox.borderColor = panelFocused ? palette.borderActive : palette.border;
       panelBox.titleColor = panelFocused ? palette.accent : palette.dim;
       panelBox.height = panelHeightRows;
       panelDivider.backgroundColor = panelFocused ? palette.accent : palette.border;
-      panelBody.fg = palette.fg;
-      panelBody.content = content
-        ? content.render({
-            width: panelViewportColumns(),
-            height: panelViewportRows(),
-            palette,
-            focused: panelFocused,
-          })
-        : new StyledText([fg(palette.dim)('  no panel content')]);
+      const cellRows = panelViewportRows();
+      spans.forEach((span, index) => {
+        const view = panelCellViews[index];
+        if (!view) return;
+        const cellFocused = panelFocused && index === focusedIndex;
+        view.body.width = span.columns;
+        view.body.fg = palette.fg;
+        view.body.content = span.content.render({ width: span.columns, height: cellRows, palette, focused: cellFocused });
+        if (view.dividerBox) view.dividerBox.backgroundColor = panelFocused ? palette.borderActive : palette.border;
+      });
     }
     statusBar.update(palette, editorContentMount.markdownSplitView?.previewFocused ?? false);
     overlayLayer.update(palette);
@@ -811,13 +913,15 @@ function $buildRootView(
     scrollbarSync.syncScrollbars();
 
     // Native terminal caret in the focused panel: a real block caret at the emulator's cursor cell,
-    // anchored to the panel body's laid-out screen cell (+1 for the 1-based ANSI cursor). This wins
-    // over the editor caret below because a focused terminal owns the keyboard.
+    // anchored to the FOCUSED cell body's laid-out screen cell (+1 for the 1-based ANSI cursor). This
+    // wins over the editor caret below because a focused terminal owns the keyboard.
     // invariant: The caret renders at the cursor display column (ui.invariants.md)
     if (panelHost.visible.value && panelHost.focused.value) {
-      const caret = panelHost.activeContent?.caret?.() ?? null;
-      if (caret) {
-        renderer.setCursorPosition(panelBody.x + caret.column + 1, panelBody.y + caret.row + 1, true);
+      const focusedCellIndex = Math.min(Math.max(0, panelHost.focusedIndex.value), Math.max(0, panelCellViews.length - 1));
+      const focusedBody = panelCellViews[focusedCellIndex]?.body;
+      const caret = panelHost.focusedContent?.caret?.() ?? null;
+      if (caret && focusedBody) {
+        renderer.setCursorPosition(focusedBody.x + caret.column + 1, focusedBody.y + caret.row + 1, true);
       } else {
         renderer.setCursorPosition(0, 0, false);
       }

@@ -63,6 +63,9 @@ export const canonicalBindings: Keybinding[] = [
   // The native agent (Claude) pane — a second PaneContent in the same bottom slot. Reserved so it
   // toggles from any mode, including from inside a focused pane, exactly like the terminal toggle.
   { chord: { key: 'a', ctrl: true, shift: true }, action: 'panel.toggleAgent', reserved: true },
+  // Split the bottom panel into two side-by-side cells (agent | terminal) and back. Reserved so it
+  // fires even while the terminal owns the keyboard.
+  { chord: { key: 'f9' }, action: 'panel.toggleSplit', reserved: true },
   { chord: { key: 'tab' }, action: 'focus.toggle' },
   // Editor buffer tabs (item 10a) — global (work in any focus). Ctrl+Tab needs the kitty keyboard
   // protocol; Ctrl+PageUp/PageDown are the widely-supported equivalents.
