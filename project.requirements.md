@@ -5,7 +5,7 @@ NOTHING decided is lost across compaction or a cold restart, and so EVERY spawne
 
 - **Loaded first** on every resume/cold-start (with `project.conventions.md` + `project.invariants.md`).
 - **Embedded by reference** in the fractal delegate packet (`scripts/delegate-packet.sh`) — every
-  codex/Fable worker reads it before working.
+  codex/Invar worker reads it before working.
 - **Append + commit** whenever a new standing rule/decision arrives. It accumulates; it never lives
   only in chat history (which compaction can drop). "Encode this persistently" is the default for any
   standing decision.
@@ -163,7 +163,7 @@ merge gate — `scripts/behavioral-contracts.sh`. Rules:
 ## Orchestration
 - Worktree-per-writer + DISJOINT file sets. PARALLELIZE capabilities, SERIALIZE RootView integration
   (the coordinator owns RootView; workers build isolated new/owned files, wired in one merge at a time).
-- Use Fable/Claude subagents for HARD reasoning-heavy work; codex for mechanical/isolated builds
+- Use Invar/Claude subagents for HARD reasoning-heavy work; codex for mechanical/isolated builds
   (separate budget). Both inherit the full fractal packet.
 - GOTCHA: the Claude Agent tool's worktree-isolation targets the WRONG repo — so for tui-editor work,
   explicitly `git worktree add` a tui-editor worktree and point the worker at it.

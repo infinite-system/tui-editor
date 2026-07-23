@@ -34,7 +34,7 @@ export interface Palette {
 }
 
 export const DARK: Palette = {
-  name: 'fable-dark',
+  name: 'invar-dark',
   bg: '#1e1e2e', panel: '#181825', statusBg: '#11111b',
   border: '#313244', borderActive: '#89b4fa',
   fg: '#cdd6f4', dim: '#6c7086', accent: '#89b4fa',
@@ -47,7 +47,7 @@ export const DARK: Palette = {
 };
 
 export const LIGHT: Palette = {
-  name: 'fable-light',
+  name: 'invar-light',
   bg: '#eff1f5', panel: '#e6e9ef', statusBg: '#dce0e8',
   border: '#ccd0da', borderActive: '#1e66f5',
   fg: '#4c4f69', dim: '#8c8fa1', accent: '#1e66f5',

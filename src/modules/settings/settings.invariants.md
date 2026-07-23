@@ -16,8 +16,8 @@ propagating an error.
 
 **Mechanism:** `readSettingsFile` gets `null` from the filesystem seam for a missing/unreadable file
 and returns `{}`; a `JSON.parse` throw is caught and also returns `{}`. `sanitize` then keeps only
-recognized, correctly-typed keys. The reality is that `~/.config/fable/settings.json` and
-`.fable/settings.json` are user-editable files on disk the editor does not exclusively own.
+recognized, correctly-typed keys. The reality is that `~/.config/invar/settings.json` and
+`.invar/settings.json` are user-editable files on disk the editor does not exclusively own.
 
 **Generates:** the never-throw load contract; the defaults-as-floor behavior.
 
@@ -110,7 +110,7 @@ OS default) via `fileSystem.writeTextFile`; the filesystem is built once by the 
 during load()".
 
 **Impossible if true:** `save()` writing the project override file; a test mutating the real
-`~/.config/fable/settings.json`; a write failure crashing the app.
+`~/.config/invar/settings.json`; a write failure crashing the app.
 
 **Verification:** a test that `set()`+`save()` then confirms only the user path was written in the
 fake store and a reload reads the values back.

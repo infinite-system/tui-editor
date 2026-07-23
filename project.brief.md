@@ -1,4 +1,4 @@
-# Fable Build Brief: Lightweight AI-Era TUI Code Workspace
+# Invar Build Brief: Lightweight AI-Era TUI Code Workspace
 
 ## Mission
 
@@ -2749,7 +2749,7 @@ These must not be violated.
 
 Verification is a primary deliverable.
 
-Fable must prove that every requested subsystem exists, works together, disposes resources correctly, and meets the intended architecture.
+Invar must prove that every requested subsystem exists, works together, disposes resources correctly, and meets the intended architecture.
 
 Create and maintain:
 
@@ -2838,7 +2838,7 @@ Verify behavior under:
 
 # Real Terminal UI Verification Harness
 
-Fable must not verify the TUI only through unit tests or static inspection.
+Invar must not verify the TUI only through unit tests or static inspection.
 
 It must launch the built application inside a real terminal session and interact with it programmatically.
 
@@ -3016,7 +3016,7 @@ When a terminal interaction test fails:
 7. compare before and after
 8. add the scenario permanently to the regression suite
 
-Fable must visibly operate the TUI it built.
+Invar must visibly operate the TUI it built.
 
 It must not claim completion without demonstrating the real application through automated terminal interactions and captured evidence.
 

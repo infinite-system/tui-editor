@@ -1,7 +1,7 @@
 // The reactive user-settings store (MODEL layer). Fields are ref-returning getters so every read is
 // reactive and every change LIVE-APPLIES to consumers (`Settings.Class.<field>.value`). Values are
-// layered defaults <- user <- project: a user file at `~/.config/fable/settings.json` overrides the
-// built-in defaults, and a workspace file at `.fable/settings.json` overrides the user file. Loading
+// layered defaults <- user <- project: a user file at `~/.config/invar/settings.json` overrides the
+// built-in defaults, and a workspace file at `.invar/settings.json` overrides the user file. Loading
 // a missing or corrupt file never throws — it silently falls back to the layer beneath it.
 //
 // The filesystem is reached through an overridable `createFileSystem()` seam (a constructor-injected
@@ -58,9 +58,9 @@ export interface SettingsFileSystem {
 
 /** Locations the store reads from and writes back to; any omitted field is derived from the OS. */
 export interface SettingsPaths {
-  /** User-level file (written back by `save()`). Default: `~/.config/fable/settings.json`. */
+  /** User-level file (written back by `save()`). Default: `~/.config/invar/settings.json`. */
   userPath?: string;
-  /** Project-override file. Default: `<workspaceRoot>/.fable/settings.json`. */
+  /** Project-override file. Default: `<workspaceRoot>/.invar/settings.json`. */
   projectPath?: string;
   /** Workspace root used to derive `projectPath`. Default: `Environment.cwd`. */
   workspaceRoot?: string;
@@ -212,8 +212,8 @@ class $Settings {
     const home = this.fileSystem.homeDirectory();
     const workspaceRoot = paths.workspaceRoot ?? Environment.Class.cwd;
     return {
-      userPath: paths.userPath ?? Files.Class.join(home, '.config', 'fable', 'settings.json'),
-      projectPath: paths.projectPath ?? Files.Class.join(workspaceRoot, '.fable', 'settings.json'),
+      userPath: paths.userPath ?? Files.Class.join(home, '.config', 'invar', 'settings.json'),
+      projectPath: paths.projectPath ?? Files.Class.join(workspaceRoot, '.invar', 'settings.json'),
     };
   }
 

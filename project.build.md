@@ -1,6 +1,6 @@
 # project.build.md — Build, Run, Test (the one place)
 
-Fable is a terminal code editor built on **Bun + ivue + OpenTUI + Tree-sitter**. This file is the
+Invar is a terminal code editor built on **Bun + ivue + OpenTUI + Tree-sitter**. This file is the
 single reference for how to run it from source, build the standalone binary, run the tests, and pass
 the gate. Commands assume Bun is on PATH (`export PATH="$HOME/.bun/bin:$PATH"`).
 
@@ -49,7 +49,7 @@ cd /tmp/tui-demo && PATH="$HOME/.bun/bin:$PATH" bun run src/main.ts .
 Or build the standalone binary and run that:
 
 ```bash
-cd /tmp/tui-demo && PATH="$HOME/.bun/bin:$PATH" bun run build && ./dist/fable .
+cd /tmp/tui-demo && PATH="$HOME/.bun/bin:$PATH" bun run build && ./dist/invar .
 ```
 
 The workspace argument is `.` (the demo dir itself). Quit with `Ctrl+Q` or `F10`.
@@ -57,11 +57,11 @@ The workspace argument is `.` (the demo dir itself). Quit with `Ctrl+Q` or `F10`
 ## Build the standalone binary (distribution)
 
 ```bash
-bun run build          # → dist/fable  (self-contained executable, ~30–60s)
-./dist/fable .         # run the compiled binary against the current dir
+bun run build          # → dist/invar  (self-contained executable, ~30–60s)
+./dist/invar .         # run the compiled binary against the current dir
 ```
 
-- `build` = `bun build --compile --minify --external web-tree-sitter src/main.ts --outfile dist/fable`.
+- `build` = `bun build --compile --minify --external web-tree-sitter src/main.ts --outfile dist/invar`.
 - The binary is ~120 MB: **most of that is the embedded Bun+JavaScriptCore runtime** (the baseline any
   `bun --compile` binary carries). The app itself is ~14k lines / ~1.2 MB of source; build-time deps
   (typescript, babel, …) are NOT in the binary. Runtime footprint ≈ 100 MB RSS, ~0% idle CPU.
@@ -75,7 +75,7 @@ and cannot bundle that wasm asset, so the build fails without `--external web-tr
 **The compiled binary IS standalone today.** The syntax layer uses the regex `Highlighter` (the
 immediate, never-blocks layer); the tree-sitter *deferred* layer is not wired, so the lazy wasm import
 never fires and the external is never needed at runtime. Verified: the binary boots, opens a `.ts` file
-(regex highlighting), and edits without touching the wasm path — you can run `./dist/fable` from
+(regex highlighting), and edits without touching the wasm path — you can run `./dist/invar` from
 anywhere.
 
 **When tree-sitter gets wired (future M-tier):** ship `node_modules/web-tree-sitter/tree-sitter.wasm`

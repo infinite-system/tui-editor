@@ -21,7 +21,7 @@ H="$DIR/tui-harness.sh"
 # tui-harness.sh launches every app with this worktree-local HOME. Write the contract settings to
 # that SAME isolated path; writing the caller's real $HOME makes the drive depend on stale harness
 # state and can silently run the wrap contract with wordWrap=false.
-SET="$ROOT/artifacts/home/.config/fable/settings.json"
+SET="$ROOT/artifacts/home/.config/invar/settings.json"
 export PATH="$HOME/.bun/bin:$PATH"
 fail=0
 SESSIONS=""

@@ -18,7 +18,7 @@ class $App {
 
   // Reactive UI state.
   get title() {
-    return ref('Fable');
+    return ref('Invar');
   }
   get statusMessage() {
     return ref('Ready · Ctrl+Q to quit');

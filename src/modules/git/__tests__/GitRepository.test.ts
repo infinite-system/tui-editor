@@ -136,10 +136,10 @@ function runGit(cwd: string, arguments_: string[]): string {
 }
 
 function createRepositoryFixture(): string {
-  const cwd = mkdtempSync(join(tmpdir(), 'fable-git-'));
+  const cwd = mkdtempSync(join(tmpdir(), 'invar-git-'));
   runGit(cwd, ['init', '--quiet']);
-  runGit(cwd, ['config', 'user.name', 'Fable Test']);
-  runGit(cwd, ['config', 'user.email', 'fable@example.test']);
+  runGit(cwd, ['config', 'user.name', 'Invar Test']);
+  runGit(cwd, ['config', 'user.email', 'invar@example.test']);
   writeFileSync(join(cwd, 'tracked.txt'), 'original\n');
   runGit(cwd, ['add', '--', 'tracked.txt']);
   runGit(cwd, ['commit', '--quiet', '-m', 'Initial commit']);

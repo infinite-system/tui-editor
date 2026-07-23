@@ -1,6 +1,6 @@
-# Fable — a terminal code editor
+# Invar — a terminal code editor
 
-Desktop-editor ergonomics, in the terminal. Fable is a fast, mouse- and keyboard-driven
+Desktop-editor ergonomics, in the terminal. Invar is a fast, mouse- and keyboard-driven
 code workspace that runs entirely in your terminal — a file tree, a real text editor with
 word wrap and wide/emoji-aware columns, fuzzy go-to-file, find & replace, a git panel with
 side-by-side diffs and staging, a command palette, settings, and tabs. Built on
@@ -8,6 +8,17 @@ side-by-side diffs and staging, a command palette, settings, and tabs. Built on
 
 The design goal: a newcomer can learn it in ~15 minutes — every action has a visible,
 clickable affordance, and no capability requires a memorized motion.
+
+> **Why "Invar"?** [Invar](https://en.wikipedia.org/wiki/Invar) is the iron–nickel alloy
+> discovered by Charles Édouard Guillaume in 1896 — named from *invariable*, because its
+> thermal expansion is near zero. Precision clocks and measuring instruments were built
+> from it for one reason: **it does not drift**. This editor is built the same way — every
+> module carries an explicit invariants contract, and a merge gate keeps the structure
+> from drifting, no matter how much heat the codebase takes. (Guillaume got the 1920
+> Nobel Prize in Physics for the alloy. We just got an editor.)
+>
+> And the binary is **`iv`** — which is `vi`, reversed. On purpose. Same terminal,
+> opposite philosophy: nothing to memorize, everything visible.
 
 ## Quickstart
 
@@ -23,8 +34,8 @@ Full run/build/test instructions live in [`project.build.md`](./project.build.md
 Build a standalone binary:
 
 ```bash
-bun run build          # → dist/fable  (self-contained executable)
-./dist/fable .
+bun run build          # → dist/iv  (self-contained executable)
+./dist/iv .
 ```
 
 ## Built with Invariant-Based Reasoning (IBR)

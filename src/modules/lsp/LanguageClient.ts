@@ -408,7 +408,7 @@ class $LanguageClient {
 
       const initializeResult = await transport.request<unknown>('initialize', {
         processId: process.pid,
-        clientInfo: { name: 'Fable', version: '0.1.0' },
+        clientInfo: { name: 'Invar', version: '0.1.0' },
         rootUri: pathToFileURL(resolvePath(this.rootPath)).href,
         workspaceFolders: [
           {

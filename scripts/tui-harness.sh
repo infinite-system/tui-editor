@@ -22,7 +22,7 @@ frame_path()  { echo "$ROOT/artifacts/frame-$1.json"; }
 STATUS="$ROOT/artifacts/status.json" # legacy fallback for single-arg field/status
 BUN="${BUN:-$HOME/.bun/bin/bun}"
 BUN_BIN="$(dirname "$BUN")"          # real bun dir, captured BEFORE we isolate HOME below
-# Per-worktree isolated HOME: each ROOT (worktree) gets its OWN ~/.config/fable/settings.json, so
+# Per-worktree isolated HOME: each ROOT (worktree) gets its OWN ~/.config/invar/settings.json, so
 # concurrent gate runs in different worktrees never share it (or clobber the real ~/.config).
 HARNESS_HOME="$ROOT/artifacts/home"
 
@@ -73,7 +73,7 @@ case "$cmd" in
     rm -f "$STATUS"
     tmux new-session -d -s "$session" -x "$cols" -y "$rows"
     rm -f "$(status_path "$session")" "$(frame_path "$session")"
-    mkdir -p "$HARNESS_HOME/.config/fable"
+    mkdir -p "$HARNESS_HOME/.config/invar"
     # Run inside the repo with a WORKTREE-LOCAL HOME (isolated ~/.config, never shared/clobbered),
     # the real bun on PATH (captured before isolation), and a session-scoped side channel.
     tmux send-keys -t "$session" "cd '$ROOT' && HOME='$HARNESS_HOME' PATH='$BUN_BIN':\"\$PATH\" TUI_STATUS_PATH='$(status_path "$session")' TUI_FRAME_PATH='$(frame_path "$session")' $* " C-m

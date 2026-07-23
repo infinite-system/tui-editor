@@ -15,7 +15,7 @@ import { TextDocument } from '../src/modules/editor/TextDocument';
 import { EditorCoordinates } from '../src/modules/editor/EditorCoordinates';
 
 const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
-const workspaceRoot = mkdtempSync(join(tmpdir(), 'fable-lsp-drive-'));
+const workspaceRoot = mkdtempSync(join(tmpdir(), 'invar-lsp-drive-'));
 let failures = 0;
 
 function check(label: string, passed: boolean, detail: unknown): void {

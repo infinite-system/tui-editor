@@ -1,4 +1,4 @@
-# Implementation Plan — Fable TUI Code Workspace
+# Implementation Plan — Invar TUI Code Workspace
 
 Governing spec: [`project.brief.md`](./project.brief.md).
 Governing method: IBR + the `/invariants` skill. This document is the build plan; the

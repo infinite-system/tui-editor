@@ -79,7 +79,7 @@ strongest signals so far; feed back to the skills.
   piping through tail/tee masks exit codes — capture the real status (`; echo exit=$?` without a
   pipe on the checked command). Same note belongs in the verify skill.
 - **Cross-review earns its keep — and even a strong reviewer can be wrong on a fact.** *(evidence)*
-  Fable and Opus disagreed on an empirical claim (tsc pass/fail); the disagreement surfaced a real
+  Invar and Opus disagreed on an empirical claim (tsc pass/fail); the disagreement surfaced a real
   bug AND the masking trap. Validates the §5.4 independent-panel design and the rule that the
   executor must verify contested empirical facts firsthand.
 
@@ -118,7 +118,7 @@ strongest signals so far; feed back to the skills.
   *(moderate)* Field-init `x = new Y.Class()` PASSES *Imported dependencies are read late* (it's a
   construction-time read, not module-scope) but VIOLATES *Construction goes through overridable
   seams* (hard-coded concrete class, no override point; fix = `createX()` factory methods). BOTH
-  the Fable and Opus audits missed it — they checked the late-read/circular rule and treated
+  the Invar and Opus audits missed it — they checked the late-read/circular rule and treated
   field-init construction as clean; the human caught it. **Proposed:** the analyze step must test
   seam-ness separately from late-ness, and flag field-initializer `new X.Class()` explicitly.
   Strong evidence that a human-in-loop catches what parallel AI audits converge on and miss.

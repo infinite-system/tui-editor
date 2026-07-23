@@ -18,7 +18,7 @@ import { GitWatcher } from '../GitWatcher';
 // also covered end-to-end by scripts/smoke-git-watch.sh). Skip cleanly when the OS can't open a watch,
 // so the merge gate is not blocked by an unavailable OS capability; on real hardware the tests run.
 const FS_WATCH_AVAILABLE = (() => {
-  const probeDirectory = mkdtempSync(join(tmpdir(), 'fable-fswatch-probe-'));
+  const probeDirectory = mkdtempSync(join(tmpdir(), 'invar-fswatch-probe-'));
   try {
     const handle = watch(probeDirectory, () => {});
     handle.close();
@@ -59,7 +59,7 @@ function git(cwd: string, arguments_: string[]): void {
 /** A temp git repository with a real `node_modules/` gitignore, a large-ish ignored subtree, and
  *  tracked nested files. Returns the repository root; the caller removes it. */
 function makeRepository(): string {
-  const cwd = mkdtempSync(join(tmpdir(), 'fable-git-watch-'));
+  const cwd = mkdtempSync(join(tmpdir(), 'invar-git-watch-'));
   git(cwd, ['init', '-q']);
   git(cwd, ['config', 'user.email', 'test@example.com']);
   git(cwd, ['config', 'user.name', 'Test']);
@@ -83,7 +83,7 @@ function makeRepository(): string {
 }
 
 test('watcher disposal cancels a pending refresh', async () => {
-  const cwd = mkdtempSync(join(tmpdir(), 'fable-git-watch-'));
+  const cwd = mkdtempSync(join(tmpdir(), 'invar-git-watch-'));
   let refreshCount = 0;
   const repository = {
     async refresh(): Promise<void> {

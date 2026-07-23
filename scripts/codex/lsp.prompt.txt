@@ -1,8 +1,8 @@
-You are implementing ONE module of the Fable TUI code workspace: a fast terminal code editor on Bun + ivue + OpenTUI + Tree-sitter + git. You are one of several codex workers building disjoint modules in parallel, each in its own git worktree. Work ONLY in your worktree (your cwd), on your module.
+You are implementing ONE module of the Invar TUI code workspace: a fast terminal code editor on Bun + ivue + OpenTUI + Tree-sitter + git. You are one of several codex workers building disjoint modules in parallel, each in its own git worktree. Work ONLY in your worktree (your cwd), on your module.
 
 == READ IN FULL BEFORE CODING (do not skim — this is the context you need to do it well) ==
 At your worktree root:
-- FABLE_TUI_EDITOR_BUILD_BRIEF_FINAL.md — the WHOLE brief (product thesis, scope, the 37 architectural invariants, verification, your module's milestone section). Read all of it.
+- INVAR_TUI_EDITOR_BUILD_BRIEF_FINAL.md — the WHOLE brief (product thesis, scope, the 37 architectural invariants, verification, your module's milestone section). Read all of it.
 - project.invariants.md — ALL project invariants (the generators your module must uphold) + project.lattice.md (how they compose).
 - project.ivue-reference.md — the ivue implementation reference incl. the FLYWEIGHT pattern (copy it for any high-cardinality data). AUTHORITATIVE for ivue code.
 - project.decisions.md (the 10 ivue decisions), project.architecture.md, project.implementation-plan.md (§3 module/file conventions, §4 milestones).

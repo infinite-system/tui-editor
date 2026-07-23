@@ -91,16 +91,16 @@ PY
 }
 
 echo "== build narrow overflowing repository fixture =="
-mkdir -p "$overflow_workspace/.fable"
+mkdir -p "$overflow_workspace/.invar"
 printf '%s\n' \
   '{"sidebarWidth":28,"scrollbarThickness":1,"horizontalScrollModifier":"alt","linesPerNotch":3,"gitSplitRatio":0.5}' \
-  > "$overflow_workspace/.fable/settings.json"
+  > "$overflow_workspace/.invar/settings.json"
 (
   cd "$overflow_workspace" || exit 1
   git init -q
   git config user.name scrollbar-smoke
   git config user.email scrollbar-smoke@example.com
-  printf '.fable/\n' > .gitignore
+  printf '.invar/\n' > .gitignore
   printf 'base\n' > base.txt
   for file_number in $(seq -w 1 50); do printf 'short\n' > "short-$file_number.txt"; done
   git add .gitignore base.txt short-*.txt
@@ -149,14 +149,14 @@ send_option_wheel_right "$overflow_session" 10 22 30
 if frame_contains "$overflow_frame" 'LOG-END-MARKER'; then pass "Option-wheel reveals the commit subject tail"; else fail "Option-wheel did not reveal the commit subject tail"; fi
 
 echo "== fitting tree + git panes paint no horizontal bar =="
-mkdir -p "$fits_workspace/.fable"
-printf '%s\n' '{"sidebarWidth":28,"scrollbarThickness":1,"gitSplitRatio":0.5}' > "$fits_workspace/.fable/settings.json"
+mkdir -p "$fits_workspace/.invar"
+printf '%s\n' '{"sidebarWidth":28,"scrollbarThickness":1,"gitSplitRatio":0.5}' > "$fits_workspace/.invar/settings.json"
 (
   cd "$fits_workspace" || exit 1
   git init -q
   git config user.name scrollbar-smoke
   git config user.email scrollbar-smoke@example.com
-  printf '.fable/\n' > .gitignore
+  printf '.invar/\n' > .gitignore
   printf 'one\n' > a.txt
   git add .gitignore a.txt
   git commit -qm fit

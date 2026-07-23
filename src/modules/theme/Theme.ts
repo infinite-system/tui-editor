@@ -45,7 +45,7 @@ class $Theme {
     if (PALETTES[name]) this.paletteName.value = name;
   }
   toggleDark(): void {
-    this.paletteName.value = this.paletteName.value === DARK.name ? 'fable-light' : DARK.name;
+    this.paletteName.value = this.paletteName.value === DARK.name ? 'invar-light' : DARK.name;
   }
   setColorDepth(d: ColorDepth): void {
     this.colorDepth.value = d;

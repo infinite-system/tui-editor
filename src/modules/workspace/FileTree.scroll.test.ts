@@ -12,7 +12,7 @@ import { join } from 'node:path';
 let treeRoot = '';
 
 beforeEach(() => {
-  treeRoot = makeTemporaryDirectorySync(join(temporaryDirectory(), 'fable-tree-scroll-'));
+  treeRoot = makeTemporaryDirectorySync(join(temporaryDirectory(), 'invar-tree-scroll-'));
   for (let fileNumber = 0; fileNumber < 20; fileNumber += 1) {
     writeFileSync(join(treeRoot, `file-${String(fileNumber).padStart(2, '0')}.txt`), 'x');
   }

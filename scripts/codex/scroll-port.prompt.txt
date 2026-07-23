@@ -1,4 +1,4 @@
-You are a scoped worker on the Fable TUI code editor (Bun + ivue + OpenTUI + Tree-sitter). Work ONLY
+You are a scoped worker on the Invar TUI code editor (Bun + ivue + OpenTUI + Tree-sitter). Work ONLY
 in your current directory (a git worktree). Do exactly the task below, verify it empirically, and
 STOP. Do NOT commit (the reviewer commits). Do NOT delete files you did not create. Do NOT modify
 `src/modules/ui/scroll-momentum.ts` (the physics is done + tested — REUSE it). Install nothing.

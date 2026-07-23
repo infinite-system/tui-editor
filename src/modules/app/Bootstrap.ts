@@ -151,8 +151,8 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   // Theme + glyph mode are settings-driven (single source): the panel edits settings.theme /
   // settings.glyphMode, and these reactive hooks PUSH the change into the Theme so it live-applies with
   // no restart. GOTCHA reconciled here: the panel's theme option strings ('dark'/'light') are NOT the
-  // palette keys ('fable-dark'/'fable-light') — map explicitly, never by string concat.
-  const THEME_OPTION_TO_PALETTE_KEY: Record<string, string> = { dark: 'fable-dark', light: 'fable-light' };
+  // palette keys ('invar-dark'/'invar-light') — map explicitly, never by string concat.
+  const THEME_OPTION_TO_PALETTE_KEY: Record<string, string> = { dark: 'invar-dark', light: 'invar-light' };
   app.$watchEffect(() => {
     const paletteKey = THEME_OPTION_TO_PALETTE_KEY[settings.theme.value] ?? settings.theme.value;
     theme.setPalette(paletteKey);

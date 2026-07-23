@@ -1,4 +1,4 @@
-# Build Progress — Fable TUI Code Workspace
+# Build Progress — Invar TUI Code Workspace
 
 Live status ledger for the autonomous build. Updated every turn so state survives context
 compaction. **If you are resuming: read this, then `project.handoff.md`, then continue at the first
@@ -125,7 +125,7 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
         + One-Writer halt. (In flight: VERTICAL_MOMENTUM profile.)
   - [ ] F. Fast-scroll MODIFIER (velocity/step multiplier on top of E), modifier read from SETTINGS
         (not hardwired — Ctrl+wheel is terminal-swallowed like shift; awaiting user's confirmed key+SGR).
-  - [ ] G. SETTINGS PANEL (approved): reactive settings.json (~/.config/fable/ + project override),
+  - [ ] G. SETTINGS PANEL (approved): reactive settings.json (~/.config/invar/ + project override),
         ivue reactive state so changes LIVE-APPLY (no restart); Ctrl+, opens it as a pane. Seeds: scroll
         physics (fling ceiling/accel/friction/lines-per-notch), h-scroll modifier (default Option/Meta),
         fast-scroll modifier+multiplier, scrollbar thickness (default = D's averaged constant), glyph mode
@@ -201,7 +201,7 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       dropLive logic, so ~28fps at rest was real THEN and is fixed NOW. The measurement was correct
       for a stale build; it was not a false-green in shipped code. The real gap it exposed — that
       quiescence was measured-once, not enforced-always — is now closed by the smoke assertion.
-      BUILD TARGET: `bun run build:prod` -> dist/fable standalone (--external web-tree-sitter unblocks
+      BUILD TARGET: `bun run build:prod` -> dist/invar standalone (--external web-tree-sitter unblocks
       --compile; lazy wasm never fires as tree-sitter is unwired; project.build.md documents run modes +
       the ship-wasm-when-wired follow-up) (bae00b7). Worker D's project.performance-baselines.md folds in on
       merge (its idle numbers are the stale pre-fix build; other metrics — RSS itemization, lifecycle,
@@ -263,9 +263,9 @@ unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
       by a smoke regression (23 assertions).
 
 ### FLEET (launched this turn; worktree-isolated; coordinator merges serially)
-- Worker A (Sub-Fable): items 3-remainder + 4 — ContextMenu + right-click + Ctrl/Shift-click +
+- Worker A (Sub-Invar): items 3-remainder + 4 — ContextMenu + right-click + Ctrl/Shift-click +
   tooltips. Worker B: item 5 — inline commit expansion. Worker C: item 6 — word-wrap mode.
-- Worker D (Sub-Fable, verification): item 8 — perf-baselines script + project.performance-baselines.md.
+- Worker D (Sub-Invar, verification): item 8 — perf-baselines script + project.performance-baselines.md.
 - codex #1: item 7 — momentum parity port (worktree codex-momentum, log .claude/worktrees/codex-momentum.log).
 - codex #2: item 9 stable partition — Static conversions (worktree codex-static, per-file commits).
 - COORDINATOR (me): item 11 scroll-feel regression tune (after codex lands — same code), reviews +
@@ -379,7 +379,7 @@ why this works); `focusHandler` handles exactly `\x1B[I`/`\x1B[O`.
   workspaceTabPosition top vs left moves the strip (FrameProbe).
 
 **THEN (fan out disjoint workers):** 5 invariants.md bootstraps (kernel/storage/syntax/theme/commands —
-REAL load-bearing, each shrinks the map-gate allowlist + weaves the module tier into lattice; Fable workers,
+REAL load-bearing, each shrinks the map-gate allowlist + weaves the module tier into lattice; Invar workers,
 judgment-heavy, gate via check_invariants.mjs) · UI polish (grip handles, context-menu adaptive positioning,
 tab count ▾ caret, git-glyph row simplification [remove checkbox; LOCKED pencil/✗/+/?/→ + section stage-all],
 file-tree tighter indent + remove chevron) · project-replace (after ripgrep) · piece-table undo.
@@ -634,12 +634,12 @@ Disease = build-but-don't-wire. Session frontier HEAD **c7ee4d8**. Progress:
      an e2e test FAILS the gate. Turns "every setting must actually apply" into an enforced invariant, not
      a hope. Implement alongside the settings-wiring TAIL (item 10).
  12. Low-pri: symlink node_modules ignore-robustness; fast-scroll modifier [F] (awaiting key); tab-dropdown keyboard nav.
-- **BUDGET RULE (coordinator):** codex = DEFAULT worker for almost everything; Fable/opus only for the
-  genuinely hard reasoning, and keep the concurrent Fable/opus count MODEST. codex never trusted with deletions.
+- **BUDGET RULE (coordinator):** codex = DEFAULT worker for almost everything; Invar/opus only for the
+  genuinely hard reasoning, and keep the concurrent Invar/opus count MODEST. codex never trusted with deletions.
 - **State:** 269 tests pass · tsc green · checker 0 · conventions-gate PASS (now hard-blocks tsc-fail) ·
   smoke-editor + smoke-tabs + smoke-tree-scroll ALL-PASS (incl. idle frame-delta==0). `conventions @ f41a241`.
 - **LANDED SINCE THE 4-WORKER MERGES (newest first):** tooltip centered-over-cursor (A, c69ec4a) ·
-  Settings MODEL layer merged (G-model, b612f22: reactive settings.json ~/.config/fable + project
+  Settings MODEL layer merged (G-model, b612f22: reactive settings.json ~/.config/invar + project
   override, live-apply, fake-fs seam, 9 tests) · tab-bar QA — clickable right-pinned arrows (one
   geometry source), positional cycle, hover/press states, close padding (56d2772, smoke-tabs.sh) ·
   higher vertical fling ceiling (E, 85d4343: VERTICAL_MOMENTUM max 220/impulse 34; horizontal
@@ -814,7 +814,7 @@ Disease = build-but-don't-wire. Session frontier HEAD **c7ee4d8**. Progress:
 - ivue gotcha found: `$stopEffects()` clears ref-getter STATE cells (not just effects) — only call it
   on effect-owning classes (see project.skill-upgrades.md).
 - Remaining codex-buildable modules (later): `diff`, and `commands`/`keybindings` extensions for M7.
-- Audits done: Fable + Opus on M1–M3 (broadly sound; coordinate + reactive-frame the deep gaps). tsc-masking trap noted.
+- Audits done: Invar + Opus on M1–M3 (broadly sound; coordinate + reactive-frame the deep gaps). tsc-masking trap noted.
 
 ## Rework backlog (audits + own review)
 1. Reactive frame effect absent — imperative render() in Bootstrap. → wiring NOW (ui.invariants "Rendering is one coarse frame effect").

@@ -58,7 +58,7 @@ describe('Workspace.scrollGitLog (window scroll, cost-tracks-observed-set)', () 
 
 describe('Workspace.tickScrollAnimations', () => {
   test('advances every injected momentum state by whole cells and stays active while any glide moves', () => {
-    const treeRoot = makeTemporaryDirectorySync(join(temporaryDirectory(), 'fable-momentum-tree-'));
+    const treeRoot = makeTemporaryDirectorySync(join(temporaryDirectory(), 'invar-momentum-tree-'));
     try {
       for (let fileNumber = 0; fileNumber < 12; fileNumber += 1) {
         writeFileSync(join(treeRoot, `file-${fileNumber}.txt`), `${fileNumber}`);

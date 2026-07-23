@@ -43,8 +43,8 @@ it correctly read the OpenTUI Zig + compiled buffer source to find the 4-lane la
 - **0 workers in flight.** All prior codex/subagent delegations merged or closed. The 4 merged
   capability workers (perf-baselines, word-wrap, context-menu, wheel-momentum-parity) + the diff-core
   codex worker are all landed/merged. No detached `codex exec` running.
-- **NEXT to delegate (post-resume, per the budget rule — codex = default worker, Fable/opus only for
-  hard reasoning, keep concurrent Fable count MODEST):** SEARCH SUITE = 4 codex workers (fuzzy
+- **NEXT to delegate (post-resume, per the budget rule — codex = default worker, Invar/opus only for
+  hard reasoning, keep concurrent Invar count MODEST):** SEARCH SUITE = 4 codex workers (fuzzy
   quick-open reusing CommandScoring.fuzzyScore; in-file find/replace; ripgrep find-in-files panel;
   project-wide replace) — isolated new-file capability builds, ideal for codex. The dead-setting wiring
   fixes (wordWrap/gitSplitRatio), the scrollbar panes, the splitter drag, and the git-panel row
@@ -61,12 +61,12 @@ suggestions. (2) Delegating ANY task whose natural solution touches a file the m
 editing (RootView) is a mistake even when the spec forbids it — the worktree base goes stale under my
 commits, so a merge would clobber. RULE: while the main loop owns + actively edits RootView, do not
 delegate settings/wiring work that lives near it; delegate only genuinely DISJOINT leaf modules, and
-prefer Fable subagents (which honor scope better) over codex for anything requiring judgment about what
+prefer Invar subagents (which honor scope better) over codex for anything requiring judgment about what
 NOT to touch. This reinforces the pre-existing "SERIALIZE RootView, PARALLELIZE disjoint" rule.
 
 ## Full-power checkpoint @ HEAD 3451999 (2026-07-21)
 
-- **0 workers of mine in flight.** This session I did NOT spawn codex/Fable workers — the capabilities
+- **0 workers of mine in flight.** This session I did NOT spawn codex/Invar workers — the capabilities
   came from the COORDINATOR's conductor-* worktrees (built cold-start, sanity-passed, handed to me to
   adopt). Nothing of mine to reconcile/orphan.
 - **Coordinator's conductor-* branches** (adopt = merge→wire→driving-smoke in ONE commit under merge-gate):
@@ -77,5 +77,5 @@ NOT to touch. This reinforces the pre-existing "SERIALIZE RootView, PARALLELIZE 
   (delegates never commit; main reviews+merges; codex never trusted with deletions; a worker's task whose
   natural solution touches actively-edited RootView must NOT be delegated — SERIALIZE RootView, mine).
 - **When to fan out (per the coordinator's full-power directive):** the DISJOINT judgment-heavy work — the
-  5 invariants.md bootstraps (kernel/storage/syntax/theme/commands, Fable workers, gate via
+  5 invariants.md bootstraps (kernel/storage/syntax/theme/commands, Invar workers, gate via
   check_invariants.mjs) — is the prime fan-out candidate; RootView wiring stays serial/mine.

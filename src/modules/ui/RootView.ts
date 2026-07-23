@@ -348,7 +348,7 @@ function $buildRootView(
 
   const EMPTY_STATE = [
     '',
-    '   Fable — a terminal code workspace',
+    '   Invar — a terminal code workspace',
     '',
     '   ↑/↓  navigate files      Enter  open / expand',
     '   Tab  switch pane         Ctrl+P command palette',

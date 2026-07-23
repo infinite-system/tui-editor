@@ -1,5 +1,5 @@
 {
-  "name": "tui-editor",
+  "name": "invar",
   "module": "index.ts",
   "type": "module",
   "private": true,
@@ -19,7 +19,7 @@
   "scripts": {
     "start": "bun src/main.ts .",
     "dev": "bun src/main.ts",
-    "build": "bun build --compile --minify --external web-tree-sitter src/main.ts --outfile dist/fable",
+    "build": "bun build --compile --minify --external web-tree-sitter src/main.ts --outfile dist/iv",
     "build:prod": "bun run build",
     "typecheck": "tsc --noEmit",
     "test": "bun test",

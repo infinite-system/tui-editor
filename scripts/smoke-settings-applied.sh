@@ -17,7 +17,7 @@ ROOT="$(cd "$DIR/.." && pwd)"
 H="$DIR/tui-harness.sh"
 BUN="$HOME/.bun/bin/bun"
 SETTINGS_HOME="$(mktemp -d /tmp/tui-sa-home.XXXXXX)"   # per-run isolated HOME — never the real ~/.config, never shared across concurrent runs
-SET="$SETTINGS_HOME/.config/fable/settings.json"
+SET="$SETTINGS_HOME/.config/invar/settings.json"
 mkdir -p "$(dirname "$SET")"
 export PATH="$HOME/.bun/bin:$PATH"
 
