@@ -102,6 +102,27 @@ expect_row_background() {
   fi
 }
 
+# Screen row index of the first frame row whose text contains the marker, or -1. Used to click a list
+# item by its rendered position instead of a hardcoded row — robust to any layout shift. Unlike the
+# top-anchored tree/changes lists, the commit log is bottom-anchored, so a uniform strip offset does
+# not describe its row; locating the item text directly does.
+frame_row_of() {
+  local row_marker="$1"
+  FRAME_PATH="$repository_root/artifacts/frame-$session_name.json" ROW_MARKER="$row_marker" python3 - <<'PY'
+import json
+import os
+
+with open(os.environ['FRAME_PATH'], encoding='utf-8') as frame_file:
+    rows = json.load(frame_file)['rows']
+for row_index, row in enumerate(rows):
+    if os.environ['ROW_MARKER'] in row.get('text', ''):
+        print(row_index)
+        break
+else:
+    print(-1)
+PY
+}
+
 echo '== build a repository with overflowing tree, changes, and commit-log lists =='
 for directory_number in $(seq -w 1 20); do
   mkdir "$fixture_root/directory-$directory_number"
@@ -133,21 +154,28 @@ else
   exit "$failure_count"
 fi
 
+# Height-robust content offset: the tree/changes/log lists (and the whole UI below the workspace tab
+# strip) shift down by this many rows when the strip grows past 1 line (two-line workspace tabs ->
+# offset 1). Every hardcoded list-row click/scroll/hover y below adds it, so the smoke passes at any
+# strip height. Derived from the rendered frame, not a compiled-in constant.
+content_offset="$("$harness" content-offset "$session_name" 2>/dev/null)"; content_offset="${content_offset:-0}"
+
 echo '== file tree: click, hover, wheel, blur, refocus, and open preserve one selection =='
-# Tree index 15 is directory-15 (.git is index 0); screen row = index + 2 before scrolling.
-"$harness" click "$session_name" 10 17 >/dev/null
+# Tree index 15 is directory-15 (.git is index 0); screen row = index + 2 before scrolling, plus the
+# workspace-strip height offset.
+"$harness" click "$session_name" 10 $((17 + content_offset)) >/dev/null
 settle
 expect_equal "$(field treeSelected)" '15' 'tree click selected item 15'
 expect_equal "$(field focus)" 'files' 'directory click kept tree keyboard focus'
 expect_row_background 'directory-15' "$focused_selection_color" 'focused tree selection paints the full token'
 
 # Real pointer motion over another row changes hover only.
-tmux send-keys -t "$session_name" -l "$(printf '\033[<35;11;7M')"
+tmux send-keys -t "$session_name" -l "$(printf '\033[<35;11;%dM' "$((7 + content_offset))")"
 settle
 expect_equal "$(field treeSelected)" '15' 'tree hover did not move selection'
 
 tree_selection_before_scroll="$(field treeSelected)"
-"$harness" scroll "$session_name" 10 17 down 1 >/dev/null
+"$harness" scroll "$session_name" 10 $((17 + content_offset)) down 1 >/dev/null
 settle
 expect_equal "$(field treeSelected)" "$tree_selection_before_scroll" 'tree wheel kept the selected item'
 expect_greater_than "$(field treeScrollTop)" '0' 'tree wheel moved only the viewport'
@@ -180,8 +208,8 @@ echo '== git changes: click selection survives hover, scroll, blur, and keyboard
 "$harness" send "$session_name" C-g >/dev/null
 sleep 0.8
 settle
-# Changes row index 10 is file-10.txt; screen row = index + 3 at scrollTop 0.
-"$harness" click "$session_name" 10 13 >/dev/null
+# Changes row index 10 is file-10.txt; screen row = index + 3 at scrollTop 0, plus the strip offset.
+"$harness" click "$session_name" 10 $((13 + content_offset)) >/dev/null
 settle
 expect_equal "$(field gitRegion)" 'changes' 'changes click focused the changes region'
 expect_equal "$(field gitChangesIndex)" '10' 'changes click selected item 10'
@@ -192,12 +220,12 @@ expect_row_background 'file-10.txt' "$unfocused_selection_color" 'clicked change
 settle
 expect_row_background 'file-10.txt' "$changes_focused_selection_color" 'refocused changes selection paints the full token'
 
-tmux send-keys -t "$session_name" -l "$(printf '\033[<35;11;7M')"
+tmux send-keys -t "$session_name" -l "$(printf '\033[<35;11;%dM' "$((7 + content_offset))")"
 settle
 expect_equal "$(field gitChangesIndex)" '10' 'changes hover did not move selection'
 
 changes_selection_before_scroll="$(field gitChangesIndex)"
-"$harness" scroll "$session_name" 10 13 down 1 >/dev/null
+"$harness" scroll "$session_name" 10 $((13 + content_offset)) down 1 >/dev/null
 settle
 expect_equal "$(field gitChangesIndex)" "$changes_selection_before_scroll" 'changes wheel kept the selected item'
 expect_greater_than "$(field changesScrollTop)" '0' 'changes wheel moved only the viewport'
@@ -215,8 +243,11 @@ expect_equal "$(field gitChangesIndex)" '11' 'refocused changes arrow resumed on
 expect_row_background 'file-11.txt' "$changes_focused_selection_color" 'keyboard-moved changes selection paints full token'
 
 echo '== commit log: click selection survives scroll and blur, then keyboard resumes =='
-# Commit-log row 10 is commit-14 before expansion; it is at screen row 29 in this fixed fixture.
-"$harness" click "$session_name" 10 29 >/dev/null
+# Commit-log row 10 is commit-14 before expansion. The commit log is bottom-anchored (unlike the
+# top-anchored tree/changes lists it does not travel with the strip), so click its rendered row found
+# directly in the frame rather than a hardcoded/offset row.
+commit_log_row="$(frame_row_of 'commit-14')"
+"$harness" click "$session_name" 10 "$commit_log_row" >/dev/null
 sleep 0.6
 settle
 expect_equal "$(field gitRegion)" 'log' 'commit click focused the log region'
@@ -224,7 +255,7 @@ expect_equal "$(field gitLogIndex)" '10' 'commit click selected flat item 10'
 expect_row_background 'commit-14' "$focused_selection_color" 'focused commit selection paints the full token'
 
 log_selection_before_scroll="$(field gitLogIndex)"
-"$harness" scroll "$session_name" 10 29 down 1 >/dev/null
+"$harness" scroll "$session_name" 10 "$commit_log_row" down 1 >/dev/null
 settle
 expect_equal "$(field gitLogIndex)" "$log_selection_before_scroll" 'log wheel kept the selected item'
 expect_greater_than "$(field gitLogScrollTop)" '0' 'log wheel moved only the viewport'

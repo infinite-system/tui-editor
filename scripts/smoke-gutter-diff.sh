@@ -67,13 +67,18 @@ frame_has_no_diff_marker() {
 
 open_only_file() {
   local session="$1"
+  # Height-robust: the tree rows shift down when the workspace tab strip grows past 1 line (two-line
+  # workspace tabs -> offset 1). tracked.txt sits at .git+1; derive the strip offset from the frame so
+  # the click lands on it at any strip height.
+  local content_offset
+  content_offset="$("$HARNESS" content-offset "$session" 2>/dev/null)"; content_offset="${content_offset:-0}"
   for _attempt in 1 2 3 4; do
     local active_buffer
     active_buffer="$("$HARNESS" field "$session" activeBuffer 2>/dev/null)"
     if [ -n "$active_buffer" ] && [ "$active_buffer" != "null" ]; then return 0; fi
-    # The workspace strip occupies y=0; the fixture root rows are .git at y=2 and tracked.txt at y=3. Click the
+    # The fixture root rows are .git then tracked.txt (base row 3 for the 1-row strip). Click the
     # visible file affordance directly, avoiding traversal into .git if it begins selected.
-    "$HARNESS" click "$session" 5 3 >/dev/null
+    "$HARNESS" click "$session" 5 $((3 + content_offset)) >/dev/null
   done
   return 1
 }
