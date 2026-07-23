@@ -136,7 +136,16 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   // init completes, so the binding is resolved by then.
   const toggleTerminal = (): void => {
     ensureTerminal();
-    panelHost.toggle();
+    // Symmetric with toggleAgent: activate + show THIS pane when hidden or showing the other pane; hide
+    // only when the terminal is already the visible one. Without the activate(), the button just toggled
+    // slot visibility and left whatever pane was active showing — so opening "terminal" while the agent
+    // was active re-showed the AGENT (the two conflated into one slot). activate() differentiates them.
+    if (panelHost.visible.value && panelHost.activeId.value === 'terminal') {
+      panelHost.hide();
+      return;
+    }
+    panelHost.activate('terminal');
+    panelHost.show();
   };
 
   // The native agent (Claude) pane toggle — same bottom slot as the terminal. Show + activate when the
