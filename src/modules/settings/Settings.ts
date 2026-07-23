@@ -25,7 +25,8 @@ export type WorkspaceTabPosition = 'top' | 'left';
 /** Which TypeScript language server backs LSP. `tsgo` (the native-Go `@typescript/native-preview`
  *  build — ~14 MB vs ~580 MB for the Node family) is the PRIMARY default; `typescript-language-server`
  *  is the fallback. If the chosen binary can't be resolved, resolve() falls back to the other so LSP
- *  still works. */
+ *  still works. NOTE: tsgo (pull-model) does not push diagnostics yet, so RED-SQUIGGLY DIAGNOSTICS
+ *  only appear under `typescript-language-server` until LanguageClient gains pull-diagnostics. */
 export type TypeScriptServer = 'tsgo' | 'typescript-language-server';
 
 /** The full set of settable values — one field per reactive getter on the store. */
