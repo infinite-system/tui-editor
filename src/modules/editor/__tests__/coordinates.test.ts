@@ -89,3 +89,64 @@ test('graphemeAtDisplayColumn clamps past end-of-line and below zero', () => {
   expect(EditorCoordinates.Class.graphemeAtDisplayColumn('ab', 99)).toBe(2); // caret after the last char
   expect(EditorCoordinates.Class.graphemeAtDisplayColumn('ab', -5)).toBe(0);
 });
+
+// --- Horizontal flyweight: the prefix-sum index must be BEHAVIOURALLY identical to the old linear
+//     scan, and must keep per-call cost sub-linear so a selection drag over a single 500k-column line
+//     (a minified .js.map) stays smooth. Regression guard for "Cost tracks the actively observed set".
+
+// Reference implementations = the pre-index linear algorithms, kept here as the oracle to diff against.
+function referenceDisplayColumn(line: string, graphemeIndex: number, tabWidth = 4): number {
+  const clusters = [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(line)].map((s) => s.segment);
+  const limit = Math.max(0, Math.min(graphemeIndex, clusters.length));
+  let column = 0;
+  for (let index = 0; index < limit; index++) {
+    const cluster = clusters[index] ?? '';
+    column += cluster === '\t' ? tabWidth - (column % tabWidth) : EditorCoordinates.Class.graphemeWidth(cluster);
+  }
+  return column;
+}
+function referenceGraphemeAtDisplayColumn(line: string, targetColumn: number, tabWidth = 4): number {
+  if (targetColumn <= 0) return 0;
+  const clusters = [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(line)].map((s) => s.segment);
+  let column = 0;
+  for (let index = 0; index < clusters.length; index++) {
+    const cluster = clusters[index] ?? '';
+    const width = cluster === '\t' ? tabWidth - (column % tabWidth) : EditorCoordinates.Class.graphemeWidth(cluster);
+    if (targetColumn < column + width) return index;
+    column += width;
+  }
+  return clusters.length;
+}
+
+test('prefix index matches the linear reference across mixed tabs / wide glyphs / emoji', () => {
+  const line = 'const\tx = "中文" + 😀 + `\ttab`;  // café';
+  const count = EditorCoordinates.Class.graphemeCount(line);
+  const width = EditorCoordinates.Class.lineWidth(line);
+  expect(width).toBe(referenceDisplayColumn(line, count));
+  for (let g = 0; g <= count; g++) {
+    expect(EditorCoordinates.Class.displayColumn(line, g)).toBe(referenceDisplayColumn(line, g));
+  }
+  for (let col = -1; col <= width + 2; col++) {
+    expect(EditorCoordinates.Class.graphemeAtDisplayColumn(line, col)).toBe(referenceGraphemeAtDisplayColumn(line, col));
+  }
+});
+
+test('a single 200k-column line: 20k drag-style lookups stay sub-linear (no re-scan per call)', () => {
+  // A minified index.js.map as ONE physical line. A drag re-runs displayColumn/graphemeAtDisplayColumn/
+  // lineWidth every paint; with the prefix index these are O(1)/O(log n) after one build. A regression
+  // to the old O(n) scan would make this loop ~20k*200k = 4e9 ops and blow far past the bound.
+  const hugeLine = 'a'.repeat(200_000);
+  const width = EditorCoordinates.Class.lineWidth(hugeLine); // builds the prefix once
+  expect(width).toBe(200_000);
+  const started = performance.now();
+  let sink = 0;
+  for (let i = 0; i < 20_000; i++) {
+    const column = (i * 9973) % 200_000; // spread across the whole line, incl. deep-right positions
+    sink += EditorCoordinates.Class.graphemeAtDisplayColumn(hugeLine, column);
+    sink += EditorCoordinates.Class.displayColumn(hugeLine, column);
+    sink += EditorCoordinates.Class.lineWidth(hugeLine);
+  }
+  const elapsed = performance.now() - started;
+  expect(sink).toBeGreaterThan(0);
+  expect(elapsed).toBeLessThan(1000); // O(1)/O(log n) finishes in ~10ms; O(n)-per-call cannot
+});

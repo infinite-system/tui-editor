@@ -20,7 +20,13 @@ column readout. Per line (positions are line-relative).
 **Mechanism:** An explicit coordinate model over each line's string converts grapheme ↔ UTF-16 ↔
 display column, accounting for surrogate pairs, combining marks, wide (2-column) glyphs, and tab
 expansion. Realizes the project invariant *A text position has several encodings* inside the
-editor.
+editor. The conversions are backed by per-line, content-memoized indices — a grapheme-boundary
+array AND a display-column prefix-sum (`EditorCoordinates.displayColumnPrefix`) — so `displayColumn`
+/ `lineWidth` are O(1) and `graphemeAtDisplayColumn` an O(log n) binary search after a line is
+scanned once. This is the HORIZONTAL twin of the line flyweight: a selection drag, mouse hit-test,
+or horizontal scroll over a single 500k-column line (a minified `.js.map`) costs index-time per
+frame, not line-length-time — realizing *Cost tracks the actively observed set* along the column
+axis, the same way the visual-row window realizes it along the row axis.
 
 **Generates:** grapheme-safe movement and backspace; a UTF-16 mapping layer for the LSP client;
 a display-column caret and wide/tab-aware rendering; the coordinate test matrix.

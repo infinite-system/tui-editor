@@ -19,6 +19,7 @@ const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 const MEMO_CAP = 512;
 const boundariesMemo = new Map<string, number[]>();
 const clustersMemo = new Map<string, string[]>();
+const displayPrefixMemo = new Map<string, number[]>();
 
 function memoized<Value>(cache: Map<string, Value>, line: string, compute: () => Value): Value {
   const cached = cache.get(line);
@@ -123,22 +124,43 @@ function $graphemeWidth(grapheme: string): number {
   return width === 0 ? 1 : width;
 }
 
-/** Display column at the start of grapheme `graphemeIndex` (tab stops every `tabWidth`). */
-function $displayColumn(line: string, graphemeIndex: number, tabWidth = 4): number {
-  const clusters = $graphemes(line);
-  const limit = Math.max(0, Math.min(graphemeIndex, clusters.length));
-  let column = 0;
-  for (let index = 0; index < limit; index++) {
-    const cluster = clusters[index] ?? '';
-    if (cluster === '\t') column += tabWidth - (column % tabWidth);
-    else column += $graphemeWidth(cluster);
-  }
-  return column;
+/** Cumulative display columns at every grapheme boundary: `[0, colAfterG0, colAfterG1, ...]`, length
+ *  = graphemeCount + 1. `prefix[g]` = the display column at the START of grapheme `g`; the last entry
+ *  is the line's full display width. This is the HORIZONTAL twin of the line flyweight's per-line
+ *  index: segment + width-scan each distinct line ONCE (content-memoized), after which displayColumn /
+ *  lineWidth are O(1) and graphemeAtDisplayColumn an O(log n) binary search — so a selection drag,
+ *  hit-test, or horizontal scroll over a 500k-column single line costs index-time per frame, not
+ *  line-length-time (which re-scanned the whole line every paint and produced the drag lag).
+ *  Memoized only for the default tab width — the sole width any caller uses; a non-default width
+ *  rebuilds directly (correct, just unmemoized) and never touches the hot path.
+ *  invariant: Cost tracks the actively observed set (project.invariants.md) */
+function $displayColumnPrefix(line: string, tabWidth = 4): number[] {
+  const build = (): number[] => {
+    const clusters = $graphemes(line);
+    const prefix: number[] = new Array(clusters.length + 1);
+    prefix[0] = 0;
+    let column = 0;
+    for (let index = 0; index < clusters.length; index++) {
+      const cluster = clusters[index] ?? '';
+      column += cluster === '\t' ? tabWidth - (column % tabWidth) : $graphemeWidth(cluster);
+      prefix[index + 1] = column;
+    }
+    return prefix;
+  };
+  return tabWidth === 4 ? memoized(displayPrefixMemo, line, build) : build();
 }
 
-/** Total display width of a whole line. */
+/** Display column at the start of grapheme `graphemeIndex` (tab stops every `tabWidth`). O(1). */
+function $displayColumn(line: string, graphemeIndex: number, tabWidth = 4): number {
+  const prefix = $displayColumnPrefix(line, tabWidth);
+  const index = Math.max(0, Math.min(graphemeIndex, prefix.length - 1));
+  return prefix[index] ?? 0;
+}
+
+/** Total display width of a whole line. O(1) after the line's prefix is built once. */
 function $lineWidth(line: string, tabWidth = 4): number {
-  return $displayColumn(line, $graphemeCount(line), tabWidth);
+  const prefix = $displayColumnPrefix(line, tabWidth);
+  return prefix[prefix.length - 1] ?? 0;
 }
 
 /**
@@ -148,15 +170,20 @@ function $lineWidth(line: string, tabWidth = 4): number {
  */
 function $graphemeAtDisplayColumn(line: string, targetColumn: number, tabWidth = 4): number {
   if (targetColumn <= 0) return 0;
-  const clusters = $graphemes(line);
-  let column = 0;
-  for (let index = 0; index < clusters.length; index++) {
-    const cluster = clusters[index] ?? '';
-    const width = cluster === '\t' ? tabWidth - (column % tabWidth) : $graphemeWidth(cluster);
-    if (targetColumn < column + width) return index;
-    column += width;
+  const prefix = $displayColumnPrefix(line, tabWidth);
+  const lastGrapheme = prefix.length - 1; // == graphemeCount; prefix[lastGrapheme] = full line width
+  // A hit at/past end-of-line clamps to the grapheme count (caret after the last character).
+  if (targetColumn >= (prefix[lastGrapheme] ?? 0)) return lastGrapheme;
+  // Largest boundary g with prefix[g] <= targetColumn — the grapheme whose cell covers the column
+  // (identical to the old linear "targetColumn < column + width" scan, in O(log n)).
+  let low = 0;
+  let high = lastGrapheme;
+  while (low < high) {
+    const mid = (low + high + 1) >> 1;
+    if ((prefix[mid] ?? 0) <= targetColumn) low = mid;
+    else high = mid - 1;
   }
-  return clusters.length;
+  return low;
 }
 
 /** Clamp a grapheme column to a line's valid range [0, graphemeCount]. */
