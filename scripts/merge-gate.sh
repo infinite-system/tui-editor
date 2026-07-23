@@ -121,5 +121,24 @@ else
 fi
 
 echo ""
-if [ "$fail" = 0 ]; then echo "merge-gate: ALL-PASS"; else echo "merge-gate: FAILURES — commit/merge BLOCKED"; fi
+if [ "$fail" = 0 ]; then
+  echo "merge-gate: ALL-PASS"
+  # Mechanical checks passed — the commit is legit. Now the one thing no checker can do: encode the
+  # invariants you LEARNED. A soft reminder, never a gate — encoding, and especially RETIRING, an
+  # invariant is a HOLISTIC judgment, not a falsifiable check.
+  echo ""
+  echo "  +-- invariant bookkeeping (reminder, not a gate) -------------------------------------"
+  echo "  | ESTABLISHED or revealed an invariant not yet written down? Annotate its load-bearing"
+  echo "  |   line in the same form the existing annotations use, and add/refine its"
+  echo "  |   *.invariants.md entry (Invariant / Mechanism / Generates / Impossible-if-true / Verify)."
+  echo "  | Suspect a change RETIRED one? Do NOT retire it here — mid-feature you may be wrong, and"
+  echo "  |   the call is holistic (other witnesses in the repo? a pervasive APPROACH with no single"
+  echo "  |   annotation? a REALITY truth merely de-scoped?). Just flag a POSSIBLE RETIREMENT"
+  echo "  |   CANDIDATE; a scheduled retirement sweep decides live-or-die with full attention."
+  echo "  | The checker proves annotations resolve and flags dangling ones; the meaning is yours."
+  echo "  |   Re-run: node .claude/skills/invariants/scripts/check_invariants.mjs --all --refs"
+  echo "  +------------------------------------------------------------------------------------"
+else
+  echo "merge-gate: FAILURES — commit/merge BLOCKED"
+fi
 exit "$fail"

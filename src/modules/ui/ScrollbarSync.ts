@@ -7,62 +7,16 @@
 // invariant: A scrollbar track is derived per frame from its region rect (src/modules/ui/ui.invariants.md)
 // invariant: One writer per scroll regime per frame (src/modules/ui/ui.invariants.md)
 // invariant: A scrollable pane height is an input not an output (src/modules/ui/ui.invariants.md)
-import { ScrollBarRenderable, parseColor, type BoxRenderable, type CliRenderer, type ColorInput, type OptimizedBuffer } from '@opentui/core';
+import { ScrollBarRenderable, type BoxRenderable, type CliRenderer, type ColorInput } from '@opentui/core';
 import { Reactive } from 'ivue';
 import { ScrollbarGeometry } from './ScrollbarGeometry';
 import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { EditorWrap } from '../editor/EditorWrap';
 import { GitPaneRenderer, type GitPanelGeometry } from './GitPaneRenderer';
-import { HitTransparentText } from './HitTransparentText';
 import { Logging } from '../system/Logging';
 import type { WorkspaceSet } from '../workspace/WorkspaceSet';
 import type { Theme } from '../theme/Theme';
-import type { Palette } from '../theme/ThemePalettes';
 import type { Tooltip } from './Tooltip';
-
-// OpenTUI paints a horizontal slider as a full-cell rectangle. Terminal cells are ~2× as tall as wide,
-// so a one-row bar reads ~2× as thick as a one-column vertical bar. Repaint the slider's exact thumb
-// rectangle with half-height glyphs so one configured row carries ~one configured column of ink.
-function paintAxisBalancedHorizontalScrollbar(
-  scrollbar: ScrollBarRenderable,
-  buffer: OptimizedBuffer,
-  backgroundColor: ColorInput,
-  trackColor: ColorInput,
-  thumbColor: ColorInput,
-): void {
-  if (!scrollbar.visible) return;
-  const slider = scrollbar.slider;
-  const sliderGeometry = slider as unknown as { getThumbRect?: () => { x: number; y: number; width: number; height: number } };
-  const thumbRectangle = sliderGeometry.getThumbRect?.();
-  if (!thumbRectangle) return;
-  const parsedBackgroundColor = parseColor(backgroundColor);
-  const parsedTrackColor = parseColor(trackColor);
-  const parsedThumbColor = parseColor(thumbColor);
-  for (let row = slider.y; row < slider.y + slider.height; row += 1) {
-    for (let column = slider.x; column < slider.x + slider.width; column += 1) {
-      const insideThumb =
-        column >= thumbRectangle.x && column < thumbRectangle.x + thumbRectangle.width &&
-        row >= thumbRectangle.y && row < thumbRectangle.y + thumbRectangle.height;
-      buffer.setCellWithAlphaBlending(column, row, insideThumb ? '▄' : '▂', insideThumb ? parsedThumbColor : parsedTrackColor, parsedBackgroundColor);
-    }
-  }
-}
-
-class AxisBalancedHorizontalScrollbarPaint extends HitTransparentText {
-  constructor(
-    renderer: CliRenderer,
-    private readonly scrollbar: ScrollBarRenderable,
-    private readonly palette: () => Palette,
-    private readonly backgroundColor: () => ColorInput,
-  ) {
-    super(renderer, { id: `${scrollbar.id}-axis-balanced-paint`, content: ' ', position: 'absolute', left: 0, top: 0, width: 1, height: 1, zIndex: 100, selectable: false });
-  }
-  override render(buffer: OptimizedBuffer, deltaTime: number): void {
-    super.render(buffer, deltaTime);
-    const palette = this.palette();
-    paintAxisBalancedHorizontalScrollbar(this.scrollbar, buffer, this.backgroundColor(), palette.border, palette.accent);
-  }
-}
 
 export interface ScrollbarSyncDeps {
   renderer: CliRenderer;
@@ -113,7 +67,8 @@ class $ScrollbarSync {
         id,
         orientation,
         position: 'absolute',
-        ...(orientation === 'vertical' ? { width: orientation === 'vertical' && id === 'editor-scrollbar-v' ? 1 : 2 } : { height: 1 }),
+        // One settings-sourced thickness for BOTH axes — never a per-bar freestyle (applyBarGeometry re-applies it each frame).
+        ...(orientation === 'vertical' ? { width: deps.scrollbarThicknessCells() } : { height: deps.scrollbarThicknessCells() }),
         showArrows: false,
         ...(trackOptions ? { trackOptions } : {}),
         onChange: (position) => {
@@ -121,11 +76,13 @@ class $ScrollbarSync {
           onChange(position);
         },
       });
-    // Horizontal bars get an axis-balanced repaint (half-height glyphs) + a hover tooltip.
-    const makeHorizontalPaint = (scrollbar: ScrollBarRenderable, backgroundColor: () => ColorInput): AxisBalancedHorizontalScrollbarPaint => {
+    // A horizontal bar renders PLAIN — identical to the git-panel + tooltip bars, at the one
+    // settings-sourced thickness (see applyBarGeometry). No half-height ▄▂ overlay: those glyphs read
+    // as stray dashes on some terminals (macOS Terminal) and sit the bar too high vs the plain bars.
+    // The bar keeps only its hover tooltip.
+    const wireHorizontalTooltip = (scrollbar: ScrollBarRenderable): void => {
       scrollbar.onMouseMove = (event) => deps.tooltip.point('Horizontal scroll — drag or Option+wheel', event.x, event.y);
       scrollbar.onMouseOut = () => deps.tooltip.clear();
-      return new AxisBalancedHorizontalScrollbarPaint(renderer, scrollbar, readPalette, backgroundColor);
     };
 
     this.editorVerticalBar = makeBar('editor-scrollbar-v', 'vertical', (position) => {
@@ -138,7 +95,7 @@ class $ScrollbarSync {
     }, { backgroundColor: readPalette().bg, foregroundColor: readPalette().accent });
     editorArea.add(this.editorVerticalBar);
     editorArea.add(this.editorHorizontalBar);
-    editorArea.add(makeHorizontalPaint(this.editorHorizontalBar, () => readPalette().bg));
+    wireHorizontalTooltip(this.editorHorizontalBar);
 
     this.changesVerticalBar = makeBar('git-changes-scrollbar-v', 'vertical', (position) => {
       workspaceSet.active.haltGitChangesScroll();
@@ -171,9 +128,9 @@ class $ScrollbarSync {
     sidebar.add(this.changesHorizontalBar);
     sidebar.add(this.logVerticalBar);
     sidebar.add(this.logHorizontalBar);
-    sidebar.add(makeHorizontalPaint(this.treeHorizontalBar, () => readPalette().panel));
-    sidebar.add(makeHorizontalPaint(this.changesHorizontalBar, () => readPalette().panel));
-    sidebar.add(makeHorizontalPaint(this.logHorizontalBar, () => readPalette().panel));
+    wireHorizontalTooltip(this.treeHorizontalBar);
+    wireHorizontalTooltip(this.changesHorizontalBar);
+    wireHorizontalTooltip(this.logHorizontalBar);
   }
 
   /** True while applyBarGeometry is writing a bar's reported position — the bars' onChange handlers
