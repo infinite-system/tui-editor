@@ -14,6 +14,9 @@ export interface Palette {
   dim: string;
   accent: string;
   selection: string;
+  /** A softer blue selection background for MULTI-selected rows (git range-select) — reads as "selected"
+   *  and keeps the row text legible, distinct from the subtle grey hover/cursor-line. */
+  selectionMuted: string;
   cursorLine: string;
   added: string;
   modified: string;
@@ -38,7 +41,7 @@ export const DARK: Palette = {
   bg: '#1e1e2e', panel: '#181825', statusBg: '#11111b',
   border: '#313244', borderActive: '#89b4fa',
   fg: '#cdd6f4', dim: '#6c7086', accent: '#89b4fa',
-  selection: '#45475a', cursorLine: '#292c3c',
+  selection: '#45475a', selectionMuted: '#33415e', cursorLine: '#292c3c',
   added: '#a6e3a1', modified: '#f9e2af', deleted: '#f38ba8',
   keyword: '#cba6f7', string: '#a6e3a1', number: '#fab387',
   comment: '#6c7086', func: '#89b4fa', type: '#f9e2af',
@@ -51,7 +54,7 @@ export const LIGHT: Palette = {
   bg: '#eff1f5', panel: '#e6e9ef', statusBg: '#dce0e8',
   border: '#ccd0da', borderActive: '#1e66f5',
   fg: '#4c4f69', dim: '#8c8fa1', accent: '#1e66f5',
-  selection: '#bcc0cc', cursorLine: '#e6e9ef',
+  selection: '#bcc0cc', selectionMuted: '#c9d6f2', cursorLine: '#e6e9ef',
   added: '#40a02b', modified: '#df8e1d', deleted: '#d20f39',
   keyword: '#8839ef', string: '#40a02b', number: '#fe640b',
   comment: '#8c8fa1', func: '#1e66f5', type: '#df8e1d',

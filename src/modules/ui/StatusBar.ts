@@ -97,13 +97,15 @@ class $StatusBar {
       parts.push(`Ln ${editor.cursor.line.value + 1}, Col ${editor.cursor.col.value + 1}`);
       parts.push(`${editor.document.lineCount} lines`);
     }
-    parts.push(
+    // Focus indicator only for the NON-default panes; editing the source is the implicit state, so no
+    // ever-present '[Editor Source]' label (it read as noise — it never told you anything new).
+    const focusLabel =
       workspaceSet.active.focus.value === 'files'
         ? '[Files]'
         : markdownPreviewFocused
           ? '[Markdown Preview]'
-          : '[Editor Source]',
-    );
+          : null;
+    if (focusLabel) parts.push(focusLabel);
     if (workspaceSet.active.focus.value === 'git')
       parts.push('checkbox/Space stage · row/o open · d discard');
     if (app.copyNotice.value) parts.push(app.copyNotice.value);

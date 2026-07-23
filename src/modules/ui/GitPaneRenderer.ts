@@ -161,14 +161,14 @@ function $renderGitPanel(context: GitPaneRenderContext): { text: StyledText; geo
       const selected = rowIndex === gitPanel.changesIndex.value;
       const selectionFocused = active && gitPanel.region.value === 'changes';
       const hovered = rowIndex === gitPanel.changesHovered.value;
-      // Multi-selected rows (Ctrl/Shift-click, right-click) share the hover token — a lower
-      // intensity than the focused row's `selection` bg — until the palette grows a third token.
+      // Every row in a multi-selection (Ctrl/Shift-click, right-click) — including the focused one —
+      // paints the SAME soft-blue `selectionMuted` so the whole range reads as selected and stays
+      // legible (previously the non-focused picks fell back to grey cursorLine and became unreadable).
       const multiSelected = gitPanel.selectedPaths.value.has(row.path);
-      const background = selected
-        ? selectionFocused
-          ? palette.selection
-          : palette.cursorLine
-        : multiSelected || hovered
+      const inSelection = multiSelected || (selected && selectionFocused);
+      const background = inSelection
+        ? palette.selectionMuted
+        : selected || hovered
           ? palette.cursorLine
           : null;
       // ` ☑ M path…            o d ±` — ONE-glyph staging checkbox (theme ladder; click toggles);

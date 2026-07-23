@@ -393,7 +393,10 @@ class $Workspace {
 
   open(root: string): void {
     this.root = root;
-    this.name.value = Files.Class.basename(root) || root;
+    // Name is the actual folder name, never "." — resolve to the absolute path first so a root of "."
+    // (or a trailing-slash path) still yields the real directory name.
+    const absoluteRoot = Files.Class.absolute(root);
+    this.name.value = Files.Class.basename(absoluteRoot) || absoluteRoot;
     this.tree.open(root);
     this.focus.value = 'files';
     // Live-wire git: create the repository + log for this root and kick a non-blocking refresh.
