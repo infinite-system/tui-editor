@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { Breadcrumb } from './Breadcrumb';
+import { TabBarRenderer } from './TabBarRenderer';
 const { breadcrumbSegments, fitBreadcrumb } = Breadcrumb.Class;
 
 describe('breadcrumbSegments', () => {
@@ -46,5 +47,22 @@ describe('fitBreadcrumb', () => {
 
   test('the filename always survives even at width 1', () => {
     expect(fitBreadcrumb(['proj', 'Foo.ts'], 1, sep)).toEqual(['…']);
+  });
+});
+
+describe('breadcrumbNavButtonAt (‹ › history-button geometry)', () => {
+  const { breadcrumbNavButtonAt } = TabBarRenderer.Class;
+  test('the ‹ glyph and its leading pad resolve to back', () => {
+    expect(breadcrumbNavButtonAt(0)).toBe('back');
+    expect(breadcrumbNavButtonAt(1)).toBe('back');
+  });
+  test('the › glyph and its leading pad resolve to forward', () => {
+    expect(breadcrumbNavButtonAt(2)).toBe('forward');
+    expect(breadcrumbNavButtonAt(3)).toBe('forward');
+  });
+  test('the pad before the first crumb and beyond resolve to neither', () => {
+    expect(breadcrumbNavButtonAt(4)).toBeNull();
+    expect(breadcrumbNavButtonAt(10)).toBeNull();
+    expect(breadcrumbNavButtonAt(-1)).toBeNull();
   });
 });

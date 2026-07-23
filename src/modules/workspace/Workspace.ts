@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { FileTree } from './FileTree';
 import { Editor } from '../editor/Editor';
 import { OpenBufferSet } from './OpenBufferSet';
+import { NavigationHistory, type Location } from '../navigation/NavigationHistory';
 import { Files } from '../system/Files';
 import { GitRepository } from '../git/GitRepository';
 import { GitWatcher } from '../git/GitWatcher';
@@ -87,6 +88,11 @@ class $Workspace {
   // live document; clean background tabs dehydrate to a light handle and rehydrate on activation.
   buffers = this.createBufferSet();
   gitPanel = this.createGitPanel();
+  // Browser-style Go Back / Go Forward: every meaningful jump (go-to-definition, opening a file
+  // from the tree / quick-open / a hover or Markdown reference) records the location left AND the
+  // location arrived at, so Alt+[ / Alt+] can walk the trail. Reactive so the UI can later show
+  // enabled/disabled affordances.
+  navigationHistory = this.createNavigationHistory();
   // A persistent, REUSED editor for read-only git diffs (drill-down). A diff is transient and does
   // NOT become a file tab (editable side-by-side diff is item 14), so it never clobbers a tab.
   protected diffEditor = this.createEditor();
@@ -103,6 +109,7 @@ class $Workspace {
     return editor;
   }
   protected createGitPanel() { return new GitPanel.Class(); }
+  protected createNavigationHistory() { return new NavigationHistory.Class(); }
   protected createBufferSet() {
     return new OpenBufferSet.Class({
       // The set only ever holds Editors (this seam is the sole creator), so `editor` below can treat
@@ -139,6 +146,10 @@ class $Workspace {
     return new LanguageClient.Class({
       rootPath: this.root,
       preferredTypeScriptServer: () => this.settingsSource?.typescriptServer.value ?? 'auto',
+      // Late-read the size budget so a file larger than the limit is never attached to the server
+      // (which would balloon and crash the app). `0` = no limit; unset settings (bare tests) also
+      // read 0 so tests are unaffected.
+      fileSizeLimitKb: () => this.settingsSource?.lspFileSizeLimitKb.value ?? 0,
     });
   }
   private ensureLanguageClient(): LanguageClient.Model {
@@ -154,6 +165,21 @@ class $Workspace {
     const editor = this.buffers.activeBuffer as Editor.Instance | null;
     if (!editor || !editor.hasDocument.value || !editor.document.path) return;
     this.languageClientInstance?.syncDocument(editor.document);
+  }
+
+  /** The active file's language-size suppression notice, or `null` when it is within the LSP size
+   *  budget (or no client/document exists). Surfaced in the status bar so a suppressed large file is
+   *  never a silent no-op, and published to the observability channel so a driven gate can assert it.
+   *
+   * invariant: The LSP attaches only to documents within the size budget (src/modules/lsp/lsp.invariants.md)
+   */
+  languageSizeNotice(): string | null {
+    if (this.showingDiff.value) return null;
+    const editor = this.buffers.activeBuffer as Editor.Instance | null;
+    const client = this.languageClientInstance;
+    if (!client || !editor || !editor.hasDocument.value || !editor.document.path) return null;
+    void client.sizeSuppressionRevision.value; // reactive: re-evaluate as suppression flips
+    return client.sizeSuppressionNotice(editor.document);
   }
 
   /**
@@ -257,10 +283,17 @@ class $Workspace {
       return false;
     }
     if (!Files.Class.exists(targetPath) || Files.Class.isDir(targetPath)) return false;
-    this.openFileInTab(targetPath);
-    this.focus.value = 'editor';
-    this.editor.placeCursor(location.range.start.line, location.range.start.column);
-    this.editor.revealCursor();
+    // Record the SOURCE (the symbol under the cursor) before the jump moves us away, open the
+    // target WITHOUT the tab-open auto-record (we record the precise declaration landing ourselves,
+    // not the fresh-open 0,0), then record the DESTINATION so Forward returns to the declaration.
+    this.recordCurrentLocation();
+    this.withSuppressedLocationRecording(() => {
+      this.openFileInTab(targetPath);
+      this.focus.value = 'editor';
+      this.editor.placeCursor(location.range.start.line, location.range.start.column);
+      this.editor.revealCursor();
+    });
+    this.recordCurrentLocation();
     return true;
   }
 
@@ -1003,12 +1036,70 @@ class $Workspace {
   // Opening a file ADDS or FOCUSES a tab (never replaces). The buffer set owns the flyweight/dispose
   // discipline; Workspace just leaves diff view and keeps the active buffer's dirty flag fresh.
 
-  /** Open `path` as a tab: focus its tab if already open, else add a new active one. */
+  // --- navigation history (Go Back / Go Forward) ---------------------------
+  // A programmatic back()/forward() restore MUST NOT itself record a new location, or the stack
+  // could never be escaped. This guard is raised around a history restore AND around the internal
+  // openFileInTab of a go-to-definition jump (which records its own source + destination
+  // explicitly). It is a plain field — an internal control flag, not observable view state.
+  // invariant: Programmatic history navigation does not record new history (src/modules/navigation/navigation.invariants.md)
+  private suppressLocationRecording = false;
+
+  /** Run `action` with location recording suppressed (history restore / an already-recorded jump). */
+  private withSuppressedLocationRecording(action: () => void): void {
+    const previouslySuppressed = this.suppressLocationRecording;
+    this.suppressLocationRecording = true;
+    try {
+      action();
+    } finally {
+      this.suppressLocationRecording = previouslySuppressed;
+    }
+  }
+
+  /** Snapshot the visible editor's current location into the history (no-op without a real
+   *  document — the empty-state and read-only diff editors carry no navigable path). */
+  recordCurrentLocation(): void {
+    const editor = this.editor;
+    if (!editor.hasDocument.value || !editor.document.path) return;
+    this.navigationHistory.record({
+      documentPath: editor.document.path,
+      line: editor.cursor.line.value,
+      column: editor.cursor.col.value,
+    });
+  }
+
+  /** Open a recorded location and land the cursor on it — the shared back/forward restore path.
+   *  Suppresses recording so replaying history never mutates it. */
+  private restoreNavigationLocation(location: Location): void {
+    this.withSuppressedLocationRecording(() => {
+      this.openFileInTab(location.documentPath);
+      this.focus.value = 'editor';
+      this.editor.placeCursor(location.line, location.column);
+      this.editor.revealCursor();
+    });
+  }
+
+  /** Go Back (Alt+[): restore the previous location in the trail; safe no-op at the start. */
+  navigateBack(): void {
+    const location = this.navigationHistory.back();
+    if (location) this.restoreNavigationLocation(location);
+  }
+
+  /** Go Forward (Alt+]): restore the next location in the trail; safe no-op at the end. */
+  navigateForward(): void {
+    const location = this.navigationHistory.forward();
+    if (location) this.restoreNavigationLocation(location);
+  }
+
+  /** Open `path` as a tab: focus its tab if already open, else add a new active one. Records the
+   *  location left (before the switch) AND the location arrived at (after) into the navigation
+   *  history, unless recording is suppressed (a history restore, or a jump that records itself). */
   openFileInTab(path: string): void {
+    if (!this.suppressLocationRecording) this.recordCurrentLocation(); // where we were, before we leave
     this.showingDiff.value = false; // a real file replaces the transient diff view
     this.diffRequest.value = null;
     this.buffers.open(path);
     void this.refreshActiveHeadText();
+    if (!this.suppressLocationRecording) this.recordCurrentLocation(); // where we arrived
   }
 
   /** Resolve a rendered Markdown reference through the existing workspace confinement boundary.

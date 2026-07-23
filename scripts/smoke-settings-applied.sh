@@ -26,7 +26,9 @@ export PATH="$HOME/.bun/bin:$PATH"
 # smokes: drag the divider, assert pane movement, then assert the persisted ratio is reused.
 # typescriptServer's applied effect is WHICH language server starts — driven end-to-end in
 # smoke-hover.sh (forced to tsgo), since this smoke deliberately never spawns a language server.
-COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap showActivityBar workspaceTabPosition typescriptServer sidebarWidth gitSplitRatio diffSplitRatio markdownSplitRatio"
+# lspFileSizeLimitKb is driven at the end of THIS file (the ONE drive here that spawns tsgo): a file
+# over the limit is size-suppressed (LSP off), a file within it attaches (diagnostics arrive).
+COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap showActivityBar workspaceTabPosition typescriptServer lspFileSizeLimitKb sidebarWidth gitSplitRatio diffSplitRatio markdownSplitRatio"
 
 # ---- schema-enumeration META-GATE (cheap; the enforcing check) -------------------------------------
 meta_gate() {
@@ -94,7 +96,14 @@ LONG=$(mktemp -d /tmp/tui-sa-long.XXXXXX); python3 -c "open('$LONG/long.txt','w'
 TREE=$(mktemp -d /tmp/tui-sa-tree.XXXXXX); for n in $(seq -w 1 60); do printf 'x\n' > "$TREE/file-$n.txt"; done
 WRAP=$(mktemp -d /tmp/tui-sa-wrap.XXXXXX); python3 -c "open('$WRAP/w.txt','w').write('A'*300+chr(10)+'MARKERLINE'+chr(10))"
 REPO=$(mktemp -d /tmp/tui-sa-repo.XXXXXX); ( cd "$REPO" && git init -q && printf 'a\n'>f.txt && git add f.txt && git commit -qm init && printf 'b\n'>>f.txt && printf 'n\n'>g.txt )
-trap 'rm -rf "$LONG" "$TREE" "$WRAP" "$REPO" "$SETTINGS_HOME"; for s in $SESSIONS; do "$H" kill "$s" >/dev/null 2>&1; done' EXIT INT TERM
+# TS fixture for the lspFileSizeLimitKb drive: a >1 KB .ts file with a deliberate type error, plus the
+# node_modules symlink + tsconfig tsgo needs to resolve + type-check it. big.ts is tree index 1
+# (node_modules dir sorts first), so ONE Down + Enter opens it — the smoke-diagnostics pattern.
+LSPFIX=$(mktemp -d /tmp/tui-sa-lsp.XXXXXX)
+ln -s "$ROOT/node_modules" "$LSPFIX/node_modules"
+printf '{ "compilerOptions": { "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler", "strict": true }, "include": ["*.ts"] }\n' > "$LSPFIX/tsconfig.json"
+python3 -c "open('$LSPFIX/big.ts','w').write('// padding '+'x'*1500+'\n'+'const bad: number = \"nope\";\n')"
+trap 'rm -rf "$LONG" "$TREE" "$WRAP" "$REPO" "$LSPFIX" "$SETTINGS_HOME"; for s in $SESSIONS; do "$H" kill "$s" >/dev/null 2>&1; done' EXIT INT TERM
 SESSIONS=""
 
 # scrollTop after ONE wheel-down over the editor of the long fixture, with the given settings patch fn.
@@ -255,6 +264,41 @@ setk gitSplitRatio 0.3; S=sa$$-gs-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS
 setk gitSplitRatio 0.7; S=sa$$-gs-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$REPO" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; open_git "$S"; "$H" settle "$S" >/dev/null 2>&1; rb=$(gitdivrow "$S")
 check_gt "$rb" "$ra" "gitSplitRatio 0.7 puts the divider lower than 0.3"
 setk gitSplitRatio 0.5
+
+echo "== lspFileSizeLimitKb: a file over the limit is NOT attached to the LSP; within it, it attaches =="
+# The guard that exists BECAUSE an unguarded huge file ballooned tsgo and crashed the editor. Same file,
+# two budgets: tiny limit -> size-suppressed (LSP off, no diagnostics, app alive); default budget ->
+# attaches (diagnostics arrive). Reads lspSizeSuppressed + diagnosticsCount off the status channel.
+lsp_drive() { # <session> <limit-kb> -> echoes "<lspSizeSuppressed> <diagnosticsCount>"
+  local session_name="$1" limit_kb="$2" diagnostics_count size_suppressed poll
+  setk lspFileSizeLimitKb "$limit_kb"; sets typescriptServer tsgo
+  "$H" launch "$session_name" 120x36 env HOME="$SETTINGS_HOME" COLORTERM=truecolor bun run src/main.ts "$LSPFIX" >/dev/null
+  SESSIONS="$SESSIONS $session_name"
+  "$H" ready "$session_name" 20 >/dev/null
+  "$H" send "$session_name" Down >/dev/null; "$H" send "$session_name" Enter >/dev/null; sleep 0.8
+  for poll in $(seq 1 30); do
+    diagnostics_count="$("$H" field "$session_name" diagnosticsCount 2>/dev/null || echo 0)"
+    size_suppressed="$("$H" field "$session_name" lspSizeSuppressed 2>/dev/null)"
+    { [ "${diagnostics_count:-0}" -gt 0 ] 2>/dev/null || [ "$size_suppressed" = "true" ]; } && break
+    sleep 2
+  done
+  "$H" settle "$session_name" >/dev/null 2>&1
+  diagnostics_count="$("$H" field "$session_name" diagnosticsCount 2>/dev/null || echo 0)"
+  size_suppressed="$("$H" field "$session_name" lspSizeSuppressed 2>/dev/null)"
+  "$H" kill "$session_name" >/dev/null 2>&1
+  printf '%s %s\n' "${size_suppressed:-unknown}" "${diagnostics_count:-0}"
+}
+if [ ! -x "$ROOT/node_modules/.bin/tsgo" ]; then
+  echo "  SKIP  tsgo not installed — lspFileSizeLimitKb applied-effect drive skipped"
+else
+  read -r sup_small dc_small <<<"$(lsp_drive sa$$-lsp-a 1)"
+  read -r sup_big   dc_big   <<<"$(lsp_drive sa$$-lsp-b 2048)"
+  check "$sup_small" "true" "lspFileSizeLimitKb 1 size-suppresses the LSP for the >1 KB file"
+  check "$dc_small" "0" "no diagnostics arrive while the file is size-suppressed (LSP not attached)"
+  check "$sup_big" "false" "the default budget attaches the LSP (file within the limit, not suppressed)"
+  check_gt "$dc_big" "0" "diagnostics arrive once the file is within the budget (LSP attached)"
+  setk lspFileSizeLimitKb 2048
+fi
 
 echo ""
 meta_gate || fail=1

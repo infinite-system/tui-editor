@@ -276,6 +276,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       ),
       workspaceTabPosition: settings.workspaceTabPosition.value,
       activeBuffer: editor.hasDocument.value ? editor.document.path : null,
+      // The active file's LSP size-suppression state — the authoritative channel a driven gate reads
+      // to assert a large file was NOT attached to the language server (the guard is never silent).
+      lspSizeSuppressed: workspaceSet.active.languageSizeNotice() !== null,
       bufferRevision: editor.document.revision.value,
       dirty: editor.document.dirty.value,
       cursor: editor.hasDocument.value
@@ -422,6 +425,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     void bufferTabStrip.scrollOffset.value;
     void workspaceSet.active.focus.value;
     void workspaceSet.active.sidebarView.value;
+    // The breadcrumb's ‹ › history buttons re-colour (enabled/disabled) as the trail moves.
+    void workspaceSet.active.navigationHistory.currentIndex.value;
+    void workspaceSet.active.navigationHistory.entries.value;
     void workspaceSet.active.markdownPreviewPaths.value;
     void workspaceSet.active.tree.selectedIndex.value;
     void workspaceSet.active.tree.hoveredIndex.value;
@@ -775,6 +781,10 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'markdown.openHoveredReference': () => view.activeMarkdownSplitView()?.openHoveredReference(),
     // F12 parity with Ctrl/Cmd+click: definition of the symbol AT THE CURSOR.
     'go.definition': () => void workspaceSet.active.goToDefinition(),
+    // Browser-style Go Back / Go Forward through the navigation trail (Alt+[ / Alt+]). Safe no-ops
+    // at the ends of the history.
+    'navigation.back': () => workspaceSet.active.navigateBack(),
+    'navigation.forward': () => workspaceSet.active.navigateForward(),
     'git.togglePanel': () => {
       workspaceSet.active.toggleGit();
       if (workspaceSet.active.focus.value === 'git') {

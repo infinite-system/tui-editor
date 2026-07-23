@@ -468,6 +468,26 @@ export interface BreadcrumbBarRenderContext {
   barWidth: number;
   /** Active workspace root — the breadcrumb is the active file's path relative to it. */
   projectRoot: string;
+  /** Whether the back (‹) button is live (there is an older location to return to). */
+  canGoBack: boolean;
+  /** Whether the forward (›) button is live (there is a newer location to return to). */
+  canGoForward: boolean;
+}
+
+// Breadcrumb history-nav button geometry (VS Code's Go Back / Go Forward): the ‹ and › glyphs sit at
+// these LOCAL columns of the breadcrumb bar, ahead of the first crumb. ONE source shared by the
+// renderer below and the hit-tester, so a click always resolves to the glyph it points at.
+const BREADCRUMB_BACK_COLUMN = 1; // ‹
+const BREADCRUMB_FORWARD_COLUMN = 3; // ›
+const BREADCRUMB_NAV_PREFIX_WIDTH = 5; // ' ‹ › ' rendered before the first crumb
+
+/** Which history-nav button (if any) a breadcrumb-bar click at `localColumn` lands on. The back
+ *  glyph owns its cell and the pad before it; the forward glyph the same — forgiving click targets
+ *  that never overlap the crumbs. */
+function $breadcrumbNavButtonAt(localColumn: number): 'back' | 'forward' | null {
+  if (localColumn === BREADCRUMB_BACK_COLUMN || localColumn === BREADCRUMB_BACK_COLUMN - 1) return 'back';
+  if (localColumn === BREADCRUMB_FORWARD_COLUMN || localColumn === BREADCRUMB_FORWARD_COLUMN - 1) return 'forward';
+  return null;
 }
 
 // The breadcrumb bar that sits UNDER the buffer-tab strip (VS Code parity): the ACTIVE file's full
@@ -475,16 +495,24 @@ export interface BreadcrumbBarRenderContext {
 // leading crumbs to `…` only when the whole path exceeds the bar width. Empty when no file is open.
 // This is where the path lives now — the tabs themselves show just the filename, so they stay compact.
 function $renderBreadcrumbBar(context: BreadcrumbBarRenderContext): StyledText {
-  const { strip, palette, projectRoot } = context;
+  const { strip, palette, projectRoot, canGoBack, canGoForward } = context;
   const activeTab = strip.items.find((tab) => tab.active);
   if (!activeTab) return new StyledText([fg(palette.dim)('')]);
   const barWidth = Math.max(1, context.barWidth);
   const crumbs = Breadcrumb.Class.fitBreadcrumb(
     Breadcrumb.Class.breadcrumbSegments(activeTab.identifier, projectRoot),
-    Math.max(1, barWidth - 2), // reserve a leading + trailing pad cell
+    Math.max(1, barWidth - BREADCRUMB_NAV_PREFIX_WIDTH - 1), // reserve the nav-button prefix + a trailing pad
     3, // ' › ' separator width
   );
-  const chunks: TextChunk[] = [fg(palette.fg)(' ')];
+  // History nav buttons (‹ ›) ahead of the path: accent when a move is available, dim at an end.
+  // The column geometry is shared with $breadcrumbNavButtonAt so clicks land on the glyph.
+  const chunks: TextChunk[] = [
+    fg(palette.fg)(' '),
+    fg(canGoBack ? palette.accent : palette.dim)('‹'),
+    fg(palette.fg)(' '),
+    fg(canGoForward ? palette.accent : palette.dim)('›'),
+    fg(palette.fg)(' '),
+  ];
   crumbs.forEach((crumb, index) => {
     const isFilename = index === crumbs.length - 1;
     chunks.push(fg(isFilename ? palette.fg : palette.dim)(crumb));
@@ -497,6 +525,7 @@ class $TabBarRenderer {
   static renderWorkspace = $renderWorkspaceTabBar;
   static renderBuffer = $renderBufferTabBar;
   static renderBreadcrumb = $renderBreadcrumbBar;
+  static breadcrumbNavButtonAt = $breadcrumbNavButtonAt;
 }
 
 export namespace TabBarRenderer {
