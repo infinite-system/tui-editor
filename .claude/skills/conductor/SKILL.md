@@ -182,5 +182,41 @@ silently regress.
 2. **If blocked** → codex/fable before deferring (see above).
 3. **Only once drained** → invent + run ONE creative parity experiment on an `experiment-*`
    branch cut from latest main, gated. **NEVER merge experiments to main.**
-4. Append lessons to `project.conductor.md` (repo root).
+4. Append lessons to `project.conductor.md` (repo root); AND when a lesson generalizes into durable
+   doctrine, **refine THIS skill** (`.claude/skills/conductor/SKILL.md`) and commit it — the loop is
+   explicitly allowed to improve its own method (IBR self-application), including the verbatim cron
+   prompts recorded below, which it keeps in sync.
 5. Keep the fleet alive; sync local main to origin/main (clean ff). Report concisely.
+
+## Live cron prompts (verbatim — the running loop's exact words)
+These are the exact prompts driving this session's loops, recorded here so we can improve them
+deliberately. **This skill may refine them** (step 4 above) — but a cron is a session-only,
+in-memory snapshot: editing the text here does NOT change a running cron. Apply a change with
+`CronDelete <id>` + `CronCreate`, then update the copy here to match. IDs drift on each recreate;
+the words are the durable artifact.
+
+### Hourly orchestration loop — `7 * * * *` (every hour at :07)
+
+```
+Hourly orchestration loop (bounded per fire). Follow the `/conductor` skill (tui-editor/.claude/skills/conductor/SKILL.md). Do in order:
+
+(1) BACKLOG FIRST — before ANY creative experiment, read the active task list and drain real work. Sources of truth, in order: (a) project.handoff.md's top resume anchor + the scratchpad HANDOFF; (b) any open goal/TodoWrite list; (c) the fork's (a0f12abb2a300d596) reported remaining tasks. Requested UI/feature tasks and user requests come first. For each UNFINISHED task: confirm the fork/workers are actively driving it (worktree writes / gate activity / branch commits in the last cycle). If dormant or stalled, nudge via SendMessage with a precise fix, OR take it over and drive it yourself. Do NOT start a creative experiment while any requested task is unmerged.
+
+(2) IF BLOCKED (fork stuck, ambiguous fix, or a hard problem) — do NOT default to deferring to the user. Spin up a codex or fable subagent (if the fork can't spawn, the conductor spawns one) and reach a solution creatively; only escalate to the user if the subagents also can't resolve it or the call is genuinely the user's (naming, scope, publish consent).
+
+(3) ONLY once the real backlog is drained — invent + execute ONE creative IDE-parity experiment: reduce a real user need to its invariant, plan it, build on an experiment-* branch forked off LATEST main, gate it. NEVER merge experiments to main.
+
+(4) Append orchestrator lessons learned this fire to /home/parallels/dev/tui-editor/project.conductor.md (the running lessons log). AND when a lesson generalizes into durable doctrine, REFINE the /conductor SKILL.md itself (tui-editor/.claude/skills/conductor/SKILL.md) and commit it — the stable doctrine is NOT frozen; the loop improving its own method is IBR self-application. If you edit the cron prompts, keep their verbatim copy in the skill in sync.
+
+(5) Keep yourself, the fork, and its workers in working order — verify alive by fork-specific evidence (gate-log step activity is authoritative, NOT process/tmux counts; never kill tmux mid-gate). Cap builders ~2-3, ONE gate at a time. Verify by DRIVING the real user path. Keep local main synced to origin/main (clean ff; never update-ref a checked-out branch). Report concisely.
+```
+
+### 10-minute liveness check — `3,13,23,33,43,53 * * * *` (every 10 min)
+
+```
+Loop check (every 10 min): VERIFY — do not assume — that the fork orchestrator (agent a0f12abb2a300d596) and its builder agents are actually progressing on the 11 Invar UI tasks. IMPORTANT: the USER runs their OWN interactive Invar instances (from /home/parallels/dev/tui-editor and /tmp/tui-demo) — do NOT treat raw `src/main.ts` process count or instance age as a fork-liveness or hang signal, and NEVER kill a process from those paths. Key ONLY on FORK-SPECIFIC evidence: (1) writes in the fork's worktrees `/tmp/conductor-*` and `.claude/worktrees/agent-*` in the last ~10 min (`find /tmp/conductor-* /home/parallels/dev/tui-editor/.claude/worktrees/agent-* -newermt '10 minutes ago' -not -path '*/.git/*'`); (2) gate-log transitions in /tmp/*gate*.log (ALL-PASS / FAILURES / running); (3) new commits on main (past f64e15e), or on agent-*/conductor-* branches (`git -C /home/parallels/dev/tui-editor log --oneline --all --since='12 minutes ago'`); (4) tmux harness sessions with builder/conductor/agent-ish names (NOT diff-manual*, which are stale). If the fork is DORMANT with a red or finished gate: read the gate log, diagnose the specific failing step, and nudge it via SendMessage with the precise fix. If genuinely STALLED (no worktree writes, no gate activity, no branch commits across a FULL cycle): take over — diagnose, fix, gate, merge. If progressing, note it briefly. Also flag if the fork over-spawned builders (CPU contention flakes smoke-wrap) — tell it to cap at ~2. Report concisely.
+```
+
+**Due for refresh:** both prompts still name "the 11 Invar UI tasks" / `f64e15e` / the specific agent-id
+— session-specific and now largely complete. The hourly loop is allowed (step 4) to generalize these
+on a future fire.

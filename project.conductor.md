@@ -308,7 +308,7 @@ Six new operational lessons, every one from real friction this run.
 
 ---
 
-## Live cron prompts (verbatim — the editable source of truth)
+## Live cron prompts (canonical copy now in the /conductor SKILL.md "Live cron prompts" section — edit THERE; the copy below may lag)
 
 These are the exact prompts driving the orchestration loop this session. **Improve them HERE, then
 recreate the cron** — crons are session-only, in-memory snapshots (`CronDelete <id>` +
