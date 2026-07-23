@@ -62,7 +62,17 @@ PY
 
 frame_has_no_diff_marker() {
   local session="$1"
-  ! "$HARNESS" capture "$session" | grep -E '[▎▁]' >/dev/null
+  # Scan from column 4 onward: the activity bar (cols 0-3) draws its ACTIVE-item accent with the same
+  # ▎ glyph a diff marker uses, but diff markers live in the editor gutter well to the right. A
+  # whole-screen grep would mistake the bar's own accent for a gutter marker.
+  ! SESSION_FRAME="$PROJECT_ROOT/artifacts/frame-$session.json" python3 - <<'PY'
+import json, os
+rows = json.load(open(os.environ['SESSION_FRAME'], encoding='utf-8'))['rows']
+for row in rows:
+    if any(character in '▎▁' for character in row.get('text', '')[4:]):
+        raise SystemExit(0)   # a gutter marker is present
+raise SystemExit(1)           # none found
+PY
 }
 
 open_only_file() {

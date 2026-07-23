@@ -282,7 +282,9 @@ class $ScrollbarSync {
       scrollPosition: editor.viewport.scrollLeft.value,
     });
 
-    const filesVisible = workspaceSet.active.sidebarView.value !== 'git';
+    // Only the files (tree) view owns the tree scrollbars — git has its own bars and extensions is a
+    // static placeholder, so neither should paint a tree bar over its content.
+    const filesVisible = workspaceSet.active.sidebarView.value === 'files';
     const sidebarInnerWidthFiles = this.deps.sidebarWidth() - 2;
     const treeViewportHeight = Math.max(1, (sidebar.height as number) - 2);
     this.applyBarGeometry(

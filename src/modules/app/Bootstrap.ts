@@ -273,6 +273,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       paletteQuery: commands.open.value ? commands.query.value : '',
       paletteMatches: commands.open.value ? commands.filtered.length : 0,
       focus: workspaceSet.active.focus.value,
+      // The activity bar's active view (files/git/extensions) — the authoritative channel a driven
+      // contract reads to assert a click/chord switched the sidebar (paired with FrameProbe for the accent).
+      sidebarView: workspaceSet.active.sidebarView.value,
       treeRows: workspaceSet.active.tree.rows.length,
       treeSelected: workspaceSet.active.tree.selectedIndex.value,
       treeScrollTop: workspaceSet.active.tree.scrollTop.value,
@@ -280,6 +283,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       editorScrollTop: editor.viewport.scrollTop.value,
       editorScrollLeft: editor.viewport.scrollLeft.value,
       wordWrap: editor.wordWrap.value,
+      showActivityBar: settings.showActivityBar.value,
       changesScrollTop: workspaceSet.active.gitPanel.changesScrollTop.value,
       gitChangesIndex: workspaceSet.active.gitPanel.changesIndex.value,
       gitLogScrollTop: workspaceSet.active.gitPanel.logScrollTop.value,
@@ -572,6 +576,10 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     nextDiffChange: () => view.activeDiffView()?.jumpToNextChange(),
     previousDiffChange: () => view.activeDiffView()?.jumpToPreviousChange(),
     toggleMarkdownPreview: () => workspaceSet.active.toggleMarkdownPreview(),
+    toggleActivityBar: () => {
+      settings.showActivityBar.value = !settings.showActivityBar.value;
+      app.requestRender();
+    },
     hasHoveredMarkdownReference: () =>
       Boolean(view.activeMarkdownSplitView()?.hoveredReferencePath.value),
     openHoveredMarkdownReference: () => view.activeMarkdownSplitView()?.openHoveredReference(),
@@ -724,6 +732,15 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
         void workspaceSet.active.git.value?.refresh();
         void workspaceSet.active.commitLog.value?.ensureRange(0, 50);
       }
+    },
+    // Activity-bar view switchers (Ctrl+Shift+E/G/X) — the SAME single writer the bar's clicks call.
+    'view.showFiles': () => workspaceSet.active.showSidebarView('files'),
+    'view.showSourceControl': () => workspaceSet.active.showSidebarView('git'),
+    'view.showExtensions': () => workspaceSet.active.showSidebarView('extensions'),
+    // Ctrl+Shift+B shows/hides the whole activity bar (same setting-flip the palette command runs).
+    'view.toggleActivityBar': () => {
+      settings.showActivityBar.value = !settings.showActivityBar.value;
+      app.requestRender();
     },
     'git.up': () => {
       normalizeChangesIndex();

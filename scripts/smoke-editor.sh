@@ -80,7 +80,7 @@ for(let y=0;y<f.height && qy<0;y++){for(const ch of f.rows[y].text){if(ch==="X")
 if(qy<0){console.log("WRONG no typed glyph found");process.exit(0)}
 // Consecutive rows must carry CONSECUTIVE gutter numbers (one file line == one visual row). A
 // wrap tail leaves a blank gutter on the next row and shifts every number after it.
-const gutterNumber=(y)=>{const m=f.rows[y].text.slice(33,40).match(/\d+/);return m?Number(m[0]):null};
+const gutterNumber=(y)=>{const m=f.rows[y].text.slice(37,44).match(/\d+/);return m?Number(m[0]):null};
 const here=gutterNumber(qy), below=gutterNumber(qy+1);
 console.log(here!==null && below===here+1 ? "OK" : `WRONG here=${here} below=${below}`);
 ')"
@@ -96,7 +96,8 @@ chk "selection cleared after Escape" "$(f hasSelection)" "false"
 echo "== mouse drag-select persists + Ctrl+C copies (human-QA regression) =="
 # Drag along doc line 1 ("A tiny project..." — a CONTENT line; an empty line cannot hold a
 # horizontal selection). Screen row = editor content top, shifted by the workspace-strip height.
-"$H" drag "$S" 40 $((3 + content_offset)) 50 $((3 + content_offset)) >/dev/null
+# x is +4 for the far-left activity bar (Task 7) which shifts all editor content right by its 4 cols.
+"$H" drag "$S" 44 $((3 + content_offset)) 54 $((3 + content_offset)) >/dev/null
 "$H" settle "$S" >/dev/null 2>&1
 chk "drag created a selection" "$(f hasSelection)" "true"
 sleep 0.8
@@ -109,13 +110,13 @@ if [ -n "$copied" ] && [ "$copied" != "null" ] && [ "$copied" -gt 0 ] 2>/dev/nul
 "$H" send "$S" Escape >/dev/null
 
 echo "== mouse input path (real SGR click arrives) =="
-"$H" click "$S" 40 $((6 + content_offset)) >/dev/null
+"$H" click "$S" 44 $((6 + content_offset)) >/dev/null
 "$H" settle "$S" >/dev/null 2>&1
 mouse="$(f mouse)"
 if [ -n "$mouse" ] && [ "$mouse" != "null" ]; then echo "  PASS  mouse click registered ($mouse)"; else echo "  FAIL  mouse click did not register"; fail=1; fi
 
 echo "== h-scroll range: End reveals the long line's end (scrollbar geometry regression) =="
-"$H" click "$S" 40 $((3 + content_offset)) >/dev/null   # editor line 0 (workspace strip + buffer tabs above)
+"$H" click "$S" 44 $((3 + content_offset)) >/dev/null   # editor line 0 (workspace strip + buffer tabs above); x+4 for the activity bar
 tmux send-keys -t "$S" End; sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
 end_visible="$(FRAME_FILE="$FRAME" "$BUN" -e '
 const f=JSON.parse(require("fs").readFileSync(process.env.FRAME_FILE));
@@ -160,17 +161,17 @@ echo "== horizontal wheel ROUTING test (Option+wheel SGR 75/74) =="
 "$H" settle "$S" >/dev/null 2>&1
 h_wheel_before="$(f editorScrollLeft)"
 wheel_sgr_row=$((3 + content_offset))   # over editor content; shifts with the workspace-strip height
-for _ in 1 2 3 4 5 6; do tmux send-keys -t "$S" -l "$(printf '\033[<75;40;%dM' "$wheel_sgr_row")"; sleep 0.12; done  # Option+wheel-right
+for _ in 1 2 3 4 5 6; do tmux send-keys -t "$S" -l "$(printf '\033[<75;44;%dM' "$wheel_sgr_row")"; sleep 0.12; done  # Option+wheel-right (x+4: activity bar)
 sleep 0.5; "$H" settle "$S" >/dev/null 2>&1
 h_wheel_after="$(f editorScrollLeft)"
 if [ "${h_wheel_after:-0}" -gt "${h_wheel_before:-0}" ] 2>/dev/null; then echo "  PASS  Option+wheel routes to horizontal ($h_wheel_before->$h_wheel_after)"; else echo "  FAIL  Option+wheel did not route horizontal ($h_wheel_before->$h_wheel_after)"; fail=1; fi
-for _ in 1 2 3 4 5 6 7 8; do tmux send-keys -t "$S" -l "$(printf '\033[<74;40;%dM' "$wheel_sgr_row")"; sleep 0.1; done  # Option+wheel-left reverses
+for _ in 1 2 3 4 5 6 7 8; do tmux send-keys -t "$S" -l "$(printf '\033[<74;44;%dM' "$wheel_sgr_row")"; sleep 0.1; done  # Option+wheel-left reverses (x+4: activity bar)
 sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
 tmux send-keys -t "$S" Home; sleep 0.3
 
 echo "== drag-edge auto-scroll: hold at right edge scrolls + extends selection =="
 edge_sgr_row=$((4 + content_offset))   # SGR is 1-based; editor line 0 = screen y=(3+content_offset)
-tmux send-keys -t "$S" -l "$(printf '\033[<0;50;%dM' "$edge_sgr_row")"; sleep 0.1     # press on editor line 0
+tmux send-keys -t "$S" -l "$(printf '\033[<0;54;%dM' "$edge_sgr_row")"; sleep 0.1     # press on editor line 0 (x+4: activity bar)
 tmux send-keys -t "$S" -l "$(printf '\033[<32;118;%dM' "$edge_sgr_row")"; sleep 0.1   # drag to right edge, HOLD
 sleep 0.9; "$H" settle "$S" >/dev/null 2>&1
 edge_scroll="$(f editorScrollLeft)"

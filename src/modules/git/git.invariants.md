@@ -199,31 +199,41 @@ panel-observed refs and waking rendering.
 
 ### The watcher never watches inside an ignored directory
 
-**Invariant:** If `GitWatcher` establishes its watches, then no watch handle is ever opened inside a
-directory git ignores or inside `.git`; a change to a tracked file at any depth still refreshes, and
-a change inside an ignored directory never does.
+**Invariant:** If `GitWatcher` establishes its watches, then the WORKING-TREE WALK never opens a
+watch handle inside a directory git ignores or inside `.git`; a change to a tracked file at any depth
+still refreshes, and a change inside an ignored working-tree directory never does. Exactly ONE
+deliberate watch stands apart from the walk: a single handle on the worktree's git dir, filtered to
+HEAD, so a branch switch refreshes promptly — it is bounded (one handle), never recurses, and is not
+part of the walk's watch set.
 
 **Scope:** One `GitWatcher` instance's watch set, from construction through `dispose`, including
-directories that appear after start.
+directories that appear after start. The dedicated HEAD watch is the single named exception.
 
 **Mechanism:** The watcher WALKS the working tree from the root and opens one non-recursive
 `fs.watch` per directory, pruning any child git reports through `git check-ignore` (and always
 `.git`) before its watch is created; a new subdirectory event re-runs the same ignore test before
 gaining a watch. A recursive root watch is not used — it would open a handle per directory inside
 ignored subtrees like `node_modules`. When git cannot answer (no repository or git unavailable) a
-fixed fallback skip set stands in.
+fixed fallback skip set stands in. Separately, `watchHead` opens ONE `fs.watch` on the worktree's git
+dir (`rev-parse --absolute-git-dir`) and refreshes only when the changed entry is `HEAD` — a
+directory watch, not a file watch, because git replaces HEAD by rename (HEAD.lock → HEAD), which
+would break a file watch after the first switch. This handle lives outside `directoryWatchers`, so
+`watchedDirectories()` — the bounded-walk contract's observable — never reports it.
 
 **Generates:** Bounded watch-handle count on large projects; no filesystem-handle or memory growth
-from ignored subtrees; refreshes driven only by relevant working-tree changes.
+from ignored subtrees; refreshes driven by relevant working-tree changes plus prompt branch
+reactivity on checkout/switch.
 
 **Evidence:** `src/modules/git/GitWatcher.ts` (`walkAndWatch`, `filterIgnoredChildren`,
-`queryIgnoredNames`, `onDirectoryEvent`); `no watch handle is ever opened inside an ignored
-directory`, `a nested tracked change refreshes but a change inside an ignored directory does not`,
-and `a newly created nested directory is watched but a new ignored directory is not` in
-`src/modules/git/__tests__/GitWatcher.test.ts`.
+`queryIgnoredNames`, `onDirectoryEvent`, `watchHead`); `no watch handle is ever opened inside an
+ignored directory`, `a nested tracked change refreshes but a change inside an ignored directory does
+not`, and `a newly created nested directory is watched but a new ignored directory is not` in
+`src/modules/git/__tests__/GitWatcher.test.ts` (all asserting `watchedDirectories()`, which excludes
+the HEAD handle).
 
-**Impossible if true:** A watch handle open on any path under `node_modules`, or a write inside an
-ignored directory scheduling a repository refresh.
+**Impossible if true:** A watch handle open on any path under `node_modules`, or the WALK opening a
+handle inside `.git`, or a write inside an ignored working-tree directory scheduling a refresh. (A
+write to HEAD scheduling a refresh is the intended branch-reactivity path, not a violation.)
 
 **Verification:** `bun test src/modules/git/__tests__/GitWatcher.test.ts`
 

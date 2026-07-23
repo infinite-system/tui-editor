@@ -26,7 +26,7 @@ export PATH="$HOME/.bun/bin:$PATH"
 # smokes: drag the divider, assert pane movement, then assert the persisted ratio is reused.
 # typescriptServer's applied effect is WHICH language server starts — driven end-to-end in
 # smoke-hover.sh (forced to tsgo), since this smoke deliberately never spawns a language server.
-COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap workspaceTabPosition typescriptServer sidebarWidth gitSplitRatio diffSplitRatio markdownSplitRatio"
+COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap showActivityBar workspaceTabPosition typescriptServer sidebarWidth gitSplitRatio diffSplitRatio markdownSplitRatio"
 
 # ---- schema-enumeration META-GATE (cheap; the enforcing check) -------------------------------------
 meta_gate() {
@@ -84,6 +84,11 @@ changed() { if [ "$1" != "$2" ]; then echo "  PASS  $3 ($1 != $2)"; else echo " 
 open_file() { for _ in 1 2 3 4; do b="$("$H" field "$1" activeBuffer 2>/dev/null)"; [ -n "$b" ] && [ "$b" != "null" ] && return 0; "$H" send "$1" Enter >/dev/null; sleep 0.2; done; }
 check() { if [ "$1" = "$2" ]; then echo "  PASS  $3"; else echo "  FAIL  $3 (got: $1 vs $2)"; fail=1; fi; }
 check_gt() { if [ "${1:-0}" -gt "${2:-0}" ] 2>/dev/null; then echo "  PASS  $3 ($1 > $2)"; else echo "  FAIL  $3 ($1 not > $2)"; fail=1; fi; }
+
+# Baseline the activity bar OFF for every drive below: mounted, it shifts sidebar+editor content right
+# by 4 columns, which would move the scrollbar/glyph/gutter cells these drives read. Its OWN applied
+# effect gets a dedicated drive at the end (and smoke-activitybar covers it in depth).
+setb showActivityBar false
 
 LONG=$(mktemp -d /tmp/tui-sa-long.XXXXXX); python3 -c "open('$LONG/long.txt','w').write(''.join('line %03d '%i + 'x'*180 + '\n' for i in range(300)))"
 TREE=$(mktemp -d /tmp/tui-sa-tree.XXXXXX); for n in $(seq -w 1 60); do printf 'x\n' > "$TREE/file-$n.txt"; done
@@ -220,6 +225,15 @@ sets glyphMode ascii; S=sa-gm-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOM
 sets glyphMode nerd; S=sa-gm-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; gb=$(firstglyph "$S")
 if [ "$ga" != "$gb" ]; then echo "  PASS  glyphMode changes glyphs (ascii $ga != nerd $gb)"; else echo "  FAIL  glyphMode did not change glyphs ($ga == $gb)"; fail=1; fi
 sets glyphMode auto
+
+echo "== showActivityBar: mounts/unmounts the 4-col bar, shifting sidebar+editor content =="
+# Applied-effect drive (schema-meta requires one): with the bar ON the whole sidebar (and its right
+# divider) sits 4 columns further right than with it OFF — the bar reclaimed those columns. Reusing
+# sidebar_divider_col makes the shift directly measurable from rendered cells.
+setb showActivityBar true;  S=sa-ab-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; div_on=$(sidebar_divider_col "$S")
+setb showActivityBar false; S=sa-ab-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; div_off=$(sidebar_divider_col "$S")
+check "$((div_on - div_off))" "4" "showActivityBar ON shifts the sidebar divider right by the bar's 4 columns (on=$div_on off=$div_off)"
+setb showActivityBar false
 
 echo "== gitSplitRatio: the changes/log divider row moves =="
 # Split observable = the COMMIT-LOG region's first commit row ('init'). A bigger changes region (higher

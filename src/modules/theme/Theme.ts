@@ -6,7 +6,7 @@ import { Reactive } from 'ivue';
 import { ref } from 'vue';
 import { TerminalCapabilities, type ColorDepth, type GlyphLevel } from './TerminalCapabilities';
 import { PALETTES, DARK, ThemePalettes, type Palette } from './ThemePalettes';
-import { ThemeIcons, type IconSet, type ActionIconSet, type CheckboxIconSet } from './ThemeIcons';
+import { ThemeIcons, type IconSet, type ActionIconSet, type CheckboxIconSet, type ActivityIconSet } from './ThemeIcons';
 
 class $Theme {
   get paletteName() {
@@ -35,6 +35,12 @@ class $Theme {
   /** Staging-checkbox glyphs (unchecked/checked) at the current glyph level. */
   get checkboxIcons(): CheckboxIconSet {
     return ThemeIcons.Class.checkboxIconsFor(this.glyphLevel.value);
+  }
+  /** Activity-bar view-switcher glyphs at the current glyph level (nerd → unicode → ascii). The tier
+   *  follows the SAME single source as every other glyph — settings.glyphMode → theme.glyphLevel
+   *  (auto-detected via TerminalCapabilities, or forced) — so swapping tiers is one config, not per-icon. */
+  get activityIcons(): ActivityIconSet {
+    return ThemeIcons.Class.activityIconsFor(this.glyphLevel.value);
   }
 
   icon(name: string, isDir: boolean, open = false): string {

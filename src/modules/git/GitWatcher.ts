@@ -30,6 +30,10 @@ const FALLBACK_IGNORED_DIRECTORY_NAMES = new Set(['node_modules', '.git', 'dist'
 
 class $GitWatcher {
   private readonly directoryWatchers = new Map<string, FSWatcher>();
+  // A SINGLE watch on this worktree's git dir, dedicated to HEAD changes (branch switches). Kept out
+  // of directoryWatchers so it never appears in watchedDirectories() — the "never watch inside an
+  // ignored directory" invariant is about the working-tree WALK, not this one targeted handle.
+  private headWatcher: FSWatcher | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private reconcileTimer: ReturnType<typeof setInterval> | null = null;
   private disposed = false;
@@ -48,6 +52,36 @@ class $GitWatcher {
     );
     this.start();
     this.startReconcileFloor();
+    this.watchHead();
+  }
+
+  /** Watch HEAD so a `git checkout`/`switch` refreshes the branch even when the working tree does not
+   *  change (the tree walk skips .git; the 5s reconcile floor is only a fallback). We watch the git
+   *  DIR — not the HEAD file — because git replaces HEAD by rename (HEAD.lock -> HEAD), which would
+   *  break a file watch after the first switch; a directory watch survives it. HEAD lives in THIS
+   *  worktree's own git dir (the linked-worktree dir for a worktree, `<root>/.git` for the main
+   *  checkout), resolved via `rev-parse --absolute-git-dir`. */
+  private watchHead(): void {
+    if (this.disposed) return;
+    const result = spawnSync('git', ['-C', this.cwd, 'rev-parse', '--absolute-git-dir'], {
+      encoding: 'utf8',
+      timeout: 2000,
+    });
+    if (result.status !== 0) return;
+    const gitDirectory = result.stdout.trim();
+    if (!gitDirectory) return;
+    try {
+      this.headWatcher = watch(gitDirectory, (_event, changedName) => {
+        // Refresh only on HEAD (the branch pointer); other git-internal writes are noise here. A null
+        // filename (platform could not report it) is treated as "maybe HEAD" and refreshes to be safe.
+        if (changedName === null || changedName === 'HEAD' || changedName.toString() === 'HEAD') {
+          this.scheduleRefresh();
+        }
+      });
+      this.headWatcher.unref?.();
+    } catch {
+      // HEAD unwatchable (permissions, transient race) — the reconcile floor still converges the branch.
+    }
   }
 
   get active(): boolean {
@@ -203,6 +237,8 @@ class $GitWatcher {
     this.debounceTimer = null;
     if (this.reconcileTimer) clearInterval(this.reconcileTimer);
     this.reconcileTimer = null;
+    this.headWatcher?.close();
+    this.headWatcher = null;
     for (const watcher of this.directoryWatchers.values()) watcher.close();
     this.directoryWatchers.clear();
   }

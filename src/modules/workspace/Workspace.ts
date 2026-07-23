@@ -4,6 +4,7 @@
 // invariant: Workspace and file navigation are separate layers (workspace.invariants.md)
 import { Reactive } from 'ivue';
 import { computed, ref, shallowRef } from 'vue';
+import { spawnSync } from 'node:child_process';
 import { FileTree } from './FileTree';
 import { Editor } from '../editor/Editor';
 import { OpenBufferSet } from './OpenBufferSet';
@@ -32,7 +33,27 @@ import {
 import { fileURLToPath } from 'node:url';
 import { resolve as resolvePath } from 'node:path';
 
+/** The project name for a root: the basename of the parent of the git COMMON dir — shared by the
+ *  main checkout and every linked worktree of the same repository. `--git-common-dir` resolves to
+ *  `<checkout>/.git` for the main checkout and to `<project>/.git` for a worktree, so its parent is
+ *  the project root in both cases. Returns '' when the root is not a git repository (caller falls
+ *  back to the folder name). One synchronous git call, in open() only — never a hot path. */
+function projectNameForRoot(absoluteRoot: string): string {
+  const result = spawnSync(
+    'git',
+    ['-C', absoluteRoot, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+    { encoding: 'utf8', timeout: 2000 },
+  );
+  if (result.status !== 0) return '';
+  const commonDir = result.stdout.trim();
+  return commonDir ? Files.Class.basename(Files.Class.dirname(commonDir)) : '';
+}
+
 export type Focus = 'files' | 'editor' | 'git';
+
+/** Which panel the activity bar shows in the sidebar for this workspace. 'extensions' is a
+ *  placeholder view for now. Persisted per workspace (it is model state on the Workspace). */
+export type SidebarView = 'files' | 'git' | 'extensions';
 
 /** One diagnostic's span on a single line: grapheme columns [startColumn, endColumn) and its severity
  *  (1 = error, 2 = warning, 3 = info, 4 = hint). A multi-line diagnostic yields one mark per line. */
@@ -445,9 +466,10 @@ class $Workspace {
     return ref<Focus>('files');
   }
   // WHICH panel the sidebar shows — decoupled from keyboard focus, so opening a diff from the git
-  // panel keeps the panel visible while the editor takes focus (VS Code behavior).
+  // panel keeps the panel visible while the editor takes focus (VS Code behavior). ONE ref holds ONE
+  // value, so "exactly one activity item is active per workspace" is true by representation.
   get sidebarView() {
-    return ref<'files' | 'git'>('files');
+    return ref<SidebarView>('files');
   }
   get name() {
     return ref('');
@@ -457,10 +479,17 @@ class $Workspace {
   get worktreeName() {
     return ref<string | null>(null);
   }
-  /** The second tab-strip line for this project: the worktree name when the root is a linked git
-   *  worktree, else the checked-out branch (empty until git reports / when not a repository). */
+  /** The second tab-strip line for this project: the checked-out BRANCH, live-reactive so a
+   *  `git checkout`/`switch` updates it (GitWatcher watches HEAD). git reports a detached HEAD as
+   *  the literal branch "(detached)"; show the short HEAD SHA instead, which actually identifies it.
+   *  Empty until git first reports, or when the root is not a repository. */
   get tabDetail(): string {
-    return this.worktreeName.value ?? this.git.value?.branch.value ?? '';
+    const branch = this.git.value?.branch.value ?? '';
+    if (branch === '(detached)') {
+      const head = this.git.value?.head.value ?? '';
+      return head ? head.slice(0, 7) : '(detached)';
+    }
+    return branch;
   }
   // The repository + commit-log window for the current root (null until open()).
   get git() {
@@ -478,7 +507,11 @@ class $Workspace {
     // Name is the actual folder name, never "." — resolve to the absolute path first so a root of "."
     // (or a trailing-slash path) still yields the real directory name.
     const absoluteRoot = Files.Class.absolute(root);
-    this.name.value = Files.Class.basename(absoluteRoot) || absoluteRoot;
+    // Line 1 is the PROJECT name, shared by the main checkout AND all its linked worktrees, so every
+    // worktree tab reads as the same project (its branch on line 2 tells them apart). The project root
+    // is the parent of the git COMMON dir: for the main checkout that is `<root>/.git` -> <root>; for a
+    // linked worktree it is `<project>/.git` -> <project>. Falls back to the folder name off-repo.
+    this.name.value = projectNameForRoot(absoluteRoot) || Files.Class.basename(absoluteRoot) || absoluteRoot;
     // A linked git worktree keeps `.git` as a pointer FILE ("gitdir: …"), never a directory — the
     // main checkout's `.git` is a directory. The worktree's own name is its root folder name.
     const gitPointerPath = Files.Class.join(absoluteRoot, '.git');
@@ -547,6 +580,26 @@ class $Workspace {
   focusGit(): void {
     this.focus.value = 'git';
   }
+  /**
+   * Switch the sidebar to an activity-bar view (a bar click OR the Ctrl+Shift+E/G/X chord). This is
+   * the SINGLE writer the activity bar and its keybindings both call, so the active view is one
+   * decision per workspace. Focus follows the view for the interactive panels (files/git) so their
+   * keyboard navigation is live immediately; the extensions placeholder is display-only, so it leaves
+   * keyboard focus where it is. Switching TO git kicks the same non-blocking refresh Ctrl+G does.
+   *
+   * invariant: The active activity item determines the sidebar content (src/modules/ui/ui.invariants.md)
+   */
+  showSidebarView(view: SidebarView): void {
+    this.sidebarView.value = view;
+    if (view === 'files') {
+      this.focus.value = 'files';
+    } else if (view === 'git') {
+      this.focus.value = 'git';
+      void this.git.value?.refresh();
+      void this.commitLog.value?.ensureRange(0, 50);
+    }
+  }
+
   /** Cycle the sidebar between the files tree and the git panel (Ctrl+G style toggle). */
   toggleGit(): void {
     const entering = this.focus.value !== 'git';

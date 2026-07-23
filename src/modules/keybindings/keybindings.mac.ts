@@ -40,4 +40,7 @@ export const macOverlayBindings: Keybinding[] = [
   { chord: { key: 'z', super: true, shift: true }, action: 'editor.redo', context: 'editor' },
   { chord: { key: 'p', super: true }, action: 'palette.open' },
   { chord: { key: 'q', super: true }, action: 'app.quit' },
+  // Cmd+Shift+] / Cmd+Shift+[ cycle projects — the mac-native form of the bracket cycling on the floor.
+  { chord: { key: ']', super: true, shift: true }, action: 'workspace.next' },
+  { chord: { key: '[', super: true, shift: true }, action: 'workspace.previous' },
 ];

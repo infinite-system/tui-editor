@@ -69,7 +69,7 @@ echo "== launch with one workspace and add a second through the visible + path i
 "$HARNESS" launch "$SESSION_NAME" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$FIRST_ROOT" >/dev/null
 "$HARNESS" ready "$SESSION_NAME" 20 >/dev/null || { echo "  FAIL  boot"; exit 1; }
 check_equal "$(field workspaceCount)" "1" "booted one workspace"
-check_frame_contains "$FIRST_NAME" "first workspace tab paints"
+check_frame_contains "${FIRST_NAME:0:17}" "first workspace tab paints (project name, capped)"
 PLUS_COLUMN="$($BUN -e 'const frame=JSON.parse(require("fs").readFileSync(process.argv[1]));process.stdout.write(String(Array.from(frame.rows[0].text).lastIndexOf("+")));' "$FRAME_PATH")"
 "$HARNESS" click "$SESSION_NAME" "$PLUS_COLUMN" 0 >/dev/null
 sleep 0.3
@@ -87,14 +87,24 @@ sleep 0.8
 "$HARNESS" settle "$SESSION_NAME" >/dev/null 2>&1
 check_equal "$(field workspaceCount)" "2" "second workspace was added"
 check_equal "$(field activeWorkspaceRoot)" "$SECOND_ROOT" "new workspace is active"
-check_frame_contains "$SECOND_NAME" "second workspace tab paints"
+check_frame_contains "${SECOND_NAME:0:17}" "second workspace tab paints (project name, capped)"
+# The long temp-dir names exceed the tab label cap, so the name ends in an ellipsis rather than a
+# hard truncation. (Real project/branch names are short and show in full.) Checked via tmux capture,
+# not the frame JSON: FrameProbe remaps the non-ASCII "…" glyph into its opaque plane, so the real
+# rendered text is the honest channel here.
+if "$HARNESS" capture "$SESSION_NAME" | grep -Fq "…"; then
+  echo "  PASS  long project name is capped with an ellipsis (…)"
+else
+  echo "  FAIL  long project name was not capped with an ellipsis (…)"
+  FAILURES=1
+fi
 
 # The active workspace tab's second line (branch/worktree detail) must stay LEGIBLE on the active
 # tab's background: palette.dim collides with palette.selection (grey-on-grey dark / grey-on-light),
 # hiding the branch. Assert the active tab's detail chars use the SAME fg as its name (theme-agnostic:
 # both should be the readable active fg, not dim).
 active_branch_legible() {
-  SECOND_NAME_ENV="$SECOND_NAME" "$BUN" -e '
+  SECOND_NAME_ENV="${SECOND_NAME:0:17}" "$BUN" -e '
 const frame=JSON.parse(require("fs").readFileSync(process.argv[1]));
 const rows=frame.rows, name=process.env.SECOND_NAME_ENV;
 let nameRow=-1, col=-1;
@@ -123,7 +133,7 @@ sleep 0.8
 check_frame_contains "second-root-change.txt" "git panel shows the second repository"
 
 echo "== clicking the first workspace tab restores its tree and git repository =="
-FIRST_COORDINATE="$(frame_coordinate "$FIRST_NAME")"
+FIRST_COORDINATE="$(frame_coordinate "${FIRST_NAME:0:17}")"
 FIRST_COLUMN="${FIRST_COORDINATE%% *}"
 FIRST_ROW="${FIRST_COORDINATE##* }"
 "$HARNESS" click "$SESSION_NAME" "$FIRST_COLUMN" "$FIRST_ROW" >/dev/null
@@ -141,7 +151,7 @@ check_equal "$(field liveGitWatcherCount)" "1" "two workspaces cost one live Git
 check_equal "$(field workspaceLiveGitWatchers)" "true,false" "only the active workspace owns a watcher"
 
 echo "== workspaceTabPosition moves and reorients the same strip top <-> left =="
-SECOND_TOP_COORDINATE="$(frame_coordinate "$SECOND_NAME")"
+SECOND_TOP_COORDINATE="$(frame_coordinate "${SECOND_NAME:0:17}")"
 SECOND_TOP_ROW="${SECOND_TOP_COORDINATE##* }"
 check_equal "$SECOND_TOP_ROW" "0" "horizontal strip paints both projects on the top row"
 "$HARNESS" send "$SESSION_NAME" C-, >/dev/null
@@ -168,8 +178,26 @@ fi
 sleep 0.8
 "$HARNESS" settle "$SESSION_NAME" >/dev/null 2>&1
 check_equal "$(field workspaceTabPosition)" "top" "settings panel restored top orientation"
-SECOND_RESTORED_COORDINATE="$(frame_coordinate "$SECOND_NAME")"
+SECOND_RESTORED_COORDINATE="$(frame_coordinate "${SECOND_NAME:0:17}")"
 check_equal "${SECOND_RESTORED_COORDINATE##* }" "0" "workspace strip returned to the top row"
+
+echo "== Ctrl+Shift+] / Ctrl+Shift+[ cycle between projects =="
+# Kitty-encoded chords (the app enables the protocol under tmux): ] = codepoint 93, [ = 91, ctrl+shift = mod 6.
+CYCLE_BEFORE="$(field activeWorkspaceRoot)"
+tmux send-keys -t "$SESSION_NAME" -l "$(printf '\033[93;6u')"; sleep 0.6; "$HARNESS" settle "$SESSION_NAME" >/dev/null 2>&1
+CYCLE_NEXT="$(field activeWorkspaceRoot)"
+if [ -n "$CYCLE_BEFORE" ] && [ "$CYCLE_NEXT" != "$CYCLE_BEFORE" ]; then
+  echo "  PASS  Ctrl+Shift+] cycled to the next project"
+else
+  echo "  FAIL  Ctrl+Shift+] did not cycle the active project (stayed $CYCLE_BEFORE)"; FAILURES=1
+fi
+tmux send-keys -t "$SESSION_NAME" -l "$(printf '\033[91;6u')"; sleep 0.6; "$HARNESS" settle "$SESSION_NAME" >/dev/null 2>&1
+CYCLE_PREV="$(field activeWorkspaceRoot)"
+if [ "$CYCLE_PREV" = "$CYCLE_BEFORE" ]; then
+  echo "  PASS  Ctrl+Shift+[ cycled back to the previous project"
+else
+  echo "  FAIL  Ctrl+Shift+[ did not cycle back ($CYCLE_PREV vs $CYCLE_BEFORE)"; FAILURES=1
+fi
 
 echo "== RESULT: $([ "$FAILURES" = 0 ] && echo ALL-PASS || echo FAILURES) =="
 exit "$FAILURES"

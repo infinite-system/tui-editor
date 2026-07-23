@@ -15,6 +15,16 @@ import { EditorCoordinates } from '../editor/EditorCoordinates';
 import type { Palette } from '../theme/ThemePalettes';
 import type { TabStrip } from './TabStrip';
 
+// Project name / branch on a workspace tab are capped so one long name cannot swallow the strip; the
+// cut is marked with an ellipsis rather than a silent hard truncation.
+const WORKSPACE_TAB_MAX_LABEL_WIDTH = 18;
+function ellipsize(text: string, width: number): string {
+  if (width <= 0) return '';
+  if (EditorCoordinates.Class.lineWidth(text) <= width) return text.padEnd(width, ' ');
+  if (width === 1) return '…';
+  return `${text.slice(0, width - 1)}…`;
+}
+
 export type WorkspaceTabBarSegment = {
   kind: 'tab' | 'panBackward' | 'panForward' | 'add';
   workspaceIndex: number;
@@ -167,9 +177,12 @@ function $renderWorkspaceTabBar(context: WorkspaceTabBarRenderContext): Workspac
     workspaceTab,
     width: Math.min(
       availableTabsWidth,
-      Math.max(
-        EditorCoordinates.Class.lineWidth(workspaceTab.label),
-        EditorCoordinates.Class.lineWidth(workspaceTab.detailLabel ?? ''),
+      Math.min(
+        WORKSPACE_TAB_MAX_LABEL_WIDTH,
+        Math.max(
+          EditorCoordinates.Class.lineWidth(workspaceTab.label),
+          EditorCoordinates.Class.lineWidth(workspaceTab.detailLabel ?? ''),
+        ),
       ) + 6,
     ),
   }));
@@ -203,7 +216,7 @@ function $renderWorkspaceTabBar(context: WorkspaceTabBarRenderContext): Workspac
     const closeHovered = hovered && hover?.kind === 'close';
     const rowBackground = workspaceTab.active ? palette.selection : hovered ? palette.cursorLine : null;
     const maximumLabelWidth = Math.max(1, measuredWorkspaceTab.width - 6);
-    const label = workspaceTab.label.slice(0, maximumLabelWidth).padEnd(maximumLabelWidth, ' ');
+    const label = ellipsize(workspaceTab.label, maximumLabelWidth);
     const tabText = ` ${workspaceTab.active ? '●' : ' '} ${label} `;
     const styledTab = fg(workspaceTab.active ? palette.fg : palette.dim)(tabText);
     chunks.push(rowBackground ? bg(rowBackground)(styledTab) : styledTab);
@@ -256,9 +269,7 @@ function $renderWorkspaceTabBar(context: WorkspaceTabBarRenderContext): Workspac
     const hovered = hover?.workspaceIndex === workspaceIndex;
     const rowBackground = workspaceTab.active ? palette.selection : hovered ? palette.cursorLine : null;
     const maximumDetailWidth = Math.max(1, measuredWorkspaceTab.width - 6);
-    const detailLabel = (workspaceTab.detailLabel ?? '')
-      .slice(0, maximumDetailWidth)
-      .padEnd(maximumDetailWidth, ' ');
+    const detailLabel = ellipsize(workspaceTab.detailLabel ?? '', maximumDetailWidth);
     const detailText = `   ${detailLabel}   `;
     const styledDetail = fg(workspaceTab.active ? palette.fg : palette.dim)(detailText);
     chunks.push(rowBackground ? bg(rowBackground)(styledDetail) : styledDetail);
