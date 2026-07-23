@@ -311,6 +311,21 @@ Six new operational lessons, every one from real friction this run.
   lifecycle and cleans up itself; the authoritative liveness signal is gate-LOG step activity, not
   process/tmux counts. And never kill unknown/stale sessions (the 2-day-old `diff-manual*` here) —
   they may be adjacent to the user's env. Reinforces "process topology lies; the log is truth."
+- **Migration verification must cover EVERY behavior the module provides (2026-07-23).** The
+  ScrollableTextViewport migration was drive-verified for scroll/momentum but NOT drag-select; a user
+  later reported "drag-select broke." It turned out NOT broken (see next lesson), but no smoke drove the
+  hover-card drag — so a real regression WOULD have shipped silently. Rule: migrating to a shared module,
+  ratchet a driven smoke for EACH behavior it provides (selection, momentum, alt-scroll, scrollbars), not
+  just the one you're focused on. An instance of the smoke-coverage ratchet.
+- **The tmux/SGR harness has a BLIND SPOT at terminal-specific paths (2026-07-23).** A user-reported
+  "drag-select broke" did NOT reproduce in-harness — it's a macOS Terminal.app MOUSE-PROTOCOL path
+  (Terminal.app may not honor SGR mode 1006 → X10 fallback, coords clamped at 223) the SGR-encoding
+  harness can't emit. Two rules: (a) do NOT fabricate a code fix for a bug that won't reproduce — that
+  ships a no-op (the fork correctly refused, and drive-proved the logic works + smoke-ratcheted it);
+  (b) when a real user "break" won't reproduce in-harness, suspect a terminal-CAPABILITY path (mouse mode,
+  glyph tier, escape support) the harness's own terminal can't exercise — diagnose defensively from the
+  code path, flag that final verification needs the user's real terminal. The harness proves LOGIC, not
+  every terminal's protocol quirks.
 
 ---
 
