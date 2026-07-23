@@ -241,8 +241,10 @@ present in the frame.
 src/modules/agent/
   AgentEvents.ts         — event/type vocabulary (deltas, tool_use, results, consent records)
   AgentBackend.ts        — the seam (interface + namespace slot)
-  ClaudeSdkBackend.ts    — Claude Agent SDK adapter (only file that imports the SDK)
-  GuestTailBackend.ts    — tier G: projects a PTY-guest session from its structured sidecars
+  CliStreamBackend.ts    — drives `claude -p --output-format stream-json` (subscription-billed
+                           structured events — the default native backend; verified 2026-07-23)
+  ClaudeSdkBackend.ts    — Claude Agent SDK adapter (API-key billing; only file importing the SDK)
+  GuestHookBackend.ts    — tier G: projects a PTY-guest session from hook events (stable contract)
   MockAgentBackend.ts    — scripted double (the gate's backend)
   AgentPolicy.ts         — Static; resolve(request) → allow | deny | ask (rules from settings)
   AgentSession.ts        — Reactive; transcript, pendingApproval, send/approve/deny/dispose
@@ -259,20 +261,28 @@ Dependency rule (conventions-gate): `agent/` imports ui seams and system seams; 
 
 - **Tier G (the guest hybrid — plan-billed users get the instrument too):** the stock Claude
   Code TUI keeps running in the PTY pane (subscription billing, untouched interaction), and the
-  harness attaches through the guest's two STRUCTURED side doors — never the ANSI stream:
-  - `GuestTailBackend` tails the session's local JSONL transcript
-    (`~/.claude/projects/<slug>/<session>.jsonl`) and emits the same `AgentEvent`s as the SDK
-    backend — the guest's own transcript IS the single session truth, Invar merely projects it.
-    Evidence pane, clickable file refs, real-diff rendering, transcript analytics: all read-only,
-    zero added cost.
-  - Claude Code **hooks** (`PreToolUse`/`PostToolUse`) carry the membrane: a thin hook command
-    forwards the tool call as JSON to `AgentPolicy` (socket/FIFO to the running Invar) and
-    returns its allow/deny/ask resolution; `ask` raises the native overlay. Policy'd consent for
-    guest sessions with no SDK in the loop.
+  harness attaches through the guest's STRUCTURED side doors — never the ANSI stream. Facts
+  pinned against official docs 2026-07-23 (hooks.md, sessions.md, headless.md,
+  agent-sdk/overview.md):
+  - **Hooks carry both flows, and they are the STABLE contract.** `PreToolUse` receives the tool
+    call as JSON and returns `permissionDecision: allow | deny | ask | defer` — the membrane,
+    officially supported; the `http` hook handler POSTs straight to the running Invar (no
+    FIFO/socket improvisation). `PostToolUse` delivers every tool call + result as JSON — the
+    evidence feed for the highest-slop surface (what actually executed), also stable.
+    `GuestHookBackend` folds these into `AgentEvent`s.
+  - **The JSONL transcript tail is an optional enhancement, not a foundation** — the on-disk
+    format (`~/.claude/projects/<slug>/<session>.jsonl`) is officially internal and may break on
+    any release. If used (for assistant-text mirroring between hook events), it is version-pinned
+    and degrades gracefully to the hook-only feed.
   Tier G exercises the SAME `AgentSession`/`AgentPolicy`/`AgentPaneContent` classes — only the
-  backend differs, which is exactly what the one-seam invariant is for. Facts to pin before
-  build (exploration dispatched 2026-07-23): SDK subscription-auth policy, JSONL
-  format/stability, hook allow/deny contract.
+  backend differs, which is exactly what the one-seam invariant is for.
+- **Auth matrix (verified 2026-07-23):** the Agent SDK requires API-key billing —
+  subscription/claude.ai login for SDK products is explicitly disallowed by policy. BUT
+  `claude -p --output-format stream-json` runs under normal subscription OAuth and streams the
+  full structured event vocabulary (assistant / tool_use / tool_result / stream_event deltas /
+  result with usage+cost). Therefore **`CliStreamBackend` is the default native backend** —
+  plan-billed, officially documented events — and `ClaudeSdkBackend` is the API-key/enterprise
+  option (Bedrock/Vertex/Foundry), not a prerequisite.
 - **Tier S (the weekend):** one session; transcript pane (PaneContent + renderer);
   composer line; approval overlay wired through AgentPolicy with default rules
   (reads auto-approved, writes ask, deny-list); clickable `file:line` references opening tabs;
