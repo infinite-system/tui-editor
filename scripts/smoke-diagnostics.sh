@@ -70,6 +70,31 @@ PY
   local local_fails=0
   if [ "${gutter:-0}" -ge 1 ]; then echo "  PASS  [$SERVER_NAME] severity-coloured gutter mark on the error line ($gutter)"; else echo "  FAIL  [$SERVER_NAME] no red gutter mark on the error line (diagnosticsCount=$dc)"; local_fails=$((local_fails+1)); fi
   if [ "${underline:-0}" -ge 1 ]; then echo "  PASS  [$SERVER_NAME] coloured underline over the diagnostic range ($underline cells)"; else echo "  FAIL  [$SERVER_NAME] no red underline over the diagnostic range (diagnosticsCount=$dc)"; local_fails=$((local_fails+1)); fi
+
+  # HOVER surfaces the diagnostic MESSAGE (not just `any`): dwell on badValue, poll for a bordered card
+  # carrying the error text. This is the fix for "hover shows `any` instead of the tsgo error message".
+  local badcol badrow
+  read -r badcol badrow <<<"$(FRAME="$PROJECT_ROOT/artifacts/frame-$SESSION.json" python3 -c "
+import json,os
+rows=json.load(open(os.environ['FRAME']))['rows']
+for i,r in enumerate(rows):
+    t=r.get('text','')
+    j=t.find('badValue')
+    if j>=0 and 'const' in t: print(j,i); break
+")"
+  local hover_seen='no'
+  if [ -n "${badcol:-}" ]; then
+    local hpoll=$((SECONDS+25))
+    while [ $SECONDS -lt $hpoll ]; do
+      tmux send-keys -t "$SESSION" -l "$(printf '\033[<35;%d;%dM' "$((badcol+1))" "$((badrow+1))")"; sleep 0.5
+      if FRAME="$PROJECT_ROOT/artifacts/frame-$SESSION.json" python3 -c "
+import json,os,sys
+rows=json.load(open(os.environ['FRAME']))['rows']
+sys.exit(0 if any('│' in r.get('text','') and ('error:' in r.get('text','').lower() or 'not assignable' in r.get('text','')) for r in rows) else 1)
+" 2>/dev/null; then hover_seen='yes'; break; fi
+    done
+  fi
+  if [ "$hover_seen" = 'yes' ]; then echo "  PASS  [$SERVER_NAME] hover card surfaces the diagnostic message"; else echo "  FAIL  [$SERVER_NAME] hover over the error showed no diagnostic message"; local_fails=$((local_fails+1)); fi
   return "$local_fails"
 }
 
