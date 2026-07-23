@@ -15,6 +15,12 @@ ROOT="$(cd "$DIR/.." && pwd)"
 BUN="$HOME/.bun/bin/bun"
 SEED="$(mktemp -d /tmp/tui-voices-XXXXXX)"
 FIX="$(mktemp -d /tmp/tui-voicefix-XXXXXX)"
+# Per-run ISOLATED HOME so settings start from DEFAULTS every launch — the harness otherwise points HOME
+# at a SHARED artifacts/home whose ~/.config/invar/settings.json persists across gate smokes (a prior
+# settings smoke leaves agentNarrationVoice/agentNarrationRate set, and this smoke would read that stale
+# state instead of the auto/1.0 defaults it asserts). Overriding HOME via `env` below wins over the
+# harness's HOME= assignment.
+VOICE_HOME="$(mktemp -d /tmp/tui-voicehome-XXXXXX)"; mkdir -p "$VOICE_HOME/.config/invar"
 S="voice-$$"
 FRAME="$ROOT/artifacts/frame-$S.json"
 fail=0
@@ -41,7 +47,7 @@ click_widget() { # label glyph
 mkdir -p "$SEED/piper-voices/library"
 : > "$SEED/piper-voices/aaa.onnx"; : > "$SEED/piper-voices/bbb.onnx"; : > "$SEED/piper-voices/library/ccc.onnx"
 
-trap '"$H" kill "$S" >/dev/null 2>&1; rm -rf "$SEED" "$FIX"' EXIT INT TERM
+trap '"$H" kill "$S" >/dev/null 2>&1; rm -rf "$SEED" "$FIX" "$VOICE_HOME"' EXIT INT TERM
 
 echo "== A) deterministic unit tests (discovery + resolve + dynamic-enum) =="
 if "$BUN" test src/modules/narration/VoiceDiscovery.test.ts src/modules/settings/SettingsPanel.test.ts >/tmp/voice-unit-$$.log 2>&1; then
@@ -52,7 +58,7 @@ fi
 rm -f /tmp/voice-unit-$$.log
 
 echo "== B) launch (seeded voices dir; mock TTS = no audio) =="
-"$H" launch "$S" 120x44 env XDG_DATA_HOME="$SEED" INVAR_TTS_BACKEND=mock TUI_FRAME_DUMP=1 bun run src/main.ts "$FIX" >/dev/null
+"$H" launch "$S" 120x44 env HOME="$VOICE_HOME" XDG_DATA_HOME="$SEED" INVAR_TTS_BACKEND=mock TUI_FRAME_DUMP=1 bun run src/main.ts "$FIX" >/dev/null
 if "$H" ready "$S" 20 >/dev/null; then echo "  PASS  boot: ready+quiescent"; else echo "  FAIL  boot never ready"; "$H" capture "$S"; exit 1; fi
 
 echo "== the Test-Voice command is registered (discoverable in the palette) =="
