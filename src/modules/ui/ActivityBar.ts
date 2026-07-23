@@ -140,14 +140,17 @@ class $ActivityBar {
       const isActive = activeView === item.view;
       const isHovered = this.hoveredItemIndex === index;
       const glyphColor = isActive ? palette.accent : isHovered ? palette.fg : palette.dim;
-      // Top row (4 cols): [accent | space glyph space]. The accent bar is drawn (accent-coloured)
-      // only for the active item; inactive items pad that column with a space so glyphs stay aligned.
-      chunks.push(fg(palette.accent)(isActive ? icons.accentBar : ' '));
+      // Top row (4 cols): [badge | space glyph space]. A count/flag badge sits TOP-LEFT (col 0), the
+      // same corner the editor tabs use, so both surfaces read consistently. Today only Source Control
+      // shows one (the working-tree change count); other items pad col 0 with a space.
+      const badge = item.view === 'git' && changedCount > 0 ? (changedCount > 9 ? '+' : String(changedCount)) : ' ';
+      chunks.push(fg(palette.accent)(badge));
       chunks.push(fg(glyphColor)(` ${item.glyph(icons)} `));
       chunks.push(fg(palette.fg)('\n'));
-      // Bottom row (4 cols): a badge digit in the bottom-right corner (Source Control's change count).
-      const badge = item.view === 'git' && changedCount > 0 ? (changedCount > 9 ? '+' : String(changedCount)) : ' ';
-      chunks.push(fg(palette.accent)(`   ${badge}`));
+      // Bottom row (4 cols): the active-item accent bar at the LEFT edge (col 0) — one cell per active
+      // item — with the rest padded so the button stays 4 wide.
+      chunks.push(fg(palette.accent)(isActive ? icons.accentBar : ' '));
+      chunks.push(fg(palette.fg)('   '));
       if (index < ACTIVITY_ITEMS.length - 1) chunks.push(fg(palette.fg)('\n'));
     });
     this.body.content = new StyledText(chunks);
