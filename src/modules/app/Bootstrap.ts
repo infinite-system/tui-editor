@@ -578,8 +578,11 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   // drop it and the loop STOPS (frames and status writes cease — 'idle CPU above ~zero is forbidden').
   let liveAnimationHeld = false;
   // Last panel geometry pushed to the terminal — so the resize ioctl fires only on a real change.
-  let lastPanelColumns = 0;
-  let lastPanelRows = 0;
+  // The panel converge signature: total rows + each cell's id=width. Keyed on the LAYOUT, not just the
+  // total width, so splitting/un-splitting/dragging the divider (which redistributes the SAME total
+  // width across cells) re-fires setViewportSize — otherwise a cell's child (a real terminal) keeps its
+  // pre-split full width because the panel's outer width never changed.
+  let lastPanelLayoutKey = '';
   const syncAnimationLiveness = (animating: boolean): void => {
     if (animating && !liveAnimationHeld) {
       renderer.requestLive();
@@ -631,9 +634,12 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     if (panelHost.visible.value) {
       const panelColumns = view.panelViewportColumns();
       const panelRows = view.panelViewportRows();
-      if (panelColumns > 0 && panelRows > 0 && (panelColumns !== lastPanelColumns || panelRows !== lastPanelRows)) {
-        lastPanelColumns = panelColumns;
-        lastPanelRows = panelRows;
+      const layoutKey = `${panelRows}:${panelHost
+        .cellSpans(panelColumns)
+        .map((span) => `${span.content.id}=${span.columns}`)
+        .join(',')}`;
+      if (panelColumns > 0 && panelRows > 0 && layoutKey !== lastPanelLayoutKey) {
+        lastPanelLayoutKey = layoutKey;
         panelHost.setViewportSize(panelColumns, panelRows);
         renderer.requestRender();
       }
