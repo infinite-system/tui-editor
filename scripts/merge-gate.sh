@@ -109,6 +109,7 @@ if [ "${FAST:-0}" != "1" ]; then
   step "smoke: hover" bash scripts/smoke-hover.sh
   step "smoke: diagnostics" bash scripts/smoke-diagnostics.sh
   step "smoke: image-preview" bash scripts/smoke-image-preview.sh
+  step "smoke: agent"       bash scripts/smoke-agent.sh
   # 5) The REAL settings applied-effect drives (all 16 fields, not just the --meta enumeration).
   # diffSplitRatio is driven in smoke-diff-overview above through a real divider drag + second open.
   step "settings applied-effect (all 16 driven)" bash scripts/smoke-settings-applied.sh

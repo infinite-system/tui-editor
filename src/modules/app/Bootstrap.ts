@@ -39,6 +39,7 @@ import { HandlerGuard } from './HandlerGuard';
 import { TerminalSession } from './TerminalSession';
 import { PanelHost } from '../ui/PanelHost';
 import { TerminalFactory } from '../terminal/TerminalFactory';
+import { AgentFactory } from '../agent/AgentFactory';
 import { dirname, join } from 'node:path';
 
 export interface BootOptions {
@@ -138,6 +139,19 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     panelHost.toggle();
   };
 
+  // The native agent (Claude) pane toggle — same bottom slot as the terminal. Show + activate when the
+  // slot is hidden or showing another pane; hide when the agent is already the visible pane (VS Code
+  // panel parity). Forward-references `ensureAgent` (declared below with ensureTerminal).
+  const toggleAgent = (): void => {
+    ensureAgent();
+    if (panelHost.visible.value && panelHost.activeId.value === 'agent') {
+      panelHost.hide();
+      return;
+    }
+    panelHost.activate('agent');
+    panelHost.show();
+  };
+
   // Reveal through the bound pane target: source, Markdown preview, and each diff side keep their own
   // scroll/selection writer while FindBar retains independent engines for all of them.
   const revealFindMatch = (): void => {
@@ -199,6 +213,16 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       cwd: workspaceSet.active.root,
     });
     panelHost.register(content);
+  };
+
+  // The native agent (Claude) pane — a second PaneContent in the SAME bottom slot, registered lazily on
+  // first toggle (idle cost zero). Tier S wires the local EchoAgentBackend; CliStreamBackend swaps in
+  // later behind the one backend seam with no change here.
+  let agentRegistered = false;
+  const ensureAgent = (): void => {
+    if (agentRegistered) return;
+    agentRegistered = true;
+    panelHost.register(AgentFactory.Class.create());
   };
   app.onDispose(() => panelHost.dispose());
 
@@ -1003,6 +1027,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     // focused terminal (to hide it) — exactly like the quit escape hatch. Same closure the status-bar
     // terminal button runs, so chord and click are one action.
     'panel.toggleTerminal': toggleTerminal,
+    'panel.toggleAgent': toggleAgent,
     'menu.previous': () => contextMenu.moveSelection(-1),
     'menu.next': () => contextMenu.moveSelection(1),
     'menu.run': () => contextMenu.runSelected(),
