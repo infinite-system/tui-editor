@@ -211,6 +211,9 @@ class $HoverCard {
           }
           this.requestPaint();
         },
+        // Card text is code (ASCII type signatures), so display column ≈ character index; the plain
+        // line length is the end-of-line stop that makes a rightward drag include the last character.
+        lineGraphemeCount: (lineIndex) => this.contentPlain[lineIndex]?.length ?? 0,
       },
     });
     root.add(this.box);

@@ -123,6 +123,33 @@ let ok=false;for(let y=0;y<f.height;y++) if(f.rows[y].text.includes("desync)")){
 console.log(ok?"OK":"CUT");
 ')"
 if [ "$end_visible" = "OK" ]; then echo "  PASS  line end visible at max scrollLeft"; else echo "  FAIL  line end cut off at max scrollLeft"; fail=1; fi
+
+echo "== rightward drag-select INCLUDES the char under the release cell (last-char off-by-one) =="
+# The user's repro: "horizontal scrollbar + drag-select to the right end drops the last letter." The
+# defect is a half-open range that ends BEFORE the grapheme under the release cell — independent of
+# scroll position (it lives in the shared drag behavior). We drive it deterministically at Home:
+# "Fixture" (7 chars) sits in the plain-ASCII head of the long line, so screen col == grapheme col and
+# NO reveal-scroll drifts the cells mid-drag. Dragging 'F'..'e' must copy all 7 — before the fix the
+# range stopped at 'r' (6). (At the scrolled right edge the same fix applies; a real user tracks the
+# last char visually, where the smoke's precomputed cell drifts with the boundary reveal-scroll.)
+tmux send-keys -t "$S" Home; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
+read -r fx_row fx_col <<<"$(FRAME_FILE="$FRAME" "$BUN" -e '
+const f=JSON.parse(require("fs").readFileSync(process.env.FRAME_FILE));
+for(let y=0;y<f.height;y++){const i=f.rows[y].text.indexOf("Fixture");if(i>=0){console.log(y+" "+i);break}}
+')"
+if [ -n "${fx_col:-}" ]; then
+  fx_end=$((fx_col + 6))   # "Fixture" spans 7 cells; final 'e' is at offset 6
+  scroll_present="$(f editorHorizontalScrollbar 2>/dev/null || echo unknown)"
+  "$H" drag "$S" "$fx_col" "$fx_row" "$fx_end" "$fx_row" >/dev/null
+  "$H" settle "$S" >/dev/null 2>&1
+  "$H" send "$S" C-c >/dev/null; sleep 0.4
+  fx_copied="$(f lastCopyChars)"
+  if [ "${fx_copied:-0}" = "7" ]; then echo "  PASS  rightward drag copied all 7 chars incl. the final 'e' (lastCopyChars=7)";
+  else echo "  FAIL  rightward drag dropped the last char (lastCopyChars=$fx_copied, want 7)"; fail=1; fi
+  "$H" send "$S" Escape >/dev/null
+else
+  echo "  FAIL  could not locate 'Fixture' at the line head"; fail=1
+fi
 tmux send-keys -t "$S" Home; sleep 0.3
 
 echo "== horizontal wheel ROUTING test (Option+wheel SGR 75/74) =="

@@ -545,6 +545,14 @@ content across scrolls, and paints it window-local each frame (the *selected ran
 background* projection). Stands on *One writer per scroll regime per frame* (the drag's `scrollRows`
 is that frame's sole writer) and *The selected range renders with a background*.
 
+A terminal mouse reports whole cells, so a drag has no sub-cell side; the shared behavior therefore
+makes a rightward/downward release INCLUSIVE of the grapheme under the release cell — it advances the
+head one grapheme past a release at or after the anchor, clamped to the line's end-of-line caret
+(`lineGraphemeCount`). Without this the half-open range stops before that grapheme and drops the last
+character of a word — most visible dragging to a line scrolled fully right. This inclusive rule lives
+once in `SelectionDragBehavior` (each host only supplies `lineGraphemeCount`) so no surface selects one
+character short while another selects whole.
+
 **Generates:** one selection/scroll feel across every text pane; a new scrollable pane is correct by
 construction the moment it wires the shared behavior — no per-pane drag/autoscroll rules to drift.
 
@@ -559,11 +567,13 @@ drag that selects but never auto-scrolls at the edge; two scrollable panes with 
 
 **Verification:** review that each scrollable surface constructs `SelectionDragBehavior` (no bespoke
 drag path) + `scripts/smoke-hover.sh` drives a drag across the card's scroll boundary and asserts the
-copied text via `lastCopyChars`; `scripts/smoke-editor.sh` + `smoke-diff` cover the editor and diff.
+copied text via `lastCopyChars`; `scripts/smoke-editor.sh` covers the editor (its "rightward
+drag-select INCLUDES the char under the release cell" case asserts a 7-char word copies whole, not 6)
+and `smoke-diff-overview` the diff.
 
 **Status:** provisional
 
-**Last refined:** 2026-07-22
+**Last refined:** 2026-07-23
 
 ### A scrollbar track is derived per frame from its region rect
 

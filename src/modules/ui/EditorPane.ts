@@ -235,6 +235,8 @@ class $EditorPane {
       positionAtCell: (cellX, cellY) => this.documentPositionAtCell(cellX, cellY),
       horizontalScrollPosition: () => workspaceSet.active.editor.viewport.scrollLeft.value,
       horizontalScrollingEnabled: () => !workspaceSet.active.editor.wordWrap.value,
+      lineGraphemeCount: (lineIndex) =>
+        EditorCoordinates.Class.graphemeCount(workspaceSet.active.editor.document.line(lineIndex)),
       beginSelection: (position) => {
         workspaceSet.active.focusEditor();
         workspaceSet.active.editor.placeCursor(position.line, position.column);

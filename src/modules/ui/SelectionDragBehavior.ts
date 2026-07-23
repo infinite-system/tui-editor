@@ -26,10 +26,15 @@ export interface SelectionDragBehaviorOptions {
   scrollColumns: (columnDelta: number) => void;
   scrollRows: (rowDelta: number) => void;
   haltCompetingScroll: () => void;
+  // Grapheme count of a document line, used to make a rightward drag INCLUSIVE of the character
+  // under the release cell (terminal cells are whole; the caret otherwise lands before that char,
+  // dropping the last letter of a word). Omit to keep the caret-exact half-open behavior.
+  lineGraphemeCount?: (lineIndex: number) => number;
 }
 
 export class SelectionDragBehavior {
   private pointerPosition: { screenColumn: number; screenRow: number } | null = null;
+  private selectionAnchor: SelectionDragPosition | null = null;
   private columnScrollRemainder = 0;
   private rowScrollRemainder = 0;
 
@@ -44,6 +49,7 @@ export class SelectionDragBehavior {
     if (!position) return;
     this.options.haltCompetingScroll();
     this.pointerPosition = { screenColumn, screenRow };
+    this.selectionAnchor = position;
     this.columnScrollRemainder = 0;
     this.rowScrollRemainder = 0;
     this.options.beginSelection(position, this.pointerDisplayColumn(screenColumn));
@@ -54,15 +60,35 @@ export class SelectionDragBehavior {
     this.pointerPosition = { screenColumn, screenRow };
     const position = this.options.positionAtCell(screenColumn, screenRow);
     if (!position) return;
-    this.options.extendSelection(position, this.pointerDisplayColumn(screenColumn));
+    this.options.extendSelection(this.inclusiveHead(position), this.pointerDisplayColumn(screenColumn));
   }
 
   end(): void {
     if (!this.pointerPosition) return;
     this.pointerPosition = null;
+    this.selectionAnchor = null;
     this.columnScrollRemainder = 0;
     this.rowScrollRemainder = 0;
     this.options.finishSelection();
+  }
+
+  // Terminal mouse reports whole cells, so a drag has no sub-cell side. Placing the head caret at
+  // the grapheme UNDER the release cell yields a half-open range that drops the final character —
+  // most visible when the line is scrolled fully right and the pointer sits on the last char. When
+  // the head is at or past the anchor (a rightward/downward drag) advance it one grapheme so the
+  // character under the release cell is INCLUDED, clamped to the line's end-of-line caret.
+  private inclusiveHead(position: SelectionDragPosition): SelectionDragPosition {
+    const anchor = this.selectionAnchor;
+    const lineGraphemeCount = this.options.lineGraphemeCount;
+    if (!anchor || !lineGraphemeCount) return position;
+    const headAtOrAfterAnchor =
+      position.line > anchor.line ||
+      (position.line === anchor.line && position.column >= anchor.column);
+    if (!headAtOrAfterAnchor) return position;
+    return {
+      line: position.line,
+      column: Math.min(position.column + 1, lineGraphemeCount(position.line)),
+    };
   }
 
   /** Advance edge autoscroll by one frame. True keeps the demand-driven frame clock alive. */
@@ -112,7 +138,7 @@ export class SelectionDragBehavior {
     );
     const position = this.options.positionAtCell(clampedScreenColumn, clampedScreenRow);
     if (position) {
-      this.options.extendSelection(position, this.pointerDisplayColumn(clampedScreenColumn));
+      this.options.extendSelection(this.inclusiveHead(position), this.pointerDisplayColumn(clampedScreenColumn));
     }
     return true;
   }

@@ -907,6 +907,8 @@ class $DiffView {
       positionAtCell: (screenColumn, screenRow) => this.selectionPositionAtCell(side, screenColumn, screenRow),
       horizontalScrollPosition: () => this.horizontalScrollOffset.value,
       horizontalScrollingEnabled: () => true,
+      lineGraphemeCount: (lineIndex) =>
+        this.selectionEditor ? EditorCoordinates.Class.graphemeCount(this.selectionEditor.document.line(lineIndex)) : 0,
       beginSelection: (position, pointerDisplayColumn) => {
         this.activateSelection(side, position, pointerDisplayColumn);
       },

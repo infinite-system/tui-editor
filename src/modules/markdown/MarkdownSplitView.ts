@@ -158,6 +158,8 @@ class $MarkdownSplitView {
         this.previewRenderable.positionAtCell(screenColumn, screenRow),
       horizontalScrollPosition: () => 0,
       horizontalScrollingEnabled: () => false,
+      lineGraphemeCount: (lineIndex) =>
+        EditorCoordinates.Class.graphemeCount(this.previewSelectionEditor.document.line(lineIndex)),
       beginSelection: (position, pointerDisplayColumn) => {
         this.focusPreview();
         this.previewSelectionEditor.cursor.set(position.line, position.column, pointerDisplayColumn);

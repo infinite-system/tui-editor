@@ -57,6 +57,8 @@ export interface ScrollableTextViewportDeps {
     extend: (position: SelectionDragPosition, pointerDisplayColumn: number) => void;
     finish: () => void;
     viewportRectangle: () => { leftColumn: number; rightColumn: number; topRow: number; bottomRow: number };
+    /** Grapheme count of a content line — lets a rightward drag include the char under the release cell. */
+    lineGraphemeCount?: (lineIndex: number) => number;
   };
 }
 
@@ -104,6 +106,7 @@ class $ScrollableTextViewport {
       beginSelection: (position, pointerDisplayColumn) => deps.selection.begin(position, pointerDisplayColumn),
       extendSelection: (position, pointerDisplayColumn) => deps.selection.extend(position, pointerDisplayColumn),
       finishSelection: () => deps.selection.finish(),
+      lineGraphemeCount: deps.selection.lineGraphemeCount,
       scrollColumns: (columnDelta) => this.scrollColumnsBy(columnDelta),
       scrollRows: (rowDelta) => this.scrollRowsBy(rowDelta),
       haltCompetingScroll: () => this.haltMomentum(),
