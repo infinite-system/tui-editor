@@ -242,6 +242,7 @@ src/modules/agent/
   AgentEvents.ts         — event/type vocabulary (deltas, tool_use, results, consent records)
   AgentBackend.ts        — the seam (interface + namespace slot)
   ClaudeSdkBackend.ts    — Claude Agent SDK adapter (only file that imports the SDK)
+  GuestTailBackend.ts    — tier G: projects a PTY-guest session from its structured sidecars
   MockAgentBackend.ts    — scripted double (the gate's backend)
   AgentPolicy.ts         — Static; resolve(request) → allow | deny | ask (rules from settings)
   AgentSession.ts        — Reactive; transcript, pendingApproval, send/approve/deny/dispose
@@ -256,6 +257,22 @@ Dependency rule (conventions-gate): `agent/` imports ui seams and system seams; 
 
 ## Tier plan
 
+- **Tier G (the guest hybrid — plan-billed users get the instrument too):** the stock Claude
+  Code TUI keeps running in the PTY pane (subscription billing, untouched interaction), and the
+  harness attaches through the guest's two STRUCTURED side doors — never the ANSI stream:
+  - `GuestTailBackend` tails the session's local JSONL transcript
+    (`~/.claude/projects/<slug>/<session>.jsonl`) and emits the same `AgentEvent`s as the SDK
+    backend — the guest's own transcript IS the single session truth, Invar merely projects it.
+    Evidence pane, clickable file refs, real-diff rendering, transcript analytics: all read-only,
+    zero added cost.
+  - Claude Code **hooks** (`PreToolUse`/`PostToolUse`) carry the membrane: a thin hook command
+    forwards the tool call as JSON to `AgentPolicy` (socket/FIFO to the running Invar) and
+    returns its allow/deny/ask resolution; `ask` raises the native overlay. Policy'd consent for
+    guest sessions with no SDK in the loop.
+  Tier G exercises the SAME `AgentSession`/`AgentPolicy`/`AgentPaneContent` classes — only the
+  backend differs, which is exactly what the one-seam invariant is for. Facts to pin before
+  build (exploration dispatched 2026-07-23): SDK subscription-auth policy, JSONL
+  format/stability, hook allow/deny contract.
 - **Tier S (the weekend):** one session; transcript pane (PaneContent + renderer);
   composer line; approval overlay wired through AgentPolicy with default rules
   (reads auto-approved, writes ask, deny-list); clickable `file:line` references opening tabs;
@@ -271,7 +288,10 @@ Dependency rule (conventions-gate): `agent/` imports ui seams and system seams; 
 ## Boundary (what this is NOT)
 
 - Not a replacement for the PTY guest path — running stock Claude Code in the terminal pane stays
-  supported and untouched; the two compose (native pane orchestrates, PTY executes shells).
+  supported and untouched; the two compose (native pane orchestrates, PTY executes shells), and
+  tier G makes the guest itself a first-class evidence source through its sidecars.
+- Not ANSI interception, ever — tier G reads the guest's structured transcript and hook events;
+  the rendered byte stream stays what the reality invariant says it is: a dead end.
 - Not an autonomy change — the policy pipeline only ever *narrows* what executes without a human;
   the default posture matches today's guest behavior (asks).
 - Not gate-coupled to the network — the merge gate never requires an API key; the SDK backend is
