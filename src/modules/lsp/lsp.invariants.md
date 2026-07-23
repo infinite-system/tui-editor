@@ -244,39 +244,47 @@ installed) and `bun test src/modules/workspace/Workspace.goToDefinition.test.ts`
 
 ### Diagnostic updates match current revisions
 
-**Invariant:** If a `publishDiagnostics` batch is applied to a document, then the revision it is
+**Invariant:** If a diagnostic batch is applied to a document — arriving by PUSH
+(`publishDiagnostics`) or by PULL (`textDocument/diagnostic` response) — then the revision it is
 stored under equals both the document's current revision and the version last synced to the
-server. A batch naming any other version is discarded; a batch naming NO version (real
+server. A batch naming any other version is discarded; a PUSH batch naming NO version (real
 `typescript-language-server` 5.x omits `version` even when `versionSupport` is advertised) is
-attributed to the last synced revision and accepted only while that is still the current one.
+attributed to the last synced revision, and a PULL report is stamped with the revision synced when
+the request was issued — either way accepted only while that revision is still the current one.
 
-**Scope:** `applyDiagnostics`. Diagnostics for a document whose text has advanced past the batch's
-version, or that was never opened/synced.
+**Scope:** `storeDiagnostics` (the shared sink), reached from `applyDiagnostics` (push) and
+`ingestDiagnosticReport` (pull). Diagnostics for a document whose text has advanced past the
+batch's version, or that was never opened/synced.
 
 **Mechanism:** Stands on *An async result can outlive the state it described* and generates
 *Async results are revision-stamped and stale results discarded*. The client stamps every
 `didOpen`/`didChange` with the document revision; a returning batch is accepted only when its
-version — reported, or `lastSentVersion` when the server omits it — matches both the live
-revision and the last-sent version, so a batch computed against stale text is dropped either way.
+version — reported, or `lastSentVersion` when a push server omits it, or the `lastSentVersion`
+captured when a pull request was issued — matches both the live revision and the last-sent
+version, so a batch computed against stale text is dropped either way. The pull path captures the
+request version BEFORE awaiting the response: if the document advances mid-flight, `lastSentVersion`
+moves and the same guard drops the stale report.
 
-**Generates:** The exact-version guard in `applyDiagnostics`; the versionless fallback to
-`lastSentVersion`; revision stamping on document sync; per-URI diagnostic batches keyed by
-version.
+**Generates:** The exact-version guard in `storeDiagnostics`; the versionless push fallback to
+`lastSentVersion`; the pull's `requestVersion` capture before the await; revision stamping on
+document sync; per-URI diagnostic batches keyed by version.
 
 **Rejected alternatives:** Applying whatever diagnostics arrive last — an older batch would then
 overwrite diagnostics for newer text, the exact failure *Async results are revision-stamped*
 forbids. Requiring a reported `version` unconditionally — drops every batch from real
 `typescript-language-server` 5.x, which never sends one (found by driving the real server).
 
-**Evidence:** `src/modules/lsp/LanguageClient.ts:551` (versionless fallback to
-`state.lastSentVersion`); `:554` (`state.document.revision.value !== version ||
-state.lastSentVersion !== version` → discard); `:541` (`applyDiagnostics`).
+**Evidence:** `src/modules/lsp/LanguageClient.ts` — `applyDiagnostics` versionless push fallback to
+`state.lastSentVersion`; `pullDiagnostics` captures `requestVersion = state.lastSentVersion` before
+the `textDocument/diagnostic` await; `storeDiagnostics` holds the shared discard guard
+(`state.document.revision.value !== version || state.lastSentVersion !== version`).
 
 **Impossible if true:** A stored diagnostic whose `version` is older than the document revision it
-is shown against.
+is shown against — whether it arrived by push or by pull.
 
-**Verification:** `bun test src/modules/lsp -t "stored only for the current document revision"`
-and `bun test src/modules/lsp -t "versionless batch"`.
+**Verification:** `bun test src/modules/lsp -t "stored only for the current document revision"`,
+`bun test src/modules/lsp -t "versionless batch"`, and
+`bun test src/modules/lsp -t "full report replaces the prior batch"`.
 
 **Status:** provisional
 
@@ -288,13 +296,14 @@ and `bun test src/modules/lsp -t "versionless batch"`.
 non-reactive records in a per-URI map and capped at `maxDiagnosticsPerDocument`, so storage
 scales with the configured bound, not with whatever count the server emits.
 
-**Scope:** The `diagnosticBatches` store and every read/ingest path (`applyDiagnostics`,
+**Scope:** The `diagnosticBatches` store and every read/ingest path (`storeDiagnostics`,
 `diagnosticSlice`). Not the reactive revision signal, which is a single sparse counter.
 
 **Mechanism:** Stands on *Cost tracks the actively observed set*. Ground truth is a
 `Map<uri, {version, items}>` of compact records; a single `diagnosticsRevision` ref signals
 change. Ingest slices the incoming array to the cap, and reads clamp their window to it, so a
-pathological server cannot inflate memory or reactive fan-out.
+pathological server cannot inflate memory or reactive fan-out. Both the push and pull paths ingest
+through the one `storeDiagnostics` sink, so the cap is applied regardless of source.
 
 **Generates:** The compact `LanguageDiagnostic` record; the single coarse `diagnosticsRevision`
 signal instead of a ref per diagnostic; the ingest and read caps.
@@ -302,8 +311,9 @@ signal instead of a ref per diagnostic; the ingest and read caps.
 **Rejected alternatives:** One reactive object per diagnostic — reintroduces the per-item
 reactivity cost *Cost tracks the actively observed set* rejects.
 
-**Evidence:** `src/modules/lsp/LanguageClient.ts:103` (`diagnosticBatches` plain `Map`); `:550`
-(ingest `.slice(0, maxDiagnosticsPerDocument)`); `:211` (read window clamped to the cap).
+**Evidence:** `src/modules/lsp/LanguageClient.ts` — `diagnosticBatches` is a plain `Map`;
+`storeDiagnostics` ingests `rawDiagnostics.slice(0, maxDiagnosticsPerDocument)`; `diagnosticSlice`
+clamps its read window to the cap.
 
 **Impossible if true:** A document holding more than `maxDiagnosticsPerDocument` stored
 diagnostics, or a reactive object allocated per diagnostic.
@@ -313,3 +323,59 @@ diagnostics, or a reactive object allocated per diagnostic.
 **Status:** provisional
 
 **Last refined:** 2026-07-21
+
+### Diagnostics reach the store by push or pull
+
+**Invariant:** If a language server reports diagnostics, then they reach the diagnostics store the
+same way regardless of transport model: a PUSH server (`typescript-language-server`) sends
+`textDocument/publishDiagnostics` notifications, while a PULL server (tsgo / native-preview, which
+never publishes) is polled with `textDocument/diagnostic` — and both funnel through the single
+`storeDiagnostics` sink under one revision guard and one cap. Pulling is gated on the server's
+advertised `diagnosticProvider` capability, so a push-only server is never polled and a pull-only
+server is never left silent.
+
+**Scope:** `storeDiagnostics` (shared sink), `applyDiagnostics` (push adapter),
+`pullDiagnostics`/`ingestDiagnosticReport`/`parseDiagnosticReport` (pull adapter),
+`scheduleDiagnosticPull` (debounce), and the `serverPullsDiagnostics` capability guard. The
+render (`Workspace.diagnosticsByLine` → `EditorPaneRenderer`) reads the store and is indifferent
+to which adapter wrote it.
+
+**Mechanism:** Stands on *Cost tracks the actively observed set* and generates nothing below it.
+The client advertises pull support on `initialize` (`textDocument.diagnostic`,
+`workspace.diagnostics.refreshSupport`). On `initialize`'s result it records
+`serverCapabilities.diagnosticProvider`. `sendLatestDocument` schedules a debounced pull after
+each `didOpen` (~50ms) and `didChange` (~350ms) — a no-op when the server is push-model.
+`pullDiagnostics` sends `textDocument/diagnostic` (echoing the last `resultId` as
+`previousResultId`); a `full` report REPLACES the stored batch through `storeDiagnostics` (so an
+error that disappears is cleared, even by an empty `items`), while an `unchanged` report keeps the
+batch and only refreshes the `resultId`. A `workspace/diagnostic/refresh` server request re-pulls
+every open document.
+
+**Generates:** The `storeDiagnostics` sink both adapters share; the `serverPullsDiagnostics` guard;
+the debounced `scheduleDiagnosticPull` with its per-URI timers; the `resultId` bookkeeping and
+`full`/`unchanged` handling; the `workspace/diagnostic/refresh` re-pull.
+
+**Rejected alternatives:** A separate pull-only diagnostics store parallel to the push store — the
+render would need two readers and would drift on clearing/versioning. Pulling unconditionally
+(ignoring `diagnosticProvider`) — floods a push-only server with `textDocument/diagnostic` it need
+not answer. Pulling without a debounce — one request per keystroke during typing.
+
+**Evidence:** `src/modules/lsp/LanguageClient.ts` — `storeDiagnostics` (shared sink),
+`pullDiagnostics`/`ingestDiagnosticReport`/`parseDiagnosticReport`, `serverPullsDiagnostics`,
+`scheduleDiagnosticPull`, the `initialize` capability advertisement, and the
+`workspace/diagnostic/refresh` handler. Driven against BOTH real servers by
+`scripts/smoke-diagnostics.sh`: tsgo (pull) and typescript-language-server (push) each paint the
+red gutter mark + red underline on the error line.
+
+**Impossible if true:** A reported diagnostic visible under one server model but not the other for
+the same error; a `textDocument/diagnostic` request sent to a server that never advertised
+`diagnosticProvider`; a pull report stored under a revision the document has moved past.
+
+**Verification:** `bash scripts/smoke-diagnostics.sh` (skips a case cleanly when that server is
+absent), `bun test src/modules/lsp -t "diagnostics are pulled via textDocument/diagnostic"`,
+`bun test src/modules/lsp -t "unchanged report keeps the prior batch"`, and
+`bun test src/modules/lsp -t "never sends textDocument/diagnostic"`.
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23

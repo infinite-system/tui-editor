@@ -134,6 +134,120 @@ test('diagnostic storage is capped at maxDiagnosticsPerDocument', async () => {
   }
 });
 
+/** Wait long enough for a debounced pull timer (open ~50ms, change ~350ms) to fire, then settle. */
+async function waitReal(milliseconds: number): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+  await flush();
+}
+
+test('pull-model server (tsgo): diagnostics are pulled via textDocument/diagnostic and stored', async () => {
+  const fake = new FakeLspProcess(6101);
+  fake.onInitialize = () => ({ capabilities: { diagnosticProvider: { identifier: 'typescript' } } });
+  let report: unknown = { kind: 'full', items: [makeDiagnostic('pulled 1'), makeDiagnostic('pulled 2')] };
+  fake.responders.set('textDocument/diagnostic', () => report);
+  const client = new LanguageClient.Class({
+    rootPath: ROOT,
+    providers: [new FakeProvider()],
+    processFactory: () => fake,
+  });
+  const path = `${ROOT}/pull.ts`;
+  const uri = uriFor(path);
+  const document = new TextDocument.Class();
+  document.loadFromText('const value: number = "x"\n', path);
+
+  try {
+    client.openDocument(document);
+    await client.whenStarted();
+    await fake.waitFor('textDocument/didOpen');
+    // The server never pushed; the client must PULL after the open-debounce window.
+    await fake.waitFor('textDocument/diagnostic');
+    await waitReal(80);
+    expect(client.diagnosticCountFor(uri)).toBe(2);
+    expect(client.diagnosticSlice(uri, 0, 10).map((d) => d.message)).toEqual(['pulled 1', 'pulled 2']);
+
+    // A fresh full report that no longer lists the errors REPLACES the batch (clears stale).
+    report = { kind: 'full', items: [] };
+    document.insertInline(0, 0, 'y');
+    client.syncDocument(document);
+    await waitReal(450);
+    expect(client.diagnosticCountFor(uri)).toBe(0);
+  } finally {
+    await client.dispose();
+  }
+});
+
+test('pull-model server: an unchanged report keeps the prior batch and echoes previousResultId', async () => {
+  const fake = new FakeLspProcess(6102);
+  fake.onInitialize = () => ({ capabilities: { diagnosticProvider: {} } });
+  const seenPreviousResultIds: Array<unknown> = [];
+  let report: unknown = { kind: 'full', resultId: 'r1', items: [makeDiagnostic('first')] };
+  fake.responders.set('textDocument/diagnostic', (params) => {
+    seenPreviousResultIds.push((params as { previousResultId?: unknown })?.previousResultId);
+    return report;
+  });
+  const client = new LanguageClient.Class({
+    rootPath: ROOT,
+    providers: [new FakeProvider()],
+    processFactory: () => fake,
+  });
+  const path = `${ROOT}/unchanged.ts`;
+  const uri = uriFor(path);
+  const document = new TextDocument.Class();
+  document.loadFromText('let a = 1\n', path);
+
+  try {
+    client.openDocument(document);
+    await client.whenStarted();
+    await fake.waitFor('textDocument/diagnostic');
+    await waitReal(80);
+    expect(client.diagnosticCountFor(uri)).toBe(1);
+    expect(seenPreviousResultIds[0]).toBeUndefined(); // no prior resultId on the first pull
+
+    // Next pull returns `unchanged`: prior diagnostics are kept, and the stored resultId is sent back.
+    report = { kind: 'unchanged', resultId: 'r2' };
+    document.insertInline(0, 0, 'y');
+    client.syncDocument(document);
+    await waitReal(450);
+    expect(client.diagnosticCountFor(uri)).toBe(1); // kept, not cleared
+    expect(seenPreviousResultIds[1]).toBe('r1'); // echoed the last resultId
+  } finally {
+    await client.dispose();
+  }
+});
+
+test('push-model server (typescript-language-server): the client never sends textDocument/diagnostic', async () => {
+  const fake = new FakeLspProcess(6103);
+  fake.onInitialize = () => ({ capabilities: {} }); // no diagnosticProvider → push-only
+  const client = new LanguageClient.Class({
+    rootPath: ROOT,
+    providers: [new FakeProvider()],
+    processFactory: () => fake,
+  });
+  const path = `${ROOT}/push.ts`;
+  const uri = uriFor(path);
+  const document = new TextDocument.Class();
+  document.loadFromText('const x = 1\n', path);
+
+  try {
+    client.openDocument(document);
+    await client.whenStarted();
+    await fake.waitFor('textDocument/didOpen');
+    await waitReal(120); // well past the open-debounce window
+
+    const sentDiagnosticPull = fake.received.some(
+      (message) => 'method' in message && message.method === 'textDocument/diagnostic',
+    );
+    expect(sentDiagnosticPull).toBe(false);
+
+    // The push path still populates the same store.
+    fake.pushDiagnostics(uri, document.revision.value, [makeDiagnostic('pushed')]);
+    await flush();
+    expect(client.diagnosticCountFor(uri)).toBe(1);
+  } finally {
+    await client.dispose();
+  }
+});
+
 test('closing a document clears its diagnostics', async () => {
   const fake = new FakeLspProcess(6002);
   const client = new LanguageClient.Class({

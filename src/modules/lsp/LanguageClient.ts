@@ -94,6 +94,17 @@ const NO_CAPABILITIES: LanguageCapabilities = {
   references: false,
 };
 
+/** Pull-diagnostics debounce windows. A freshly opened document pulls almost immediately (off the
+ *  sync microtask); rapid typing coalesces to one pull ~350ms after the last keystroke. */
+const DIAGNOSTIC_PULL_OPEN_DELAY_MILLISECONDS = 50;
+const DIAGNOSTIC_PULL_CHANGE_DELAY_MILLISECONDS = 350;
+
+interface DocumentDiagnosticReport {
+  kind: 'full' | 'unchanged';
+  resultId: string | null;
+  items: readonly unknown[];
+}
+
 class $LanguageClient {
   private readonly rootPath: string;
   private readonly providers: readonly LanguageProvider[];
@@ -106,6 +117,11 @@ class $LanguageClient {
   private readonly preferredTypeScriptServer: (() => string) | undefined;
   private readonly documents = new Map<string, OpenDocument>();
   private readonly diagnosticBatches = new Map<string, DiagnosticBatch>();
+  /** Last `resultId` per URI for pull diagnostics — echoed back as `previousResultId` so the server
+   *  may answer with an `unchanged` report instead of recomputing. */
+  private readonly diagnosticResultIds = new Map<string, string>();
+  /** Per-URI debounce timers for pull diagnostics — the active pull scheduled for each document. */
+  private readonly diagnosticPullTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private process: LspProcessLike | null = null;
   private transport: LspTransport.Model | null = null;
   private provider: LanguageProvider | null = null;
@@ -203,6 +219,8 @@ class $LanguageClient {
     const state = this.documents.get(uri);
     if (!state) return;
     this.documents.delete(uri);
+    this.cancelDiagnosticPull(uri);
+    this.diagnosticResultIds.delete(uri);
     if (state.opened && this.transport?.running) {
       void this.transport.notify('textDocument/didClose', { textDocument: { uri } }).catch(
         (reason) => this.containFailure(reason),
@@ -333,6 +351,9 @@ class $LanguageClient {
     }
     transport?.dispose();
     process?.dispose();
+    for (const timer of this.diagnosticPullTimers.values()) clearTimeout(timer);
+    this.diagnosticPullTimers.clear();
+    this.diagnosticResultIds.clear();
     this.documents.clear();
     if (this.diagnosticBatches.size > 0) {
       this.diagnosticBatches.clear();
@@ -426,11 +447,16 @@ class $LanguageClient {
           textDocument: {
             synchronization: { didSave: true, dynamicRegistration: false },
             publishDiagnostics: { versionSupport: true, relatedInformation: true },
+            diagnostic: { dynamicRegistration: false, relatedDocumentSupport: false },
             definition: { dynamicRegistration: false, linkSupport: true },
             hover: { dynamicRegistration: false, contentFormat: ['markdown', 'plaintext'] },
             references: { dynamicRegistration: false },
           },
-          workspace: { configuration: true, workspaceFolders: true },
+          workspace: {
+            configuration: true,
+            workspaceFolders: true,
+            diagnostics: { refreshSupport: true },
+          },
         },
       });
       if (!this.isCurrent(generation) || this.transport !== transport) {
@@ -493,6 +519,7 @@ class $LanguageClient {
       });
       state.opened = true;
       state.lastSentVersion = version;
+      this.scheduleDiagnosticPull(state, DIAGNOSTIC_PULL_OPEN_DELAY_MILLISECONDS);
       return;
     }
     await transport.notify('textDocument/didChange', {
@@ -500,6 +527,7 @@ class $LanguageClient {
       contentChanges: [{ text: state.document.text }],
     });
     state.lastSentVersion = version;
+    this.scheduleDiagnosticPull(state, DIAGNOSTIC_PULL_CHANGE_DELAY_MILLISECONDS);
   }
 
   private async transportFor(
@@ -540,15 +568,20 @@ class $LanguageClient {
     if (method === 'client/registerCapability' || method === 'window/workDoneProgress/create') {
       return null;
     }
+    if (method === 'workspace/diagnostic/refresh') {
+      // The server signals that a change elsewhere (e.g. another file) may have invalidated the
+      // diagnostics it computed for open documents; re-pull each so cross-file errors stay fresh.
+      this.refreshAllPulledDiagnostics();
+      return null;
+    }
     throw new Error(`Unsupported server request: ${method}`);
   }
 
   /**
-   * Diagnostics are accepted only when the server names the exact revision currently in
-   * the document and last sent over didOpen/didChange.
+   * PUSH path (`textDocument/publishDiagnostics`, used by typescript-language-server). Resolves
+   * the batch version, then hands the raw diagnostics to the shared, source-agnostic store.
    *
    * invariant: Diagnostic updates match current revisions (src/modules/lsp/lsp.invariants.md)
-   * invariant: Diagnostic storage stays compact and bounded (src/modules/lsp/lsp.invariants.md)
    */
   private applyDiagnostics(params: unknown): void {
     const value = this.objectValue(params);
@@ -563,15 +596,118 @@ class $LanguageClient {
     const reportedVersion = typeof value?.version === 'number' ? value.version : null;
     const version = reportedVersion ?? state.lastSentVersion;
     if (version === null) return;
+    this.storeDiagnostics(uri, version, value.diagnostics);
+  }
+
+  /**
+   * PULL path (`textDocument/diagnostic`, used by tsgo/native-preview, which never pushes). Sends
+   * the request for the document's synced revision, parses the `DocumentDiagnosticReport`, and
+   * feeds a `full` report into the SAME store as the push path. Guarded by the server's advertised
+   * `diagnosticProvider` capability so a push-only server is never polled.
+   *
+   * invariant: Diagnostics reach the store by push or pull (src/modules/lsp/lsp.invariants.md)
+   * invariant: Server failures remain contained (src/modules/lsp/lsp.invariants.md)
+   */
+  private async pullDiagnostics(state: OpenDocument): Promise<void> {
+    const transport = this.transport;
+    if (!transport?.running || !this.serverPullsDiagnostics) return;
+    if (!state.opened || !this.provider?.supportsPath(state.document.path)) return;
+    // Stamp the pull with the revision currently synced to the server. If the document advances
+    // while the request is in flight, `lastSentVersion` moves past it and the store's revision
+    // guard drops the stale report — the same staleness rule the push path obeys.
+    const requestVersion = state.lastSentVersion;
+    if (requestVersion === null) return;
+    const previousResultId = this.diagnosticResultIds.get(state.uri);
+    let report: unknown;
+    try {
+      report = await transport.request<unknown>('textDocument/diagnostic', {
+        textDocument: { uri: state.uri },
+        ...(previousResultId ? { previousResultId } : {}),
+      });
+    } catch (reason) {
+      this.containFailure(reason);
+      return;
+    }
+    this.ingestDiagnosticReport(state.uri, requestVersion, report);
+  }
+
+  /** Parse a `DocumentDiagnosticReport`. A `full` report REPLACES the stored batch (so a report
+   *  that no longer lists a prior error clears it); an `unchanged` report keeps the current batch
+   *  and only refreshes the `resultId`. */
+  private ingestDiagnosticReport(uri: string, version: number, report: unknown): void {
+    const parsed = this.parseDiagnosticReport(report);
+    if (!parsed) return;
+    if (parsed.resultId) this.diagnosticResultIds.set(uri, parsed.resultId);
+    else this.diagnosticResultIds.delete(uri);
+    if (parsed.kind === 'unchanged') return;
+    this.storeDiagnostics(uri, version, parsed.items);
+  }
+
+  private parseDiagnosticReport(report: unknown): DocumentDiagnosticReport | null {
+    const value = this.objectValue(report);
+    if (!value) return null;
+    const kind = value.kind === 'unchanged' ? 'unchanged' : 'full';
+    const resultId = typeof value.resultId === 'string' ? value.resultId : null;
+    const items = kind === 'full' && Array.isArray(value.items) ? value.items : [];
+    return { kind, resultId, items };
+  }
+
+  /**
+   * The single source-agnostic diagnostic sink: whether a batch arrived by PUSH notification or by
+   * PULL response, it is stored only under the revision that equals both the document's current
+   * revision and the last one synced to the server, capped at `maxDiagnosticsPerDocument`.
+   *
+   * invariant: Diagnostic updates match current revisions (src/modules/lsp/lsp.invariants.md)
+   * invariant: Diagnostic storage stays compact and bounded (src/modules/lsp/lsp.invariants.md)
+   * invariant: Diagnostics reach the store by push or pull (src/modules/lsp/lsp.invariants.md)
+   */
+  private storeDiagnostics(uri: string, version: number, rawDiagnostics: readonly unknown[]): void {
+    const state = this.documents.get(uri);
+    if (!state || !state.opened) return;
     if (state.document.revision.value !== version || state.lastSentVersion !== version) return;
 
     const items: LanguageDiagnostic[] = [];
-    for (const candidate of value.diagnostics.slice(0, this.maxDiagnosticsPerDocument)) {
+    for (const candidate of rawDiagnostics.slice(0, this.maxDiagnosticsPerDocument)) {
       const diagnostic = this.parseDiagnostic(candidate, uri, version);
       if (diagnostic) items.push(diagnostic);
     }
     this.diagnosticBatches.set(uri, { version, items });
     this.bumpDiagnostics();
+  }
+
+  /** True when the server advertised a pull-model `diagnosticProvider` on initialize (tsgo does;
+   *  typescript-language-server does not — it pushes). Only then is `textDocument/diagnostic` sent. */
+  private get serverPullsDiagnostics(): boolean {
+    return Boolean(this.serverCapabilities.diagnosticProvider);
+  }
+
+  /** Debounce a pull for `state`, collapsing rapid edits into one `textDocument/diagnostic`. No-op
+   *  for push-model servers, so the debounce/timer machinery never runs under typescript-language-server. */
+  private scheduleDiagnosticPull(state: OpenDocument, delayMilliseconds: number): void {
+    if (this.disposed || !this.serverPullsDiagnostics) return;
+    const existing = this.diagnosticPullTimers.get(state.uri);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      this.diagnosticPullTimers.delete(state.uri);
+      void this.pullDiagnostics(state).catch((reason) => this.containFailure(reason));
+    }, delayMilliseconds);
+    this.diagnosticPullTimers.set(state.uri, timer);
+  }
+
+  private cancelDiagnosticPull(uri: string): void {
+    const timer = this.diagnosticPullTimers.get(uri);
+    if (timer) {
+      clearTimeout(timer);
+      this.diagnosticPullTimers.delete(uri);
+    }
+  }
+
+  /** Re-pull every open, supported document — the response to `workspace/diagnostic/refresh`. */
+  private refreshAllPulledDiagnostics(): void {
+    if (!this.serverPullsDiagnostics) return;
+    for (const state of this.documents.values()) {
+      if (state.opened) this.scheduleDiagnosticPull(state, DIAGNOSTIC_PULL_CHANGE_DELAY_MILLISECONDS);
+    }
   }
 
   private parseDiagnostic(value: unknown, uri: string, version: number): LanguageDiagnostic | null {
