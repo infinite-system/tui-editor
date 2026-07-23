@@ -22,6 +22,12 @@ export type GlyphMode = 'auto' | 'nerd' | 'unicode' | 'ascii';
 /** Where the project-layer tab strip is mounted in the root frame. */
 export type WorkspaceTabPosition = 'top' | 'left';
 
+/** Which TypeScript language server backs LSP. `tsgo` (the native-Go `@typescript/native-preview`
+ *  build — ~14 MB vs ~580 MB for the Node family) is the PRIMARY default; `typescript-language-server`
+ *  is the fallback. If the chosen binary can't be resolved, resolve() falls back to the other so LSP
+ *  still works. */
+export type TypeScriptServer = 'tsgo' | 'typescript-language-server';
+
 /** The full set of settable values — one field per reactive getter on the store. */
 export interface SettingsValues {
   // Scroll physics.
@@ -39,6 +45,8 @@ export interface SettingsValues {
   theme: string;
   wordWrap: boolean;
   workspaceTabPosition: WorkspaceTabPosition;
+  // Language intelligence.
+  typescriptServer: TypeScriptServer;
   // Splitter geometry.
   sidebarWidth: number;
   gitSplitRatio: number;
@@ -87,6 +95,10 @@ const ALLOWED_WORKSPACE_TAB_POSITIONS: ReadonlySet<WorkspaceTabPosition> = new S
   'top',
   'left',
 ]);
+const ALLOWED_TYPESCRIPT_SERVERS: ReadonlySet<TypeScriptServer> = new Set<TypeScriptServer>([
+  'tsgo',
+  'typescript-language-server',
+]);
 
 class $Settings {
   constructor(readonly options: SettingsOptions = {}) {}
@@ -129,6 +141,9 @@ class $Settings {
   get workspaceTabPosition(): Ref<WorkspaceTabPosition> {
     return ref<WorkspaceTabPosition>('top');
   }
+  get typescriptServer(): Ref<TypeScriptServer> {
+    return ref<TypeScriptServer>('tsgo');
+  }
   get sidebarWidth(): Ref<number> {
     return ref(32);
   }
@@ -157,6 +172,7 @@ class $Settings {
       theme: this.theme,
       wordWrap: this.wordWrap,
       workspaceTabPosition: this.workspaceTabPosition,
+      typescriptServer: this.typescriptServer,
       sidebarWidth: this.sidebarWidth,
       gitSplitRatio: this.gitSplitRatio,
       diffSplitRatio: this.diffSplitRatio,
@@ -299,6 +315,7 @@ class $Settings {
       theme: 'dark',
       wordWrap: false,
       workspaceTabPosition: 'top',
+      typescriptServer: 'tsgo',
       sidebarWidth: 32,
       gitSplitRatio: 0.5,
       diffSplitRatio: 0.5,
@@ -339,6 +356,12 @@ class $Settings {
       ALLOWED_WORKSPACE_TAB_POSITIONS.has(record.workspaceTabPosition as WorkspaceTabPosition)
     ) {
       result.workspaceTabPosition = record.workspaceTabPosition as WorkspaceTabPosition;
+    }
+    if (
+      typeof record.typescriptServer === 'string' &&
+      ALLOWED_TYPESCRIPT_SERVERS.has(record.typescriptServer as TypeScriptServer)
+    ) {
+      result.typescriptServer = record.typescriptServer as TypeScriptServer;
     }
     readNumber('sidebarWidth');
     readNumber('gitSplitRatio');

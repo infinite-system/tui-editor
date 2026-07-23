@@ -97,6 +97,7 @@ describe('Settings', () => {
         theme: 'light', // valid, kept
         sidebarWidth: 'wide', // wrong type, dropped -> default 32
         glyphMode: 'bogus', // out of enum, dropped -> default 'auto'
+        typescriptServer: 'deno', // out of enum, dropped -> default 'tsgo'
         unknownKey: 99, // unknown, ignored
       }),
     });
@@ -104,6 +105,7 @@ describe('Settings', () => {
     expect(settings.theme.value).toBe('light');
     expect(settings.sidebarWidth.value).toBe(32);
     expect(settings.glyphMode.value).toBe('auto');
+    expect(settings.typescriptServer.value).toBe('tsgo');
   });
 
   test('set() + save() round-trips through the filesystem', () => {
