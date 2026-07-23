@@ -104,6 +104,7 @@ if [ "${FAST:-0}" != "1" ]; then
   step "smoke: markdown"     bash scripts/smoke-markdown.sh
   # Guarded inside the script: SKIPs cleanly (exit 0) when typescript-language-server is absent.
   step "smoke: goto-definition" bash scripts/smoke-goto-definition.sh
+  step "smoke: navigation-history" bash scripts/smoke-navigation-history.sh
   step "smoke: hover" bash scripts/smoke-hover.sh
   step "smoke: diagnostics" bash scripts/smoke-diagnostics.sh
   # 5) The REAL settings applied-effect drives (all 16 fields, not just the --meta enumeration).

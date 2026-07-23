@@ -773,6 +773,10 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'markdown.openHoveredReference': () => view.activeMarkdownSplitView()?.openHoveredReference(),
     // F12 parity with Ctrl/Cmd+click: definition of the symbol AT THE CURSOR.
     'go.definition': () => void workspaceSet.active.goToDefinition(),
+    // Browser-style Go Back / Go Forward through the navigation trail (Alt+[ / Alt+]). Safe no-ops
+    // at the ends of the history.
+    'navigation.back': () => workspaceSet.active.navigateBack(),
+    'navigation.forward': () => workspaceSet.active.navigateForward(),
     'git.togglePanel': () => {
       workspaceSet.active.toggleGit();
       if (workspaceSet.active.focus.value === 'git') {
