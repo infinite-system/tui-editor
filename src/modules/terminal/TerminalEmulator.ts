@@ -82,9 +82,18 @@ class $TerminalEmulator {
   }
 
   /** Pull one visible cell (viewport row/column) into a flat struct. Reuses a single xterm cell
-   *  object across the pull to stay allocation-free per cell — the flyweight viewport-pull. */
+   *  object across the pull to stay allocation-free per cell — the flyweight viewport-pull.
+   *
+   *  `row` is VIEWPORT-relative (0 = top visible line). xterm's getLine() indexes the WHOLE buffer
+   *  including scrollback, so we add `baseY` (the absolute line of the viewport top when scrolled to
+   *  the bottom — the live state, since no scrollback-scroll UI exists yet). This is the same origin
+   *  `cursorY` is measured against, so cells and cursor stay aligned. Without the offset, once any
+   *  content scrolls into scrollback (baseY > 0 — e.g. after a full-screen alt-screen app like an
+   *  editor or Claude Code exits) the pull would read the TOP OF SCROLLBACK: stale artifacts on
+   *  screen while live output + the cursor sit below the rendered window (typing appears to vanish). */
   cell(row: number, column: number): TerminalCell | null {
-    const line = this.terminal.buffer.active.getLine(row);
+    const active = this.terminal.buffer.active;
+    const line = active.getLine(active.baseY + row);
     if (!line) return null;
     const cell = line.getCell(column, this.reusableCell.cell);
     if (!cell) return null;

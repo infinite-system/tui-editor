@@ -57,6 +57,17 @@ test('cursor-position sequence lands text at the addressed row/column', async ()
   expect(instance.cursorColumn).toBe(3);
 });
 
+test('viewport reads follow the scrollback base — latest lines show, not the top of scrollback', async () => {
+  // Regression: after content scrolls into scrollback (baseY > 0 — e.g. a full-screen app exits),
+  // the cell pull must read the VISIBLE viewport, not absolute buffer row 0. Feed 10 lines into a
+  // 5-row grid: the viewport must show L5..L9, and typing (the last line) must be visible.
+  const { backend, instance } = makeInstance(20, 5);
+  backend.feed('L0\r\nL1\r\nL2\r\nL3\r\nL4\r\nL5\r\nL6\r\nL7\r\nL8\r\nL9');
+  await instance.flush();
+  expect(rowText(instance, 4)).toBe('L9'); // bottom visible line = the live/typing line
+  expect(rowText(instance, 0)).toBe('L5'); // top visible line, NOT 'L0' (top of scrollback)
+});
+
 test('emulator replies (device reports) return to the child through the backend seam', async () => {
   const { backend, instance } = makeInstance();
   // ESC[6n = Device Status Report (cursor position) → the emulator replies with ESC[row;colR.

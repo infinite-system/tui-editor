@@ -48,10 +48,16 @@ export const canonicalBindings: Keybinding[] = [
   // terminals (CSI 1;2P) and under kitty alike, and taken by nothing else. The sheet lists itself.
   { chord: { key: 'f1', shift: true }, action: 'help.shortcuts' },
   { chord: { key: 'g', ctrl: true }, action: 'git.togglePanel' },
-  // Toggle the bottom panel (integrated terminal). Ctrl+` is the VS Code-parity chord; it is RESERVED
-  // so it fires from any mode — including from inside the focused terminal, to hide it. Ctrl+backtick
-  // is unencodable on some legacy terminals (they send NUL), so F8 is a single-function-key ALIAS that
-  // is always deliverable and drivable (same rationale as F1 aliasing the command palette).
+  // Toggle the bottom panel (integrated terminal). THREE deliverable chords for the one action:
+  //   • Ctrl+J — VS Code's own "toggle panel" chord and the RECOMMENDED everyday one: a plain Ctrl+key
+  //     that needs no Fn modifier (F8 does on laptops/Mac) and encodes on every terminal (0x0A).
+  //   • Ctrl+` — the VS Code terminal-specific chord; unencodable on some legacy terminals (they send
+  //     NUL), which is why it silently no-ops for some users.
+  //   • F8 — a single-function-key fallback that is always deliverable (same rationale as F1 aliasing
+  //     the command palette), but on laptop/Mac keyboards needs the Fn chord.
+  // All RESERVED so they fire from any mode — including from inside the focused terminal, to hide it
+  // (VS Code parity: Ctrl+J toggles the panel even while the terminal owns the keyboard).
+  { chord: { key: 'j', ctrl: true }, action: 'panel.toggleTerminal', reserved: true },
   { chord: { key: '`', ctrl: true }, action: 'panel.toggleTerminal', reserved: true },
   { chord: { key: 'f8' }, action: 'panel.toggleTerminal', reserved: true },
   { chord: { key: 'tab' }, action: 'focus.toggle' },
