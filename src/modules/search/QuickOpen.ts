@@ -2,6 +2,7 @@ import { Reactive } from 'ivue';
 import { ref, shallowRef } from 'vue';
 import { CommandScoring } from '../commands/CommandScoring';
 import { TextEditing } from '../editor/TextEditing';
+import { Files } from '../system/Files';
 import { Processes } from '../system/Processes';
 
 export interface QuickOpenMatch {
@@ -11,8 +12,11 @@ export interface QuickOpenMatch {
 
 export type ProjectFileEnumerator = (projectRoot: string) => Promise<readonly string[]>;
 
+export type SiblingFolderEnumerator = (parentDirectory: string) => readonly string[];
+
 export interface QuickOpenOptions {
   enumerateProjectFiles?: ProjectFileEnumerator;
+  enumerateSiblingFolders?: SiblingFolderEnumerator;
 }
 
 export type QuickOpenMode = 'files' | 'workspacePath';
@@ -81,11 +85,16 @@ class $QuickOpen {
   setQuery(text: string): void {
     this.query.value = text;
     this.errorMessage.value = '';
-    if (this.mode.value === 'files') this.refilter();
+    this.refilter();
   }
 
-  /** Reuse the quick-open input as a minimal project-folder path prompt. */
-  showWorkspacePath(): void {
+  /**
+   * Open the project-folder picker. When the current workspace root is given, the input is
+   * prefilled with the ABSOLUTE path of the root's parent directory and the parent's subfolders
+   * (the current project's siblings) become the fuzzy-searchable candidates. Without a root the
+   * picker stays a blank free-form path prompt.
+   */
+  showWorkspacePath(workspaceRoot?: string): void {
     ++this.latestEnumerationRequestIdentifier;
     this.open.value = true;
     this.mode.value = 'workspacePath';
@@ -94,6 +103,13 @@ class $QuickOpen {
     this.projectFiles = [];
     this.matches.value = [];
     this.selectedIndex.value = -1;
+
+    if (workspaceRoot === undefined) return;
+
+    const parentDirectory = Files.Class.dirname(Files.Class.absolute(workspaceRoot));
+    this.query.value = parentDirectory;
+    this.projectFiles = this.enumerateSiblingFolders(parentDirectory);
+    this.refilter();
   }
 
   setError(message: string): void {
@@ -121,6 +137,8 @@ class $QuickOpen {
   /** Return the selected path. The caller owns opening the file and closing quick-open. */
   activate(): string | null {
     if (this.mode.value === 'workspacePath') {
+      const selectedFolder = this.matches.value[this.selectedIndex.value]?.path;
+      if (selectedFolder !== undefined) return selectedFolder;
       const workspacePath = this.query.value.trim();
       return workspacePath.length > 0 ? workspacePath : null;
     }
@@ -157,6 +175,15 @@ class $QuickOpen {
       return gitResult.stdout.split('\n').filter((filePath) => filePath.length > 0);
     }
     return [];
+  }
+
+  protected enumerateSiblingFolders(parentDirectory: string): readonly string[] {
+    if (this.options.enumerateSiblingFolders) {
+      return this.options.enumerateSiblingFolders(parentDirectory);
+    }
+    return Files.Class.list(parentDirectory)
+      .filter((directoryEntry) => directoryEntry.isDir)
+      .map((directoryEntry) => directoryEntry.path);
   }
 
   private refilter(): void {

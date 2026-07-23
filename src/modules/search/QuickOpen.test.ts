@@ -92,6 +92,47 @@ describe('QuickOpen', () => {
     expect(quickOpen.open.value).toBe(true);
   });
 
+  test('workspace-path mode prefills the parent path and lists fuzzy-searchable sibling folders', () => {
+    const enumeratedParentDirectories: string[] = [];
+    const quickOpen = new QuickOpen.Class({
+      enumerateSiblingFolders: (parentDirectory) => {
+        enumeratedParentDirectories.push(parentDirectory);
+        return ['/projects/alpha', '/projects/beta', '/projects/gamma'];
+      },
+    });
+
+    quickOpen.showWorkspacePath('/projects/alpha');
+
+    expect(enumeratedParentDirectories).toEqual(['/projects']);
+    expect(quickOpen.mode.value).toBe('workspacePath');
+    expect(quickOpen.query.value).toBe('/projects');
+    expect(quickOpen.matches.value.map((match) => match.path)).toEqual([
+      '/projects/alpha',
+      '/projects/beta',
+      '/projects/gamma',
+    ]);
+    expect(quickOpen.selectedIndex.value).toBe(0);
+
+    quickOpen.setQuery('/projects/gm');
+    expect(quickOpen.matches.value.map((match) => match.path)).toEqual(['/projects/gamma']);
+
+    quickOpen.moveSelection(0);
+    expect(quickOpen.activate()).toBe('/projects/gamma');
+  });
+
+  test('workspace-path mode returns the typed path when it matches no sibling folder', () => {
+    const quickOpen = new QuickOpen.Class({
+      enumerateSiblingFolders: () => ['/projects/alpha', '/projects/beta'],
+    });
+
+    quickOpen.showWorkspacePath('/projects/alpha');
+    quickOpen.setQuery('  /elsewhere/custom  ');
+
+    expect(quickOpen.matches.value).toEqual([]);
+    expect(quickOpen.selectedIndex.value).toBe(-1);
+    expect(quickOpen.activate()).toBe('/elsewhere/custom');
+  });
+
   test('workspace-path mode reuses the input and returns the typed folder', () => {
     const quickOpen = new QuickOpen.Class();
     quickOpen.showWorkspacePath();

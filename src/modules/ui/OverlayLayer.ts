@@ -213,15 +213,16 @@ class $OverlayLayer {
       this.quickOpenInput.fg = palette.fg;
       const matches = quickOpen.matches.value.slice(0, 14);
       const selectedIndex = quickOpen.selectedIndex.value;
-      this.quickOpenList.content = openingWorkspace
-        ? quickOpen.errorMessage.value
+      this.quickOpenList.content =
+        openingWorkspace && quickOpen.errorMessage.value
           ? `  ${quickOpen.errorMessage.value}\n  Enter opens · Esc cancels`
-          : '  Type an existing folder path\n  Enter opens · Esc cancels'
-        : matches.length
-          ? matches.map((match, index) => `${index === selectedIndex ? '›' : ' '} ${match.path}`).join('\n')
-          : quickOpen.query.value
-            ? '  (no matching files)'
-            : '  (type to filter project files)';
+          : matches.length
+            ? matches.map((match, index) => `${index === selectedIndex ? '›' : ' '} ${match.path}`).join('\n')
+            : openingWorkspace
+              ? '  Type an existing folder path\n  Enter opens · Esc cancels'
+              : quickOpen.query.value
+                ? '  (no matching files)'
+                : '  (type to filter project files)';
       this.quickOpenList.fg = palette.dim;
     }
 

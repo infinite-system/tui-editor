@@ -509,7 +509,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     workspaceSet,
     theme,
     openWorkspaceFolder: () =>
-      overlayCoordinator.openExclusiveOverlay('quickOpen', () => quickOpen.showWorkspacePath()),
+      overlayCoordinator.openExclusiveOverlay('quickOpen', () =>
+        quickOpen.showWorkspacePath(workspaceSet.active.root),
+      ),
     quit: () => void shutdown(),
     requestRender: () => app.requestRender(),
     hasOpenDiff: () => workspaceSet.active.showingDiff.value && view.activeDiffView() !== null,
@@ -611,7 +613,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'quickopen.open': () =>
       overlayCoordinator.openExclusiveOverlay('quickOpen', () => void quickOpen.show(workspaceSet.active.root)),
     'workspace.openFolder': () =>
-      overlayCoordinator.openExclusiveOverlay('quickOpen', () => quickOpen.showWorkspacePath()),
+      overlayCoordinator.openExclusiveOverlay('quickOpen', () =>
+        quickOpen.showWorkspacePath(workspaceSet.active.root),
+      ),
     'workspace.close': () => workspaceSet.closeActive(),
     'workspace.next': () => workspaceSet.cycle(1),
     'workspace.previous': () => workspaceSet.cycle(-1),

@@ -162,7 +162,9 @@ class $TabBar {
       } else if (segment.kind === 'panForward') {
         workspaceTabStrip.pan(1);
       } else {
-        overlayCoordinator.openExclusiveOverlay('quickOpen', () => quickOpen.showWorkspacePath());
+        overlayCoordinator.openExclusiveOverlay('quickOpen', () =>
+          quickOpen.showWorkspacePath(workspaceSet.active.root),
+        );
       }
       renderer.requestRender();
     };
