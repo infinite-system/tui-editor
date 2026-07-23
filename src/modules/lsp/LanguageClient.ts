@@ -61,6 +61,11 @@ export interface LanguageClientOptions {
   /** Late-read of the `typescriptServer` setting, threaded to the default TypeScript provider so the
    *  chosen server (or 'auto') is honoured when a document activates. */
   preferredTypeScriptServer?: () => string;
+  /** Late-read of the `lspFileSizeLimitKb` setting (KB; default 2048 = 2 MB). A document whose text exceeds this budget is
+   *  NEVER attached to the server (no `didOpen`/`didChange`), so the server can't balloon on a huge
+   *  file and crash the app. `0` (or any non-positive) means "no limit — always attach". Read late so a
+   *  live settings change is honoured on the next open/sync. */
+  fileSizeLimitKb?: () => number;
 }
 
 interface OpenDocument {
@@ -115,6 +120,10 @@ class $LanguageClient {
   private readonly maxDiagnosticsPerDocument: number;
   private readonly maxReferencesPerRequest: number;
   private readonly preferredTypeScriptServer: (() => string) | undefined;
+  private readonly fileSizeLimitKb: (() => number) | undefined;
+  /** URIs of documents currently suppressed for exceeding the size budget — the set the size notice
+   *  reads to prove the suppression is never a silent no-op. */
+  private readonly sizeSuppressedUris = new Set<string>();
   private readonly documents = new Map<string, OpenDocument>();
   private readonly diagnosticBatches = new Map<string, DiagnosticBatch>();
   /** Last `resultId` per URI for pull diagnostics — echoed back as `previousResultId` so the server
@@ -135,6 +144,7 @@ class $LanguageClient {
     this.rootPath = options.rootPath ?? this.defaultRootPath();
     // Set BEFORE createProviders() — the default TypeScript provider reads it at construction.
     this.preferredTypeScriptServer = options.preferredTypeScriptServer;
+    this.fileSizeLimitKb = options.fileSizeLimitKb;
     this.providers = options.providers ? [...options.providers] : this.createProviders();
     this.processFactory = options.processFactory ?? null;
     this.transportFactory = options.transportFactory ?? null;
@@ -152,6 +162,11 @@ class $LanguageClient {
     return ref<string | null>(null);
   }
   get diagnosticsRevision() {
+    return ref(0);
+  }
+  /** Bumped whenever a document's size-suppression state flips, so a reactive reader (the status-bar
+   *  notice) re-evaluates when a large file is opened or its budget changes. */
+  get sizeSuppressionRevision() {
     return ref(0);
   }
 
@@ -190,14 +205,57 @@ class $LanguageClient {
       this.providers.some((provider) => provider.supportsPath(document.path));
   }
 
+  /** The current size budget in KB (`0` = no limit). Read late so a live settings change applies. */
+  private currentFileSizeLimitKb(): number {
+    const limit = this.fileSizeLimitKb?.() ?? 0;
+    return Number.isFinite(limit) && limit > 0 ? limit : 0;
+  }
+
+  /** True when `document`'s text is larger than the configured budget (and a budget is set). Uses
+   *  `text.length / 1024` — the same cheap measure the server would otherwise ingest whole. */
+  private documentExceedsSizeLimit(document: TextDocumentModel): boolean {
+    const limit = this.currentFileSizeLimitKb();
+    return limit > 0 && document.text.length / 1024 > limit;
+  }
+
+  /** Recompute `document`'s suppression against the current budget, updating the tracked set and
+   *  bumping the reactive signal on a change. Returns whether it is now suppressed. */
+  private refreshSizeSuppression(document: TextDocumentModel): boolean {
+    const uri = this.uriFor(document.path);
+    const exceeds = this.documentExceedsSizeLimit(document);
+    const wasSuppressed = this.sizeSuppressedUris.has(uri);
+    if (exceeds === wasSuppressed) return exceeds;
+    if (exceeds) this.sizeSuppressedUris.add(uri);
+    else this.sizeSuppressedUris.delete(uri);
+    this.sizeSuppressionRevision.value++;
+    return exceeds;
+  }
+
+  /** True when the given document/URI is currently suppressed for exceeding the size budget. */
+  isSizeSuppressed(documentOrUri: TextDocumentModel | string): boolean {
+    void this.sizeSuppressionRevision.value;
+    const uri = typeof documentOrUri === 'string' ? documentOrUri : this.uriFor(documentOrUri.path);
+    return this.sizeSuppressedUris.has(uri);
+  }
+
+  /** A user-facing notice when `document` is size-suppressed, else `null` — so a suppressed file is
+   *  never a silent no-op. */
+  sizeSuppressionNotice(document: TextDocumentModel): string | null {
+    if (!this.isSizeSuppressed(document)) return null;
+    const kilobytes = Math.round(document.text.length / 1024);
+    return `Large file — language features off (${kilobytes} KB > ${this.currentFileSizeLimitKb()} KB limit)`;
+  }
+
   /**
    * Register a TS/JS document and schedule activation without making file-open wait for a
-   * subprocess. Unsupported files remain entirely local.
+   * subprocess. Unsupported files remain entirely local. A document larger than the size budget is
+   * size-suppressed and never attached (no subprocess start for it), so the server can't balloon.
    *
    * invariant: LSP activation follows semantic demand (src/modules/lsp/lsp.invariants.md)
    */
   openDocument(document: TextDocumentModel): void {
     if (this.disposed || !this.supportsDocument(document)) return;
+    if (this.refreshSizeSuppression(document)) return;
     const state = this.rememberDocument(document);
     void this.ensureStarted(document.path).then((ready) => {
       if (ready) return this.synchronize(state);
@@ -206,6 +264,7 @@ class $LanguageClient {
 
   syncDocument(document: TextDocumentModel): void {
     if (this.disposed || !document.path) return;
+    if (this.refreshSizeSuppression(document)) return;
     const state = this.rememberDocument(document);
     if (!this.isReady) {
       this.openDocument(document);
@@ -219,6 +278,7 @@ class $LanguageClient {
     const state = this.documents.get(uri);
     if (!state) return;
     this.documents.delete(uri);
+    if (this.sizeSuppressedUris.delete(uri)) this.sizeSuppressionRevision.value++;
     this.cancelDiagnosticPull(uri);
     this.diagnosticResultIds.delete(uri);
     if (state.opened && this.transport?.running) {
@@ -355,6 +415,7 @@ class $LanguageClient {
     this.diagnosticPullTimers.clear();
     this.diagnosticResultIds.clear();
     this.documents.clear();
+    this.sizeSuppressedUris.clear();
     if (this.diagnosticBatches.size > 0) {
       this.diagnosticBatches.clear();
       this.diagnosticsRevision.value++;
@@ -473,7 +534,11 @@ class $LanguageClient {
       this.activeProviderId.value = selection.provider.id;
       this.publishStatus();
       for (const document of this.documents.values()) {
-        if (selection.provider.supportsPath(document.document.path)) void this.synchronize(document);
+        if (selection.provider.supportsPath(document.document.path)) {
+          // Contain a mid-sync server death (broken pipe / abrupt exit) here too: an uncaught
+          // rejection from this initial re-sync must never escape as an unhandled rejection.
+          void this.synchronize(document).catch((reason) => this.containFailure(reason));
+        }
       }
       return true;
     } catch (reason) {
@@ -506,6 +571,11 @@ class $LanguageClient {
   private async sendLatestDocument(state: OpenDocument): Promise<void> {
     const transport = this.transport;
     if (!transport?.running || !this.provider?.supportsPath(state.document.path)) return;
+    // The single choke point where a document's text actually reaches the server. Never send a
+    // document that exceeds the size budget, so an oversized file is never attached even if a caller
+    // reaches here — the load-bearing guard the size-guard invariant rests on.
+    // invariant: The LSP attaches only to documents within the size budget (src/modules/lsp/lsp.invariants.md)
+    if (this.documentExceedsSizeLimit(state.document)) return;
     const version = state.document.revision.value;
     if (state.lastSentVersion === version) return;
     if (!state.opened) {

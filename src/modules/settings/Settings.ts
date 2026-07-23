@@ -49,6 +49,7 @@ export interface SettingsValues {
   workspaceTabPosition: WorkspaceTabPosition;
   // Language intelligence.
   typescriptServer: TypeScriptServer;
+  lspFileSizeLimitKb: number;
   // Splitter geometry.
   sidebarWidth: number;
   gitSplitRatio: number;
@@ -149,6 +150,9 @@ class $Settings {
   get typescriptServer(): Ref<TypeScriptServer> {
     return ref<TypeScriptServer>('tsgo');
   }
+  get lspFileSizeLimitKb(): Ref<number> {
+    return ref(2048);
+  }
   get sidebarWidth(): Ref<number> {
     return ref(32);
   }
@@ -179,6 +183,7 @@ class $Settings {
       showActivityBar: this.showActivityBar,
       workspaceTabPosition: this.workspaceTabPosition,
       typescriptServer: this.typescriptServer,
+      lspFileSizeLimitKb: this.lspFileSizeLimitKb,
       sidebarWidth: this.sidebarWidth,
       gitSplitRatio: this.gitSplitRatio,
       diffSplitRatio: this.diffSplitRatio,
@@ -323,6 +328,7 @@ class $Settings {
       showActivityBar: true,
       workspaceTabPosition: 'top',
       typescriptServer: 'tsgo',
+      lspFileSizeLimitKb: 2048,
       sidebarWidth: 32,
       gitSplitRatio: 0.5,
       diffSplitRatio: 0.5,
@@ -371,6 +377,7 @@ class $Settings {
     ) {
       result.typescriptServer = record.typescriptServer as TypeScriptServer;
     }
+    readNumber('lspFileSizeLimitKb');
     readNumber('sidebarWidth');
     readNumber('gitSplitRatio');
     readNumber('diffSplitRatio');
