@@ -27,6 +27,7 @@ import { TreePaneRenderer } from './TreePaneRenderer';
 import { GitPaneRenderer } from './GitPaneRenderer';
 import { StatusBar } from './StatusBar';
 import { TabBar } from './TabBar';
+import { TabBarRenderer } from './TabBarRenderer';
 import { ScrollGesture, type WheelModifiers } from './ScrollGesture';
 import { Sidebar } from './Sidebar';
 import { ActivityBar } from './ActivityBar';
@@ -207,6 +208,33 @@ function $buildRootView(
   // active file's `project › dir › file` path. Always 1 row (blank when no file is open) so the editor
   // never jumps as files open/close.
   const breadcrumbBar = new TextRenderable(renderer, { id: 'editor-breadcrumb-bar', content: '', height: 1, width: '100%' });
+  // History nav buttons (‹ ›) live at the START of the breadcrumb bar (VS Code's Go Back / Go
+  // Forward). A click walks the navigation trail; the column geometry comes from TabBarRenderer
+  // (shared with the render), so the click lands on the glyph it points at. Guarded to the same
+  // condition the buttons render under — a file is open and no diff is showing — so a click on the
+  // blank bar does nothing.
+  const breadcrumbButtonsShown = (): boolean =>
+    workspaceSet.active.editor.hasDocument.value && !workspaceSet.active.showingDiff.value;
+  breadcrumbBar.onMouseDown = (event) => {
+    if (!breadcrumbButtonsShown()) return;
+    const button = TabBarRenderer.Class.breadcrumbNavButtonAt(event.x - (breadcrumbBar.x as number));
+    if (button === 'back') workspaceSet.active.navigateBack();
+    else if (button === 'forward') workspaceSet.active.navigateForward();
+  };
+  breadcrumbBar.onMouseMove = (event) => {
+    if (!breadcrumbButtonsShown()) return;
+    const button = TabBarRenderer.Class.breadcrumbNavButtonAt(event.x - (breadcrumbBar.x as number));
+    if (button === 'back') {
+      const hint = keybindings.bindingHint('navigation.back', 'editor');
+      tooltip.point(`Go Back${hint ? ` (${hint})` : ''}`, event.x, event.y);
+    } else if (button === 'forward') {
+      const hint = keybindings.bindingHint('navigation.forward', 'editor');
+      tooltip.point(`Go Forward${hint ? ` (${hint})` : ''}`, event.x, event.y);
+    } else {
+      tooltip.clear();
+    }
+  };
+  breadcrumbBar.onMouseOut = () => tooltip.clear();
   const editorArea = new BoxRenderable(renderer, {
     id: 'editor-area',
     flexGrow: 1,

@@ -88,6 +88,10 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 'return', ctrl: true }, action: 'markdown.openHoveredReference', context: 'editor' },
   // Go to Definition (VS Code parity: F12; the pointer path is Ctrl/Cmd+click on the symbol).
   { chord: { key: 'f12' }, action: 'go.definition', context: 'editor' },
+  // Go Back / Go Forward through the navigation history (VS Code's Alt+Left/Right; here Alt+[ / Alt+]
+  // since the arrows move the cursor). Alt+[ / Alt+] are free — only Ctrl+Shift+[/] are bound above.
+  { chord: { key: '[', alt: true }, action: 'navigation.back', context: 'editor' },
+  { chord: { key: ']', alt: true }, action: 'navigation.forward', context: 'editor' },
 
   // --- palette (captures input while open) ---
   { chord: { key: 'escape' }, action: 'palette.close', context: 'palette' },

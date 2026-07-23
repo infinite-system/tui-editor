@@ -104,6 +104,7 @@ if [ "${FAST:-0}" != "1" ]; then
   step "smoke: markdown"     bash scripts/smoke-markdown.sh
   # Guarded inside the script: SKIPs cleanly (exit 0) when typescript-language-server is absent.
   step "smoke: goto-definition" bash scripts/smoke-goto-definition.sh
+  step "smoke: navigation-history" bash scripts/smoke-navigation-history.sh
   step "smoke: hover" bash scripts/smoke-hover.sh
   step "smoke: diagnostics" bash scripts/smoke-diagnostics.sh
   step "smoke: image-preview" bash scripts/smoke-image-preview.sh

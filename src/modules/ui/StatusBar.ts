@@ -225,6 +225,9 @@ class $StatusBar {
     if (workspaceSet.active.focus.value === 'git')
       parts.push('checkbox/Space stage · row/o open · d discard');
     if (app.copyNotice.value) parts.push(app.copyNotice.value);
+    // A large file whose LSP is size-suppressed says so here — the guard is never a silent no-op.
+    const languageSizeNotice = workspaceSet.active.languageSizeNotice();
+    if (languageSizeNotice) parts.push(languageSizeNotice);
     parts.push(app.quitChordArmed.value ? 'Ctrl+X armed — Ctrl+C quits' : 'Ctrl+Q/F10 quit');
     return parts.join('  ·  ');
   }
