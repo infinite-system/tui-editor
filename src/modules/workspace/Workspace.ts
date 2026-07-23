@@ -34,6 +34,14 @@ import { resolve as resolvePath } from 'node:path';
 
 export type Focus = 'files' | 'editor' | 'git';
 
+/** One diagnostic's span on a single line: grapheme columns [startColumn, endColumn) and its severity
+ *  (1 = error, 2 = warning, 3 = info, 4 = hint). A multi-line diagnostic yields one mark per line. */
+export interface DiagnosticLineMark {
+  startColumn: number;
+  endColumn: number;
+  severity: 1 | 2 | 3 | 4;
+}
+
 /** The two full-text SIDES of a side-by-side diff shown by the DiffView (token forces a rebuild). */
 export interface DiffRequest {
   token: number;
@@ -268,6 +276,38 @@ class $Workspace {
       void editor.document.revision.value;
       if (this.showingDiff.value || !editor.hasDocument.value) return new Map();
       return GutterDiff.Class.statusByLine(this.activeHeadText.value, editor.document.text);
+    });
+  }
+
+  // Language-server diagnostics for the active document, projected to per-line column ranges: the
+  // editor renders a severity-coloured gutter mark AND a coloured underline over each range. Cached
+  // behind computed(), recomputed only when the diagnostics revision or the document changes.
+  get diagnosticsByLine() {
+    return computed<Map<number, DiagnosticLineMark[]>>(() => {
+      const editor = this.editor;
+      const client = this.languageClientInstance;
+      if (this.showingDiff.value || !editor.hasDocument.value || !client) return new Map();
+      void client.diagnosticsRevision.value; // reactivity: repaint when diagnostics change
+      void editor.document.revision.value;
+      const total = client.diagnosticCountFor(editor.document);
+      if (total === 0) return new Map();
+      const byLine = new Map<number, DiagnosticLineMark[]>();
+      for (const diagnostic of client.diagnosticSlice(editor.document, 0, total)) {
+        const firstLine = diagnostic.range.start.line;
+        const lastLine = diagnostic.range.end.line;
+        for (let line = firstLine; line <= lastLine; line += 1) {
+          if (line < 0 || line >= editor.document.lineCount) continue;
+          const startColumn = line === firstLine ? diagnostic.range.start.column : 0;
+          const endColumn =
+            line === lastLine
+              ? diagnostic.range.end.column
+              : EditorCoordinates.Class.graphemeCount(editor.document.line(line));
+          const marks = byLine.get(line) ?? [];
+          marks.push({ startColumn, endColumn: Math.max(startColumn, endColumn), severity: diagnostic.severity });
+          byLine.set(line, marks);
+        }
+      }
+      return byLine;
     });
   }
 

@@ -636,3 +636,34 @@ there; different list panes disagreeing on the selection model.
 **Status:** established
 
 **Last refined:** 2026-07-22
+
+### TS diagnostics render as a gutter mark and an underline
+
+**Invariant:** If the language server reports a diagnostic for the active document, then every visible
+line it covers shows (a) a severity-coloured gutter mark (the same `▎` shape as the git-change marks,
+coloured error/warning/info) and (b) a severity-coloured underline over the diagnostic's column range;
+the gutter diagnostic mark takes precedence over the git-change mark on that line.
+
+**Scope:** the editor gutter + code rendering in `EditorPaneRenderer` (`pushGutterMarker` +
+`pushCodeChunks`), fed by `Workspace.diagnosticsByLine` (projected from `LanguageClient.diagnosticSlice`).
+
+**Mechanism:** `Workspace.diagnosticsByLine` is a `computed` that reads `diagnosticsRevision` and
+projects each diagnostic to per-line `{startColumn, endColumn, severity}` marks (a multi-line
+diagnostic yields one mark per line). `pushGutterMarker` paints the most-severe line's mark before the
+git-change branch; `pushCodeChunks` adds the diagnostic ranges as segment boundaries and paints those
+segments with `underline(fg(severityColor))`. Only PUSH-model servers populate the data — the tsgo
+native-preview default does not `publishDiagnostics`, so the marks appear only under a push server
+(e.g. typescript-language-server) until pull-diagnostics is added to `LanguageClient`.
+
+**Generates:** at-a-glance error/warning location in the gutter + inline, matching the git-change idiom.
+
+**Evidence:** `scripts/smoke-diagnostics.sh` (forces typescript-language-server, introduces a type
+error, asserts a red gutter mark + red underline cells on the error line).
+
+**Impossible if true:** a reported diagnostic with no gutter mark and no underline on its visible range.
+
+**Verification:** `scripts/smoke-diagnostics.sh` (wired into merge-gate).
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23
