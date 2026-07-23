@@ -47,6 +47,7 @@ const SETTING_DESCRIPTORS: readonly SettingDescriptor[] = [
   { key: 'wordWrap', label: 'Word wrap', spec: { kind: 'boolean' } },
   { key: 'workspaceTabPosition', label: 'Workspace tabs', spec: { kind: 'enum', options: WORKSPACE_TAB_POSITION_OPTIONS } },
   { key: 'typescriptServer', label: 'TypeScript server', spec: { kind: 'enum', options: TYPESCRIPT_SERVER_OPTIONS } },
+  { key: 'lspFileSizeLimitKb', label: 'LSP file size limit (KB, 0 = no limit)', spec: { kind: 'number', step: 512, minimum: 0, maximum: 51200, decimals: 0 } },
   { key: 'sidebarWidth', label: 'Sidebar width', spec: { kind: 'number', step: 1, minimum: 16, maximum: 80, decimals: 0 } },
   { key: 'gitSplitRatio', label: 'Git changes/log split', spec: { kind: 'number', step: 0.05, minimum: 0.1, maximum: 0.9, decimals: 2 } },
   { key: 'diffSplitRatio', label: 'Diff previous/current split', spec: { kind: 'number', step: 0.05, minimum: 0.15, maximum: 0.85, decimals: 2 } },

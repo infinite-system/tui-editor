@@ -91,6 +91,61 @@ text but drifts by the surrogate/cluster width once an emoji or combining mark p
 
 ## Chosen invariants
 
+### The LSP attaches only to documents within the size budget
+
+**Invariant:** If a document's text exceeds the configured size budget (`lspFileSizeLimitKb`, in KB;
+`0` disables the limit), then it is never attached to the language server — no `didOpen` or
+`didChange` carries its text to the subprocess — so the server can never balloon on a huge file and
+crash the app; and when the ACTIVE file is suppressed this way a status notice states it, so the
+suppression is never a silent no-op.
+
+**Scope:** `LanguageClient` document attachment (`openDocument`, `syncDocument`, and the shared
+`sendLatestDocument` send site) plus the active-file notice surfaced through `Workspace` and the
+status bar. Not semantic requests on already-attached small files, which are unaffected. A budget of
+`0` means every supported document attaches as before. The threshold is a product choice set by the
+`lspFileSizeLimitKb` setting (default 2048 = 2 MB — a 3 MB file was reproduced killing tsgo); `0`
+removes the guard entirely.
+
+**Mechanism:** Stands on *Language and git tools are separate failable processes* — the language
+server is a separate process whose memory scales with the file it ingests, so a large-enough file
+drives it to out-of-memory and takes the shared app down with it. The client reads the budget late
+through a `fileSizeLimitKb` getter (mirroring how `preferredTypeScriptServer` is threaded). Every
+attachment path recomputes suppression against the current text length before remembering or syncing
+the document; the one place text actually reaches the server returns early for an oversized document,
+so no attach path can leak it. Suppressed URIs are tracked in a set with a reactive revision signal
+the active-file notice reads.
+
+**Generates:** The `documentExceedsSizeLimit` / `refreshSizeSuppression` guard; the early returns in
+`openDocument` and `syncDocument`; the load-bearing skip in `sendLatestDocument`; the
+`sizeSuppressedUris` set with `isSizeSuppressed` / `sizeSuppressionNotice`; the `Workspace`
+`languageSizeNotice` the status bar shows and the observability channel publishes.
+
+**Rejected alternatives:** Attaching every file and hoping the server survives — the exact path that
+crashed the user's editor on a 30 MB file. Folding size into `supportsDocument` (path-based language
+support) — conflates two independent axes (language vs size) and would silently change the
+activation-follows-demand invariant's meaning.
+
+**Evidence:** `src/modules/lsp/LanguageClient.ts` — `documentExceedsSizeLimit`,
+`refreshSizeSuppression`, the `openDocument`/`syncDocument` early returns, and the annotated skip in
+`sendLatestDocument`; `src/modules/workspace/Workspace.ts` (`languageSizeNotice`, the
+`fileSizeLimitKb` threading in `createLanguageClient`); `src/modules/ui/StatusBar.ts` (the notice
+part); `src/modules/app/Bootstrap.ts` (`lspSizeSuppressed` published). Driven by
+`scripts/smoke-settings-applied.sh`: with `lspFileSizeLimitKb` 1 a >1 KB `.ts` file stays suppressed
+(no diagnostics, `lspSizeSuppressed` true) and the app survives; with the default budget the same
+file attaches and diagnostics arrive. Drive-verified against a real 3 MB / 100k-line file: with the
+guard on tsgo is never sent the file and its RSS stays stable; with the guard off tsgo balloons.
+
+**Impossible if true:** A `textDocument/didOpen` or `didChange` sent for a document whose text
+exceeds the budget; a size-suppressed active file with no visible notice; the app crashing because a
+file larger than the budget was handed to the server.
+
+**Verification:** `bash scripts/smoke-settings-applied.sh` (the `lspFileSizeLimitKb` drive) and
+`bun test src/modules/lsp`.
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23
+
 ### LSP activation follows semantic demand
 
 **Invariant:** If no supported document is open and no semantic feature has been requested, then

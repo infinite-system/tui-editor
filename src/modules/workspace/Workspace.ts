@@ -139,6 +139,10 @@ class $Workspace {
     return new LanguageClient.Class({
       rootPath: this.root,
       preferredTypeScriptServer: () => this.settingsSource?.typescriptServer.value ?? 'auto',
+      // Late-read the size budget so a file larger than the limit is never attached to the server
+      // (which would balloon and crash the app). `0` = no limit; unset settings (bare tests) also
+      // read 0 so tests are unaffected.
+      fileSizeLimitKb: () => this.settingsSource?.lspFileSizeLimitKb.value ?? 0,
     });
   }
   private ensureLanguageClient(): LanguageClient.Model {
@@ -154,6 +158,21 @@ class $Workspace {
     const editor = this.buffers.activeBuffer as Editor.Instance | null;
     if (!editor || !editor.hasDocument.value || !editor.document.path) return;
     this.languageClientInstance?.syncDocument(editor.document);
+  }
+
+  /** The active file's language-size suppression notice, or `null` when it is within the LSP size
+   *  budget (or no client/document exists). Surfaced in the status bar so a suppressed large file is
+   *  never a silent no-op, and published to the observability channel so a driven gate can assert it.
+   *
+   * invariant: The LSP attaches only to documents within the size budget (src/modules/lsp/lsp.invariants.md)
+   */
+  languageSizeNotice(): string | null {
+    if (this.showingDiff.value) return null;
+    const editor = this.buffers.activeBuffer as Editor.Instance | null;
+    const client = this.languageClientInstance;
+    if (!client || !editor || !editor.hasDocument.value || !editor.document.path) return null;
+    void client.sizeSuppressionRevision.value; // reactive: re-evaluate as suppression flips
+    return client.sizeSuppressionNotice(editor.document);
   }
 
   /**

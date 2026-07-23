@@ -276,6 +276,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       ),
       workspaceTabPosition: settings.workspaceTabPosition.value,
       activeBuffer: editor.hasDocument.value ? editor.document.path : null,
+      // The active file's LSP size-suppression state — the authoritative channel a driven gate reads
+      // to assert a large file was NOT attached to the language server (the guard is never silent).
+      lspSizeSuppressed: workspaceSet.active.languageSizeNotice() !== null,
       bufferRevision: editor.document.revision.value,
       dirty: editor.document.dirty.value,
       cursor: editor.hasDocument.value
