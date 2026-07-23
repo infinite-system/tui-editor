@@ -631,6 +631,9 @@ usage:
                                                         (exit 2 if none exist under ROOT)
   node <path-to>/check_invariants.mjs --refs [ROOT]     verify code annotations + lattice
                                                         links resolve; report coverage
+  node <path-to>/check_invariants.mjs --refs-for '<Name>' [ROOT]
+                                                        every code annotation + contract declaring
+                                                        ONE named invariant (retirement-sweep primitive)
   --strict     with --all: non-canonical (local-format) files fail instead of skip
   --score      emit mechanical score components as JSON (last line) — facts only; the
                scoring rubric lives in the skill's references/score.md
@@ -642,7 +645,53 @@ pass it explicitly when outside a git checkout. Exit: 0 ok, 1 findings, 2 usage/
 CRLF/BOM normalized; fenced code blocks and HTML comments are inert; nested checkouts,
 symlinks, and files over 2MB are skipped with a note.`;
 
-const KNOWN_FLAGS = new Set(["--all", "--refs", "--strict", "--help", "-h", "--version", "--score"]);
+const KNOWN_FLAGS = new Set(["--all", "--refs", "--refs-for", "--strict", "--help", "-h", "--version", "--score"]);
+
+// --refs-for <name>: locate every code annotation + contract that declares ONE named invariant.
+// The retirement-sweep primitive — "is this invariant still witnessed in code, and where?"
+function refsFor(root, targetName) {
+  const wanted = targetName.trim();
+  const definedIn = [];
+  for (const p of discover(root)) {
+    const recs = canonicalRecords(p);
+    const names = recs.length ? recs.map((r) => r.name)
+      : (isCanonicalShaped(p) ? [] : [...contractNames(p)]);
+    if (names.some((n) => n === wanted)) definedIn.push(relative(root, p));
+  }
+  const refs = [];
+  for (const p of walk(root)) {
+    if (p.endsWith(".invariants.md")) continue;
+    const b = basename(p);
+    if (b === "check_invariants.test.mjs" || b === "SKILL.md") continue;
+    let text;
+    try {
+      if (statSync(p).size > MAX_SCAN_BYTES) continue;
+      const buf = readFileSync(p);
+      if (buf.includes(0)) continue;
+      text = buf.toString("utf-8").replace(/^﻿/, "").replace(/\r\n?/g, "\n");
+    } catch { continue; }
+    if (!/invariant:/i.test(text)) continue;
+    const fileLines = text.split("\n");
+    const active = maskInert(fileLines);
+    fileLines.forEach((rawLine, idx) => {
+      if (!active[idx]) return;
+      for (const m of stripInlineCode(rawLine).matchAll(ANNOT_RE)) {
+        if (m[1].trim() === wanted) refs.push(`${relative(root, p)}:${idx + 1}  (${m[2].trim()})`);
+      }
+    });
+  }
+  console.log(`invariant: ${wanted}`);
+  console.log(definedIn.length
+    ? `  defined in: ${definedIn.join(", ")}`
+    : `  (not declared in any *.invariants.md contract under this root)`);
+  console.log(`  code annotations: ${refs.length}`);
+  for (const r of refs) console.log(`    ${r}`);
+  if (refs.length === 0 && definedIn.length) {
+    console.log(`  note: no code annotation witnesses this invariant. If you just removed the last, it ` +
+      `survives only as chosen/reality doctrine with no code locus — flag it for a retirement sweep.`);
+  }
+  return { code: 0, name: wanted, definedIn, refCount: refs.length };
+}
 
 function main() {
   const args = process.argv.slice(2);
@@ -660,6 +709,14 @@ function main() {
   if (flags.has("--version")) { console.log(VERSION); return 0; }
   if (flags.has("--strict") && flags.has("--refs")) {
     console.log("note: --strict has no effect with --refs (it applies to --all)");
+  }
+
+  if (flags.has("--refs-for")) {
+    const name = positional[0];
+    if (!name) { console.error("usage: check_invariants.mjs --refs-for '<Invariant Name>' [ROOT]"); return 2; }
+    const root = resolve(positional[1] ?? gitToplevel());
+    console.log(`root ${root}`);
+    return refsFor(root, name).code;
   }
 
   if (flags.has("--all") || flags.has("--refs")) {
