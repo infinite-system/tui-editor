@@ -118,40 +118,40 @@ scrolltop_after_fling() { # <session> — many fast wheel-downs (a hard fling)
 }
 
 echo "== linesPerNotch: bigger notch scrolls further =="
-setk linesPerNotch 1; setb wordWrap false; sets fastScrollModifier none; a=$(scrolltop_after_notch sa-lpn-a 65)
-setk linesPerNotch 8; b=$(scrolltop_after_notch sa-lpn-b 65)
+setk linesPerNotch 1; setb wordWrap false; sets fastScrollModifier none; a=$(scrolltop_after_notch sa$$-lpn-a 65)
+setk linesPerNotch 8; b=$(scrolltop_after_notch sa$$-lpn-b 65)
 check_gt "$b" "$a" "linesPerNotch 8 scrolls further than 1"
 
 echo "== scrollAccelGain: higher gain scrolls further per notch =="
-setk linesPerNotch 1; setk scrollAccelGain 5; a=$(scrolltop_after_notch sa-gain-a 65)
-setk scrollAccelGain 120; b=$(scrolltop_after_notch sa-gain-b 65)
+setk linesPerNotch 1; setk scrollAccelGain 5; a=$(scrolltop_after_notch sa$$-gain-a 65)
+setk scrollAccelGain 120; b=$(scrolltop_after_notch sa$$-gain-b 65)
 check_gt "$b" "$a" "scrollAccelGain 120 scrolls further than 5"
 setk scrollAccelGain 34
 
 echo "== verticalFlingCeiling: higher ceiling reaches further on a hard fling =="
-setk verticalFlingCeiling 80; a=$(scrolltop_after_fling sa-fling-a)
-setk verticalFlingCeiling 1500; b=$(scrolltop_after_fling sa-fling-b)
+setk verticalFlingCeiling 80; a=$(scrolltop_after_fling sa$$-fling-a)
+setk verticalFlingCeiling 1500; b=$(scrolltop_after_fling sa$$-fling-b)
 check_gt "$b" "$a" "verticalFlingCeiling 1500 flings further than 80"
 setk verticalFlingCeiling 220
 
 echo "== scrollFriction: more friction ends a fling sooner =="
-setk scrollFriction 0.001; a=$(scrolltop_after_fling sa-fric-a)
-setk scrollFriction 0.4; b=$(scrolltop_after_fling sa-fric-b)
+setk scrollFriction 0.001; a=$(scrolltop_after_fling sa$$-fric-a)
+setk scrollFriction 0.4; b=$(scrolltop_after_fling sa$$-fric-b)
 changed "$a" "$b" "scrollFriction changes the glide distance"
 setk scrollFriction 0.015
 
 echo "== fastScrollModifier + fastScrollMultiplier: held modifier multiplies the step =="
 setk linesPerNotch 1; sets horizontalScrollModifier ctrl; sets fastScrollModifier none; setk fastScrollMultiplier 6
-a=$(scrolltop_after_notch sa-fast-a 73)   # alt-wheel, fast OFF -> base
-sets fastScrollModifier alt; b=$(scrolltop_after_notch sa-fast-b 73)  # alt-wheel, fast ON x6
+a=$(scrolltop_after_notch sa$$-fast-a 73)   # alt-wheel, fast OFF -> base
+sets fastScrollModifier alt; b=$(scrolltop_after_notch sa$$-fast-b 73)  # alt-wheel, fast ON x6
 check_gt "$b" "$a" "fastScrollModifier alt + x6 multiplies the step"
 sets fastScrollModifier none; sets horizontalScrollModifier alt
 
 echo "== horizontalScrollModifier: configured modifier routes to horizontal =="
-S=sa-hmod-a; sets horizontalScrollModifier alt; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" bun run src/main.ts "$LONG" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; open_file "$S"
+S=sa$$-hmod-a; sets horizontalScrollModifier alt; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" bun run src/main.ts "$LONG" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; open_file "$S"
 for _ in 1 2 3; do tmux send-keys -t "$S" -l "$(printf '\033[<73;60;12M')"; sleep 0.12; done; sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
 hleft=$("$H" field "$S" editorScrollLeft)
-S=sa-hmod-b; sets horizontalScrollModifier none; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" bun run src/main.ts "$LONG" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; open_file "$S"
+S=sa$$-hmod-b; sets horizontalScrollModifier none; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" bun run src/main.ts "$LONG" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; open_file "$S"
 for _ in 1 2 3; do tmux send-keys -t "$S" -l "$(printf '\033[<73;60;12M')"; sleep 0.12; done; sleep 0.4; "$H" settle "$S" >/dev/null 2>&1
 nleft=$("$H" field "$S" editorScrollLeft)
 check_gt "$hleft" "$nleft" "horizontalScrollModifier alt scrolls horizontally, none does not"
@@ -165,8 +165,8 @@ for y,r in enumerate(rows):
     if 'MARKER' in r.get('text',''): print(y); break
 else: print(0)
 "; }
-setb wordWrap false; S=sa-ww-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$WRAP" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; open_file "$S"; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; ma=$(markerrow "$S")
-setb wordWrap true; S=sa-ww-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$WRAP" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; open_file "$S"; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; mb=$(markerrow "$S")
+setb wordWrap false; S=sa$$-ww-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$WRAP" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; open_file "$S"; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; ma=$(markerrow "$S")
+setb wordWrap true; S=sa$$-ww-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$WRAP" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; open_file "$S"; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; mb=$(markerrow "$S")
 check_gt "$mb" "$ma" "wordWrap ON pushes MARKER down (line wraps)"
 setb wordWrap false
 
@@ -182,8 +182,8 @@ for y in (3,5,7,10):
         if x<len(t) and t[x]=='│': print(x); exit()
 print(-1)
 "; }
-setk sidebarWidth 28; S=sa-sw-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; wa=$(sidebar_divider_col "$S")
-setk sidebarWidth 44; S=sa-sw-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; wb=$(sidebar_divider_col "$S")
+setk sidebarWidth 28; S=sa$$-sw-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; wa=$(sidebar_divider_col "$S")
+setk sidebarWidth 44; S=sa$$-sw-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; wb=$(sidebar_divider_col "$S")
 check_gt "$wb" "$wa" "sidebarWidth 44 puts the divider further right than 28"
 setk sidebarWidth 32
 
@@ -203,15 +203,15 @@ for y in range(2,34):
         if c and c not in ('0,0,0,255', sidebar_bg): cols[x]+=1
 print(len([x for x,n in cols.items() if n>20]))
 "; }
-sets theme dark; setk scrollbarThickness 1; S=sa-sbt-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; for _ in $(seq 1 10); do tmux send-keys -t "$S" -l "$(printf '\033[<65;10;10M')"; sleep 0.05; done; sleep 0.4; "$H" settle "$S" >/dev/null 2>&1; ta=$(paintedcols "$S")
-setk scrollbarThickness 3; S=sa-sbt-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; for _ in $(seq 1 10); do tmux send-keys -t "$S" -l "$(printf '\033[<65;10;10M')"; sleep 0.05; done; sleep 0.4; "$H" settle "$S" >/dev/null 2>&1; tb=$(paintedcols "$S")
+sets theme dark; setk scrollbarThickness 1; S=sa$$-sbt-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; for _ in $(seq 1 10); do tmux send-keys -t "$S" -l "$(printf '\033[<65;10;10M')"; sleep 0.05; done; sleep 0.4; "$H" settle "$S" >/dev/null 2>&1; ta=$(paintedcols "$S")
+setk scrollbarThickness 3; S=sa$$-sbt-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; for _ in $(seq 1 10); do tmux send-keys -t "$S" -l "$(printf '\033[<65;10;10M')"; sleep 0.05; done; sleep 0.4; "$H" settle "$S" >/dev/null 2>&1; tb=$(paintedcols "$S")
 check "$ta" "1" "scrollbarThickness 1 -> 1 painted column"; check "$tb" "3" "scrollbarThickness 3 -> 3 painted columns"
 setk scrollbarThickness 1
 
 echo "== theme: dark vs light change the framebuffer palette =="
 statusbg() { python3 -c "import json;print(json.load(open('$ROOT/artifacts/frame-$1.json'))['rows'][-1].get('bg',[None]*11)[10])"; }
-sets theme dark; S=sa-th-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; da=$(statusbg "$S")
-sets theme light; S=sa-th-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; db=$(statusbg "$S")
+sets theme dark; S=sa$$-th-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; da=$(statusbg "$S")
+sets theme light; S=sa$$-th-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; db=$(statusbg "$S")
 if [ "$da" != "$db" ]; then echo "  PASS  theme changes the palette (dark $da != light $db)"; else echo "  FAIL  theme did not change the palette ($da == $db)"; fail=1; fi
 sets theme dark
 
@@ -221,8 +221,8 @@ rows=json.load(open('$ROOT/artifacts/frame-$1.json'))['rows']
 text=next((row.get('text','') for row in rows if 'subfolder' in row.get('text','')), '')
 print(repr(text[1:6]))"; }
 mkdir -p "$TREE/subfolder"
-sets glyphMode ascii; S=sa-gm-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; ga=$(firstglyph "$S")
-sets glyphMode nerd; S=sa-gm-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; gb=$(firstglyph "$S")
+sets glyphMode ascii; S=sa$$-gm-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; ga=$(firstglyph "$S")
+sets glyphMode nerd; S=sa$$-gm-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; gb=$(firstglyph "$S")
 if [ "$ga" != "$gb" ]; then echo "  PASS  glyphMode changes glyphs (ascii $ga != nerd $gb)"; else echo "  FAIL  glyphMode did not change glyphs ($ga == $gb)"; fail=1; fi
 sets glyphMode auto
 
@@ -230,8 +230,8 @@ echo "== showActivityBar: mounts/unmounts the 4-col bar, shifting sidebar+editor
 # Applied-effect drive (schema-meta requires one): with the bar ON the whole sidebar (and its right
 # divider) sits 4 columns further right than with it OFF — the bar reclaimed those columns. Reusing
 # sidebar_divider_col makes the shift directly measurable from rendered cells.
-setb showActivityBar true;  S=sa-ab-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; div_on=$(sidebar_divider_col "$S")
-setb showActivityBar false; S=sa-ab-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; div_off=$(sidebar_divider_col "$S")
+setb showActivityBar true;  S=sa$$-ab-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; div_on=$(sidebar_divider_col "$S")
+setb showActivityBar false; S=sa$$-ab-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; div_off=$(sidebar_divider_col "$S")
 check "$((div_on - div_off))" "4" "showActivityBar ON shifts the sidebar divider right by the bar's 4 columns (on=$div_on off=$div_off)"
 setb showActivityBar false
 
@@ -251,8 +251,8 @@ open_git() { # open the git panel; retry until sidebarView==git (C-g can miss a 
     [ "$("$H" field "$1" sidebarView 2>/dev/null)" = "git" ] && return 0
   done
 }
-setk gitSplitRatio 0.3; S=sa-gs-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$REPO" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; open_git "$S"; "$H" settle "$S" >/dev/null 2>&1; ra=$(gitdivrow "$S")
-setk gitSplitRatio 0.7; S=sa-gs-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$REPO" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; open_git "$S"; "$H" settle "$S" >/dev/null 2>&1; rb=$(gitdivrow "$S")
+setk gitSplitRatio 0.3; S=sa$$-gs-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$REPO" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; open_git "$S"; "$H" settle "$S" >/dev/null 2>&1; ra=$(gitdivrow "$S")
+setk gitSplitRatio 0.7; S=sa$$-gs-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$REPO" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; open_git "$S"; "$H" settle "$S" >/dev/null 2>&1; rb=$(gitdivrow "$S")
 check_gt "$rb" "$ra" "gitSplitRatio 0.7 puts the divider lower than 0.3"
 setk gitSplitRatio 0.5
 
