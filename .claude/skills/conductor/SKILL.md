@@ -96,8 +96,14 @@ This delegate-when-blocked rule is wired into the hourly orchestration loop.
   session and its own fork writing the same checkout collide (renames swept into the wrong
   commit). Give each agent a topology note at spawn (who you are, who your children are, who
   commits, who else writes here).
-- **Advance main safely** when it isn't checked out in a worktree: `git update-ref
-  refs/heads/main <new> <expected-old>` (CAS fast-forward), so the fork's working tree stays put.
+- **Advance main — NEVER `update-ref` a branch checked out in ANY worktree.** Here `main` IS
+  checked out in the primary `/home/parallels/dev/tui-editor` (the user runs Invar from there).
+  `git update-ref refs/heads/main <new>` moves only the pointer and leaves that worktree's index +
+  files on the OLD commit — a phantom "staged revert of the last merge" that also serves the user
+  stale code (this bit us; `git reset --hard <new>` repaired it). Advance a checked-out branch by a
+  merge that moves the files too: `git pull --ff-only` / `git merge --ff-only` IN that worktree, or
+  merge in a separate worktree and push to origin. Reserve bare `update-ref` for a ref that
+  `git worktree list` confirms is checked out NOWHERE.
 - **Untracked files don't travel with `git merge`.** Before merging an agent branch,
   `git status` its worktree + `git add -A` — a SKIP is not a PASS.
 

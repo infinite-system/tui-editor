@@ -277,3 +277,14 @@ Six new operational lessons, every one from real friction this run.
    main in? · gate ALL-PASS on the combined tree? · diff shows only my files? · pushed? · demo
    bumped?`** The orchestration skill (Part-4) should ship this as a literal checklist, because prose
    discipline is the first thing to slip under length.
+- **`update-ref` on a CHECKED-OUT branch desyncs its worktree (2026-07-23).** To fast-forward
+  local `main` to a merged commit I ran `git update-ref refs/heads/main <new>` — but `main` was
+  checked out in the primary `/home/parallels/dev/tui-editor` worktree. update-ref moves only the
+  branch pointer; the working tree + index stayed on the old commit, producing a phantom "staged
+  revert of the last merge" in `git status` and serving the user STALE on-disk code (the just-merged
+  task 4 was absent from disk). No real work was lost — the unstaged diff was clean — and
+  `git reset --hard <new>` repaired it. **Rule: never `update-ref` a branch that `git worktree list`
+  shows checked out anywhere (the primary counts). Advance a checked-out branch with
+  `git pull --ff-only` / `git merge --ff-only` in that worktree so the files move with the pointer.**
+  The conductor owns syncing the primary's local main; workers push merges to ORIGIN and never touch
+  the primary checkout.
