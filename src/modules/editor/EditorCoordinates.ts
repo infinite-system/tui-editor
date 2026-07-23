@@ -188,8 +188,28 @@ function $padToDisplayWidth(text: string, width: number): string {
   return text + ' '.repeat(Math.max(0, width - $lineWidth(text)));
 }
 
+/** The [start, end) grapheme range of the "word" at a column: a run of word characters (letters,
+ *  digits, underscore). If the column sits on a non-word grapheme, selects that single grapheme. */
+function $wordBounds(line: string, column: number): { start: number; end: number } {
+  const lineGraphemes = $graphemes(line);
+  const graphemeTotal = lineGraphemes.length;
+  if (graphemeTotal === 0) return { start: 0, end: 0 };
+  const clampedColumn = Math.max(0, Math.min(column, graphemeTotal - 1));
+  const isWordGrapheme = (grapheme: string | undefined): boolean =>
+    grapheme !== undefined && /\w/.test(grapheme);
+  if (!isWordGrapheme(lineGraphemes[clampedColumn])) {
+    return { start: clampedColumn, end: clampedColumn + 1 };
+  }
+  let start = clampedColumn;
+  while (start > 0 && isWordGrapheme(lineGraphemes[start - 1])) start -= 1;
+  let end = clampedColumn + 1;
+  while (end < graphemeTotal && isWordGrapheme(lineGraphemes[end])) end += 1;
+  return { start, end };
+}
+
 // invariant: Construction goes through overridable seams (project.invariants.md)
 class $EditorCoordinates {
+  static wordBounds = $wordBounds;
   static graphemeBoundaries = $graphemeBoundaries;
   static graphemes = $graphemes;
   static graphemeCount = $graphemeCount;

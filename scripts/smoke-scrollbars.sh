@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Driven scrollbar contract: every overflowing sidebar pane gets a horizontal bar, real Option-wheel
-# reaches clipped content, horizontal half-height paint matches vertical visual thickness, and panes
+# reaches clipped content, horizontal bar renders plain at the same settings thickness as the vertical (no axis-balanced overlay), and panes
 # whose content fits paint no horizontal bar. Semantic movement is asserted from FrameProbe because
 # the user-visible clipped/revealed text and sub-cell glyph shape are the authoritative outcomes.
 set -uo pipefail
@@ -59,7 +59,7 @@ sidebar_end = 27
 count = 0
 for row in frame['rows']:
     text = row.get('text', '')[1:sidebar_end]
-    if sum(character in '▂▄' for character in text) >= 8:
+    if sum(character in '█▌▐' for character in text) >= 8:
         count += 1
 print(count)
 PY
@@ -73,7 +73,7 @@ sidebar_end = 27
 horizontal_rows = set()
 for row_index, row in enumerate(frame['rows']):
     text = row.get('text', '')[1:sidebar_end]
-    if sum(character in '▂▄' for character in text) >= 8:
+    if sum(character in '█▌▐' for character in text) >= 8:
         horizontal_rows.add(row_index)
 columns = 0
 for column in range(1, sidebar_end):
@@ -126,7 +126,7 @@ tree_vertical_columns="$(vertical_bar_column_count "$overflow_frame")"
 if [ "$tree_horizontal_rows" = "1" ]; then pass "tree paints one horizontal bar row"; else fail "tree horizontal bar row count is $tree_horizontal_rows, expected 1"; fi
 if [ "$tree_vertical_columns" = "1" ]; then pass "tree paints one vertical bar column"; else fail "tree vertical bar column count is $tree_vertical_columns, expected 1"; fi
 if [ "$tree_horizontal_rows" = "$tree_vertical_columns" ]; then
-  pass "axis-adjusted thickness matches (1 half-height row = 1 column of visual ink)"
+  pass "horizontal and vertical bars render at the SAME settings thickness (uniform, plain — no axis-balanced overlay)"
 else
   fail "axis-adjusted thickness differs ($tree_horizontal_rows horizontal rows vs $tree_vertical_columns vertical columns)"
 fi

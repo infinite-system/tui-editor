@@ -42,6 +42,12 @@ class $EditorPane {
   // consumers agree on what is where. Empty when wrap is off.
   private wrapRowsWindow: VisualRow[] = [];
   private readonly drag: SelectionDragBehavior;
+  // Multi-click selection state: successive clicks at the same spot within the window escalate
+  // single → double (word) → triple (line).
+  private lastClickTimeMs = 0;
+  private lastClickLine = -1;
+  private lastClickColumn = -1;
+  private clickCount = 0;
 
   constructor(private readonly deps: EditorPaneDeps) {
     this.drag = this.buildDragBehavior();
@@ -298,6 +304,29 @@ class $EditorPane {
         if (definitionPosition) {
           workspaceSet.active.focusEditor();
           void workspaceSet.active.goToDefinition(definitionPosition);
+          return;
+        }
+      }
+      // Multi-click selection (VS Code): a second click on the same spot selects the WORD, a third
+      // selects the whole LINE. A single click falls through to a normal drag-select begin.
+      const clickPosition = event.button === 0 ? this.documentPositionAtCell(event.x, event.y) : null;
+      if (clickPosition) {
+        const nowMs = Date.now();
+        const sameSpot =
+          clickPosition.line === this.lastClickLine &&
+          Math.abs(clickPosition.column - this.lastClickColumn) <= 1;
+        this.clickCount = sameSpot && nowMs - this.lastClickTimeMs < 450 ? this.clickCount + 1 : 1;
+        this.lastClickTimeMs = nowMs;
+        this.lastClickLine = clickPosition.line;
+        this.lastClickColumn = clickPosition.column;
+        if (this.clickCount === 2) {
+          workspaceSet.active.focusEditor();
+          workspaceSet.active.editor.selectWord(clickPosition.line, clickPosition.column);
+          return;
+        }
+        if (this.clickCount >= 3) {
+          workspaceSet.active.focusEditor();
+          workspaceSet.active.editor.selectLine(clickPosition.line);
           return;
         }
       }
