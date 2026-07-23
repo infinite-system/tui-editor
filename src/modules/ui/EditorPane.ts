@@ -19,6 +19,7 @@ import type { Palette } from '../theme/ThemePalettes';
 import type { WorkspaceSet } from '../workspace/WorkspaceSet';
 import type { FindBar } from '../search/FindBar';
 import type { Settings } from '../settings/Settings';
+import type { Theme } from '../theme/Theme';
 
 export interface EditorPaneDeps {
   renderer: CliRenderer;
@@ -27,6 +28,7 @@ export interface EditorPaneDeps {
   workspaceSet: WorkspaceSet.Instance;
   findBar: FindBar.Instance;
   settings: Settings.Instance;
+  theme: Theme.Instance;
   readPalette: () => Palette;
   editorViewportHeight: () => number;
   editorViewportWidth: () => number;
@@ -57,13 +59,16 @@ class $EditorPane {
   /** Render the editor window (delegates to EditorPaneRenderer); stores the wrap window. Returns null
    *  for the empty state (diff shown / no document), leaving the stored window untouched. */
   renderEditor(): { gutter: StyledText; code: StyledText } | null {
-    const { workspaceSet, readPalette, editorViewportHeight, editorViewportWidth, findBar } = this.deps;
+    const { workspaceSet, readPalette, editorViewportHeight, editorViewportWidth, findBar, settings, theme } = this.deps;
     const result = EditorPaneRenderer.Class.render({
       workspace: workspaceSet.active,
       palette: readPalette(),
       viewportHeight: editorViewportHeight(),
       viewportWidth: editorViewportWidth(),
       findEngineFor: (documentPath) => findBar.engineFor(`source:${documentPath}`),
+      showIndentGuides: settings.showIndentGuides.value,
+      // Box-drawing bar in nerd/unicode tiers; plain pipe where only ascii glyphs render.
+      indentGuideGlyph: theme.glyphLevel.value === 'ascii' ? '|' : '│',
     });
     if (!result) return null;
     this.wrapRowsWindow = result.wrapRowsWindow;

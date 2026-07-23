@@ -86,6 +86,7 @@ step "behavioral-contracts (felt invariants)" bash scripts/behavioral-contracts.
 if [ "${FAST:-0}" != "1" ]; then
   # 4) Driving SMOKES — the real user paths.
   step "smoke: editor"      bash scripts/smoke-editor.sh
+  step "smoke: indent-guides" bash scripts/smoke-indent-guides.sh
   step "smoke: tabs"        bash scripts/smoke-tabs.sh
   step "smoke: workspace tabs" bash scripts/smoke-workspace-tabs.sh
   step "smoke: tree-scroll" bash scripts/smoke-tree-scroll.sh

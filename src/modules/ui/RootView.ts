@@ -969,6 +969,7 @@ function $buildRootView(
     workspaceSet,
     findBar,
     settings,
+    theme,
     readPalette,
     editorViewportHeight,
     editorViewportWidth,

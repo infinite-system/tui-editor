@@ -27,6 +27,10 @@ export interface EditorPaneRenderContext {
   viewportWidth: number;
   /** The find engine for a document path (RootView prefixes the `source:` pane identifier). */
   findEngineFor: (documentPath: string) => FindInBuffer.Instance | null;
+  /** Draw faint vertical indent guides down the leading whitespace of each line (settings-driven). */
+  showIndentGuides: boolean;
+  /** The guide glyph at the current glyph tier — box-drawing bar `│` degrading to ascii `|`. */
+  indentGuideGlyph: string;
 }
 
 export interface EditorPaneRender {
@@ -35,6 +39,9 @@ export interface EditorPaneRender {
   /** Wrap-mode visual-row window (empty in no-wrap mode); RootView stores it for caret/hit-test. */
   wrapRowsWindow: VisualRow[];
 }
+
+// Indent guides sit at every tab stop; the display layer expands tabs on the same 4-column grid.
+const INDENT_GUIDE_TAB_WIDTH = 4;
 
 /** Map a syntax role to its palette colour. */
 function roleColor(role: Role, palette: Palette): string {
@@ -103,6 +110,23 @@ function $renderEditor(context: EditorPaneRenderContext): EditorPaneRender | nul
     const lineDiagnostics = diagnosticsByLine.get(lineIndex) ?? [];
     const windowGraphemeCount = EditorCoordinates.Class.graphemeCount(windowText);
     const boundaries = new Set<number>([0, windowGraphemeCount]);
+    // Indent guides: a faint vertical bar drawn IN PLACE of the leading-whitespace space at each indent
+    // level (display columns 0, tabWidth, 2*tabWidth, ...). Swapping a space for the guide glyph keeps
+    // the cell count identical, so caret/selection columns are untouched. Only on a line's FIRST visual
+    // row (windowStartGrapheme === 0, i.e. the physical line start); a diagnostic/find highlight over the
+    // same cell takes precedence below. Tabs render as-is (the scan stops at the first non-space).
+    // invariant: Indent guides mark leading whitespace without shifting columns (src/modules/ui/ui.invariants.md)
+    const indentGuideGraphemes = new Set<number>();
+    if (context.showIndentGuides && windowStartGrapheme === 0) {
+      for (let indentGrapheme = 0; indentGrapheme < windowGraphemeCount; indentGrapheme += 1) {
+        if (windowText[indentGrapheme] !== ' ') break;
+        if (EditorCoordinates.Class.displayColumn(windowText, indentGrapheme) % INDENT_GUIDE_TAB_WIDTH === 0) {
+          indentGuideGraphemes.add(indentGrapheme);
+          boundaries.add(indentGrapheme);
+          boundaries.add(indentGrapheme + 1);
+        }
+      }
+    }
     for (const match of lineMatches) {
       boundaries.add(Math.max(0, Math.min(windowGraphemeCount, match.startColumn - windowStartGrapheme)));
       boundaries.add(Math.max(0, Math.min(windowGraphemeCount, match.endColumn - windowStartGrapheme)));
@@ -139,6 +163,16 @@ function $renderEditor(context: EditorPaneRenderContext): EditorPaneRender | nul
         windowStartGrapheme + segmentStart,
         windowStartGrapheme + segmentEnd,
       );
+      if (
+        indentGuideGraphemes.has(segmentStart) &&
+        segmentEnd - segmentStart === 1 &&
+        diagnosticSeverity === null &&
+        !findHighlighted
+      ) {
+        // Faint vertical guide in place of this leading-whitespace space — same one cell, dim colour.
+        codeChunks.push(fg(palette.border)(context.indentGuideGlyph));
+        continue;
+      }
       if (diagnosticSeverity !== null) {
         // A diagnostic range renders as a coloured UNDERLINE in the severity colour (red for errors) —
         // the terminal's "red squiggly": the text stays but is underlined and recoloured to signal it.

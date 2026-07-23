@@ -28,7 +28,7 @@ export PATH="$HOME/.bun/bin:$PATH"
 # smoke-hover.sh (forced to tsgo), since this smoke deliberately never spawns a language server.
 # lspFileSizeLimitKb is driven at the end of THIS file (the ONE drive here that spawns tsgo): a file
 # over the limit is size-suppressed (LSP off), a file within it attaches (diagnostics arrive).
-COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap showActivityBar workspaceTabPosition typescriptServer lspFileSizeLimitKb sidebarWidth gitSplitRatio diffSplitRatio markdownSplitRatio"
+COVERED_SETTINGS="verticalFlingCeiling scrollAccelGain scrollFriction linesPerNotch horizontalScrollModifier fastScrollModifier fastScrollMultiplier scrollbarThickness glyphMode theme wordWrap showActivityBar showIndentGuides workspaceTabPosition typescriptServer lspFileSizeLimitKb sidebarWidth gitSplitRatio diffSplitRatio markdownSplitRatio"
 
 # ---- schema-enumeration META-GATE (cheap; the enforcing check) -------------------------------------
 meta_gate() {
@@ -243,6 +243,22 @@ setb showActivityBar true;  S=sa$$-ab-a; "$H" launch "$S" 120x40 env HOME="$SETT
 setb showActivityBar false; S=sa$$-ab-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$TREE" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; div_off=$(sidebar_divider_col "$S")
 check "$((div_on - div_off))" "4" "showActivityBar ON shifts the sidebar divider right by the bar's 4 columns (on=$div_on off=$div_off)"
 setb showActivityBar false
+
+echo "== showIndentGuides: the editor draws vertical guide bars in leading whitespace, gone when off =="
+INDENT_DIR=$(mktemp -d /tmp/tui-sa-indent.XXXXXX); printf 'function f() {\n        deeply();\n}\n' > "$INDENT_DIR/i.ts"
+# Count the non-space cells in the 8-cell indent before "deeply(" — those are the guide bars (FrameProbe
+# remaps the box-drawing glyph, so iterate code points as cells and count non-spaces).
+indent_guide_cells() {
+  FRAME_FILE="$ROOT/artifacts/frame-$1.json" "$BUN" -e '
+const f=JSON.parse(require("fs").readFileSync(process.env.FRAME_FILE));
+for(const r of f.rows){const c=Array.from(r.text||"");for(let k=0;k+7<=c.length;k++){if(c.slice(k,k+7).join("")==="deeply("){if(k<8)break;process.stdout.write(String(c.slice(k-8,k).filter(x=>x!==" ").length));process.exit(0);}}}
+process.stdout.write("0");'
+}
+setb showIndentGuides true;  S=sa$$-ig-a; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$INDENT_DIR" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; open_file "$S"; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; ig_on=$(indent_guide_cells "$S")
+setb showIndentGuides false; S=sa$$-ig-b; "$H" launch "$S" 120x40 env HOME="$SETTINGS_HOME" TUI_FRAME_DUMP=1 bun run src/main.ts "$INDENT_DIR" >/dev/null; SESSIONS="$SESSIONS $S"; "$H" ready "$S" 20 >/dev/null; open_file "$S"; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; ig_off=$(indent_guide_cells "$S")
+check_gt "$ig_on" "0" "showIndentGuides ON draws guide bars in the indent (on=$ig_on)"
+check "$ig_off" "0" "showIndentGuides OFF draws no guides"
+setb showIndentGuides true
 
 echo "== gitSplitRatio: the changes/log divider row moves =="
 # Split observable = the COMMIT-LOG region's first commit row ('init'). A bigger changes region (higher
