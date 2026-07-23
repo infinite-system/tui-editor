@@ -812,7 +812,16 @@ class $DiffView {
     // One divider cell plus one overview-ruler cell and one vertical-scrollbar cell are outside the
     // two pane widths. The ruler and scrollbar are absolute, but reserving them keeps current text
     // from rendering beneath the scroll axis.
-    return Math.max(2, (Number(this.bodyRenderable.width) || 80) - 3);
+    //
+    // On the FIRST frame Yoga has not measured the flex-sized bodyRenderable yet, so its `.width` is 0.
+    // Falling back to a hardcoded 80 there sized both panes to ~80/actual (≈60%) until the next frame
+    // corrected it. Instead fall back to the DEFINITE-size parent host (diffContainer, laid out before
+    // the diff opened) — then the renderer width — so the extent is correct on frame 1.
+    const measuredBodyWidth = Number(this.bodyRenderable.width) || 0;
+    const parentHost = this.options.parentRenderable ?? this.renderer.root;
+    const extentWidth =
+      measuredBodyWidth || Number(parentHost.width) || Number(this.renderer.width) || 80;
+    return Math.max(2, extentWidth - 3);
   }
 
   private paneSplitRatio(): number {
