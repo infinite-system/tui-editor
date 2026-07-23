@@ -11,6 +11,9 @@ const BY_EXTENSION: Record<string, LangId> = {
   js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
   json: 'json', jsonc: 'json',
   md: 'markdown', markdown: 'markdown',
+  html: 'html', htm: 'html', xml: 'html', svg: 'html',
+  css: 'css', scss: 'css', less: 'css', sass: 'css',
+  vue: 'vue',
 };
 
 class $LanguageRegistry {

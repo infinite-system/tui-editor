@@ -26,7 +26,16 @@ export interface Span {
   role: Role;
 }
 
-export type LangId = 'typescript' | 'javascript' | 'json' | 'markdown' | 'diff' | 'plain';
+export type LangId =
+  | 'typescript'
+  | 'javascript'
+  | 'json'
+  | 'markdown'
+  | 'html'
+  | 'css'
+  | 'vue'
+  | 'diff'
+  | 'plain';
 
 const TYPESCRIPT_KEYWORDS = new Set([
   'abstract', 'any', 'as', 'async', 'await', 'boolean', 'break', 'case', 'catch', 'class',
@@ -158,6 +167,224 @@ function tokenizeMarkdown(line: string): Span[] {
   return [{ text: line, role: 'text' }];
 }
 
+/** Tokenize one line of HTML (and, with `vue`, Vue-SFC template sugar: directives + interpolations).
+ *  Line-local `insideTag` state, mirroring the block-comment heuristic in tokenizeCode — a tag that
+ *  spans lines re-opens its attribute coloring on the next line, which is acceptable for the immediate
+ *  layer (the deferred Tree-sitter upgrade is the exact-grammar path). */
+function tokenizeHtml(line: string, vue: boolean): Span[] {
+  const spans: Span[] = [];
+  const push = (text: string, role: Role) => {
+    if (text) spans.push({ text, role });
+  };
+  let index = 0;
+  const length = line.length;
+  let insideTag = false;
+  while (index < length) {
+    const character = line[index]!;
+    if (!insideTag) {
+      // HTML comment (line-local; may not close on this line)
+      if (line.startsWith('<!--', index)) {
+        const end = line.indexOf('-->', index + 4);
+        if (end === -1) {
+          push(line.slice(index), 'comment');
+          break;
+        }
+        push(line.slice(index, end + 3), 'comment');
+        index = end + 3;
+        continue;
+      }
+      // Vue interpolation {{ expression }}
+      if (vue && line.startsWith('{{', index)) {
+        const end = line.indexOf('}}', index + 2);
+        push('{{', 'operator');
+        push(line.slice(index + 2, end === -1 ? length : end), 'variable');
+        if (end !== -1) push('}}', 'operator');
+        index = end === -1 ? length : end + 2;
+        continue;
+      }
+      // Tag open <tag / close </tag: the bracket is an operator, the tag name a keyword.
+      if (character === '<') {
+        let scan = index + 1;
+        const closing = line[scan] === '/';
+        if (closing) scan++;
+        push(closing ? '</' : '<', 'operator');
+        index = scan;
+        const nameStart = index;
+        while (index < length && /[A-Za-z0-9-]/.test(line[index]!)) index++;
+        push(line.slice(nameStart, index), 'keyword');
+        insideTag = true;
+        continue;
+      }
+      // Entity &name; / &#123;
+      if (character === '&') {
+        const semicolon = line.indexOf(';', index);
+        if (semicolon !== -1 && semicolon - index <= 10) {
+          push(line.slice(index, semicolon + 1), 'type');
+          index = semicolon + 1;
+          continue;
+        }
+        push('&', 'text');
+        index++;
+        continue;
+      }
+      // Plain text up to the next tag / entity / interpolation.
+      const textStart = index;
+      while (
+        index < length &&
+        line[index] !== '<' &&
+        line[index] !== '&' &&
+        !(vue && line.startsWith('{{', index))
+      ) {
+        index++;
+      }
+      push(line.slice(textStart, index), 'text');
+      continue;
+    }
+    // Inside a tag: close, attribute value, '=', or attribute name.
+    if (character === '>') {
+      push('>', 'operator');
+      insideTag = false;
+      index++;
+      continue;
+    }
+    if (character === '/' && line[index + 1] === '>') {
+      push('/>', 'operator');
+      insideTag = false;
+      index += 2;
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      let scan = index + 1;
+      while (scan < length && line[scan] !== character) scan++;
+      push(line.slice(index, Math.min(scan + 1, length)), 'string');
+      index = scan + 1;
+      continue;
+    }
+    if (character === '=') {
+      push('=', 'operator');
+      index++;
+      continue;
+    }
+    if (/[A-Za-z_@:#]/.test(character)) {
+      const nameStart = index;
+      while (index < length && /[A-Za-z0-9_@:#.\-]/.test(line[index]!)) index++;
+      const attribute = line.slice(nameStart, index);
+      // Vue directives (v-*, @event, :bind, #slot) pop as keywords; ordinary attributes are variables.
+      const isVueDirective = vue && /^(v-|@|:|#)/.test(attribute);
+      push(attribute, isVueDirective ? 'keyword' : 'variable');
+      continue;
+    }
+    push(character, 'text');
+    index++;
+  }
+  return spans.length ? spans : [{ text: line, role: 'text' }];
+}
+
+/** Tokenize one line of CSS. Line-local (block comments/values that span lines re-color per line).
+ *  A property is an identifier immediately followed by ':' (keyword); selectors (.class/#id/@rule) and
+ *  values/colors/units get their own roles. */
+function tokenizeCss(line: string): Span[] {
+  const spans: Span[] = [];
+  const push = (text: string, role: Role) => {
+    if (text) spans.push({ text, role });
+  };
+  let index = 0;
+  const length = line.length;
+  while (index < length) {
+    const character = line[index]!;
+    // Block comment (line-local)
+    if (character === '/' && line[index + 1] === '*') {
+      const end = line.indexOf('*/', index + 2);
+      if (end === -1) {
+        push(line.slice(index), 'comment');
+        break;
+      }
+      push(line.slice(index, end + 2), 'comment');
+      index = end + 2;
+      continue;
+    }
+    // String
+    if (character === '"' || character === "'") {
+      let scan = index + 1;
+      while (scan < length && line[scan] !== character) {
+        if (line[scan] === '\\') scan++;
+        scan++;
+      }
+      push(line.slice(index, Math.min(scan + 1, length)), 'string');
+      index = scan + 1;
+      continue;
+    }
+    // #hex color, else #id selector
+    if (character === '#') {
+      const hexColor = line.slice(index).match(/^#[0-9a-fA-F]{3,8}\b/);
+      if (hexColor) {
+        push(hexColor[0], 'number');
+        index += hexColor[0].length;
+        continue;
+      }
+      let scan = index + 1;
+      while (scan < length && /[A-Za-z0-9_-]/.test(line[scan]!)) scan++;
+      push(line.slice(index, scan), 'type');
+      index = scan;
+      continue;
+    }
+    // .class selector
+    if (character === '.' && /[A-Za-z_-]/.test(line[index + 1] ?? '')) {
+      let scan = index + 1;
+      while (scan < length && /[A-Za-z0-9_-]/.test(line[scan]!)) scan++;
+      push(line.slice(index, scan), 'type');
+      index = scan;
+      continue;
+    }
+    // @media / @import at-rule
+    if (character === '@') {
+      let scan = index + 1;
+      while (scan < length && /[A-Za-z-]/.test(line[scan]!)) scan++;
+      push(line.slice(index, scan), 'keyword');
+      index = scan;
+      continue;
+    }
+    // !important
+    if (character === '!') {
+      const bang = line.slice(index).match(/^![A-Za-z]+/);
+      if (bang) {
+        push(bang[0], 'keyword');
+        index += bang[0].length;
+        continue;
+      }
+    }
+    // number with optional unit
+    if (/[0-9]/.test(character) || (character === '-' && /[0-9.]/.test(line[index + 1] ?? ''))) {
+      const number = line.slice(index).match(/^-?\d*\.?\d+(px|em|rem|%|vh|vw|vmin|vmax|pt|fr|s|ms|deg)?/);
+      if (number) {
+        push(number[0], 'number');
+        index += number[0].length;
+        continue;
+      }
+    }
+    // identifier: a property (followed by ':') is a keyword; otherwise a value/variable
+    if (/[A-Za-z_-]/.test(character)) {
+      let scan = index;
+      while (scan < length && /[A-Za-z0-9_-]/.test(line[scan]!)) scan++;
+      const word = line.slice(index, scan);
+      let lookAhead = scan;
+      while (lookAhead < length && line[lookAhead] === ' ') lookAhead++;
+      push(word, line[lookAhead] === ':' ? 'keyword' : 'variable');
+      index = scan;
+      continue;
+    }
+    // punctuation
+    if (/[{}();:,>+~*=[\]]/.test(character)) {
+      push(character, 'operator');
+      index++;
+      continue;
+    }
+    push(character, 'text');
+    index++;
+  }
+  return spans.length ? spans : [{ text: line, role: 'text' }];
+}
+
 function $highlightLine(line: string, language: LangId): Span[] {
   if (language === 'diff') {
     // Line-level diff coloring: whole-line roles keyed by the unified-diff prefix.
@@ -175,6 +402,12 @@ function $highlightLine(line: string, language: LangId): Span[] {
       return tokenizeJson(line);
     case 'markdown':
       return tokenizeMarkdown(line);
+    case 'html':
+      return tokenizeHtml(line, false);
+    case 'vue':
+      return tokenizeHtml(line, true);
+    case 'css':
+      return tokenizeCss(line);
     default:
       return [{ text: line, role: 'text' }];
   }

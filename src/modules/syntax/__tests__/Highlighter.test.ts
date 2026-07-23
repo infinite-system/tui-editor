@@ -47,3 +47,49 @@ test('markdown headings and lists are recognized', () => {
 test('plain language returns a single text span', () => {
   expect(Highlighter.Class.highlightLine('anything at all', 'plain')).toEqual([{ text: 'anything at all', role: 'text' }]);
 });
+
+test('language registry maps web extensions (html/css/vue + aliases)', () => {
+  expect(LanguageRegistry.Class.forPath('index.html')).toBe('html');
+  expect(LanguageRegistry.Class.forPath('a.HTM')).toBe('html');
+  expect(LanguageRegistry.Class.forPath('icon.svg')).toBe('html');
+  expect(LanguageRegistry.Class.forPath('main.css')).toBe('css');
+  expect(LanguageRegistry.Class.forPath('theme.scss')).toBe('css');
+  expect(LanguageRegistry.Class.forPath('App.vue')).toBe('vue');
+});
+
+test('html: tags are keywords, attribute values strings, comments/entities colored — lossless', () => {
+  const line = '<a href="x.html" class="c">Hi&amp;</a><!-- note';
+  expect(textOf(line, 'html')).toBe(line); // lossless
+  const spans = Highlighter.Class.highlightLine(line, 'html');
+  expect(spans.find((span) => span.text === 'a')?.role).toBe('keyword');
+  expect(spans.find((span) => span.text === 'href')?.role).toBe('variable');
+  expect(spans.some((span) => span.role === 'string' && span.text === '"x.html"')).toBe(true);
+  expect(spans.some((span) => span.role === 'type' && span.text === '&amp;')).toBe(true);
+  expect(spans.some((span) => span.role === 'comment' && span.text.includes('<!-- note'))).toBe(true);
+});
+
+test('vue: directives pop as keywords and interpolation is highlighted — lossless', () => {
+  const line = '<button v-if="ok" :class="c" @click="go">{{ label }}</button>';
+  expect(textOf(line, 'vue')).toBe(line); // lossless
+  const spans = Highlighter.Class.highlightLine(line, 'vue');
+  expect(spans.find((span) => span.text === 'v-if')?.role).toBe('keyword');
+  expect(spans.find((span) => span.text === ':class')?.role).toBe('keyword');
+  expect(spans.find((span) => span.text === '@click')?.role).toBe('keyword');
+  expect(spans.some((span) => span.role === 'variable' && span.text.includes('label'))).toBe(true);
+  // Plain HTML (vue off) does NOT treat v-if as a directive keyword.
+  const htmlSpans = Highlighter.Class.highlightLine(line, 'html');
+  expect(htmlSpans.find((span) => span.text === 'v-if')?.role).toBe('variable');
+});
+
+test('css: selectors, properties, colors, units, at-rules, strings — lossless', () => {
+  const line = '.btn { color: #ff0; width: 12px; content: "x"; } /* c */';
+  expect(textOf(line, 'css')).toBe(line); // lossless
+  const spans = Highlighter.Class.highlightLine(line, 'css');
+  expect(spans.find((span) => span.text === '.btn')?.role).toBe('type');
+  expect(spans.find((span) => span.text === 'color')?.role).toBe('keyword'); // property (before ':')
+  expect(spans.some((span) => span.role === 'number' && span.text === '#ff0')).toBe(true); // hex color
+  expect(spans.some((span) => span.role === 'number' && span.text === '12px')).toBe(true); // unit
+  expect(spans.some((span) => span.role === 'string' && span.text === '"x"')).toBe(true);
+  expect(spans.some((span) => span.role === 'comment' && span.text.includes('/* c */'))).toBe(true);
+  expect(Highlighter.Class.highlightLine('@media screen {', 'css').find((span) => span.text === '@media')?.role).toBe('keyword');
+});
