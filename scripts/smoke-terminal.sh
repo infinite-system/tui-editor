@@ -35,6 +35,18 @@ if "$H" ready "$S" 20 >/dev/null; then echo "  PASS  boot: ready+quiescent"; els
 fi
 chk "terminal hidden at boot" "$(f terminalVisible)" "false"
 
+echo "== click the status-bar terminal button toggles the panel (the new bottom-right affordance) =="
+# The right cluster is pinned to the right edge, 3 cells each: [ terminal ][ gear ][ ? ]. So the
+# terminal button's middle cell is width-8, and the status bar is the last screen row (height-1).
+sb_width="$(f width)"; sb_height="$(f height)"
+term_btn_x=$(( sb_width - 8 )); status_row=$(( sb_height - 1 ))
+"$H" click "$S" "$term_btn_x" "$status_row" >/dev/null
+"$H" settle "$S" >/dev/null 2>&1
+chk "button click OPENS the terminal" "$(f terminalVisible)" "true"
+"$H" click "$S" "$term_btn_x" "$status_row" >/dev/null
+"$H" settle "$S" >/dev/null 2>&1
+chk "button click again HIDES the terminal" "$(f terminalVisible)" "false"
+
 echo "== toggle the terminal panel (F8 = deliverable alias for Ctrl+backtick) =="
 "$H" send "$S" F8 >/dev/null
 "$H" settle "$S" >/dev/null 2>&1

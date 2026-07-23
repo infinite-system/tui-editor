@@ -110,12 +110,22 @@ const SETTINGS_ICON: Record<GlyphLevel, string> = {
   ascii: '*',
 };
 
+const TERMINAL_ICON: Record<GlyphLevel, string> = {
+  nerd: '\u{f120}', // fa terminal (prompt)
+  unicode: '❯',
+  ascii: '>',
+};
+
 function $iconSetFor(level: GlyphLevel): IconSet {
   return SETS[level];
 }
 
 function $settingsIconFor(level: GlyphLevel): string {
   return SETTINGS_ICON[level];
+}
+
+function $terminalIconFor(level: GlyphLevel): string {
+  return TERMINAL_ICON[level];
 }
 
 function $actionIconsFor(level: GlyphLevel): ActionIconSet {
@@ -143,6 +153,7 @@ function $iconFor(set: IconSet, name: string, isDirectory: boolean, open = false
 class $ThemeIcons {
   static iconSetFor = $iconSetFor;
   static settingsIconFor = $settingsIconFor;
+  static terminalIconFor = $terminalIconFor;
   static actionIconsFor = $actionIconsFor;
   static checkboxIconsFor = $checkboxIconsFor;
   static activityIconsFor = $activityIconsFor;

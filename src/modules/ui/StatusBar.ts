@@ -18,6 +18,7 @@ import type { KeybindingRegistry } from '../keybindings/KeybindingRegistry';
 import type { Tooltip } from './Tooltip';
 import type { Theme } from '../theme/Theme';
 import type { SettingsPanel } from '../settings/SettingsPanel';
+import type { PanelHost } from './PanelHost';
 
 export interface StatusBarDeps {
   renderer: CliRenderer;
@@ -27,10 +28,15 @@ export interface StatusBarDeps {
   overlayCoordinator: OverlayCoordinator.Instance;
   keybindings: KeybindingRegistry.Instance;
   tooltip: Tooltip.Instance;
-  /** For the settings (gear) glyph at the current glyph tier. */
+  /** For the settings (gear) + terminal glyphs at the current glyph tier. */
   theme: Theme.Instance;
   /** The settings panel the gear button toggles (mirrors the shortcutHelp dep the `?` button uses). */
   settingsPanel: SettingsPanel.Instance;
+  /** The bottom panel; the terminal button reads its `visible` state to light up when open. */
+  panelHost: PanelHost.Instance;
+  /** Lazy-inits the terminal + toggles the bottom panel — the SAME closure the panel.toggleTerminal
+   *  keybinding runs, so the button and the chord are one action (no divergent toggle paths). */
+  toggleTerminal: () => void;
 }
 
 class $StatusBar {
@@ -39,9 +45,11 @@ class $StatusBar {
   private readonly statusText: TextRenderable;
   private readonly shortcutHelpButton: TextRenderable;
   private readonly settingsButton: TextRenderable;
+  private readonly terminalButton: TextRenderable;
   private readonly clock: TextRenderable;
   private hover = false;
   private settingsHover = false;
+  private terminalHover = false;
   // The clock's single re-armed minute-boundary timer (NOT a per-second interval): the only periodic
   // wake at rest, once/min, so it forces the demand-driven loop to repaint the new minute without
   // turning idle into a busy loop.
@@ -68,6 +76,16 @@ class $StatusBar {
       height: 1,
       selectable: false,
     });
+    // Terminal-toggle affordance: a hit-tested single-cell glyph, LEFT of the gear. Click runs the SAME
+    // toggleTerminal closure the Ctrl+J/Ctrl+`/F8 chords run (lazy-init + show/hide the bottom panel);
+    // it lights accent while the panel is open, so it doubles as a visible open/closed indicator.
+    this.terminalButton = new TextRenderable(renderer, {
+      id: 'status-terminal-button',
+      content: ` ${deps.theme.terminalIcon} `,
+      width: 3,
+      height: 1,
+      selectable: false,
+    });
     // Settings (gear) affordance: a hit-tested single-cell glyph pinned to the right end, LEFT of the
     // `?` button. Click toggles the settings panel through the exclusive-overlay coordinator (the same
     // way `?` toggles the cheat-sheet); hover shows a tooltip with the bound open chord.
@@ -87,11 +105,31 @@ class $StatusBar {
     });
     this.bar.add(spacer);
     this.bar.add(this.clock);
+    this.bar.add(this.terminalButton);
     this.bar.add(this.settingsButton);
     this.bar.add(this.shortcutHelpButton);
     // Arm the minute-boundary repaint and tear it down with the app (no leak past quit).
     this.scheduleClockTick();
     deps.app.onDispose(() => { if (this.clockTimer) clearTimeout(this.clockTimer); });
+    this.terminalButton.onMouseDown = () => {
+      deps.toggleTerminal();
+      renderer.requestRender();
+    };
+    this.terminalButton.onMouseMove = (event) => {
+      if (!this.terminalHover) {
+        this.terminalHover = true;
+        renderer.requestRender();
+      }
+      const openChordHint = deps.keybindings.bindingHint('panel.toggleTerminal', 'global');
+      deps.tooltip.point(`Terminal${openChordHint ? ` (${openChordHint})` : ''}`, event.x, event.y);
+    };
+    this.terminalButton.onMouseOut = () => {
+      if (this.terminalHover) {
+        this.terminalHover = false;
+        renderer.requestRender();
+      }
+      deps.tooltip.clear();
+    };
     this.settingsButton.onMouseDown = () => {
       this.toggleSettings();
       renderer.requestRender();
@@ -199,6 +237,11 @@ class $StatusBar {
     // The `?` help affordance brightens on hover and while its sheet is open.
     this.shortcutHelpButton.fg =
       this.hover || this.deps.shortcutHelp.open.value ? palette.accent : palette.dim;
+    // The terminal affordance: current-tier glyph, accent while HOVERED or while the panel is OPEN
+    // (so it reads as a live open/closed indicator, mirroring the gear/`?` lit-while-active pattern).
+    this.terminalButton.content = ` ${this.deps.theme.terminalIcon} `;
+    this.terminalButton.fg =
+      this.terminalHover || this.deps.panelHost.visible.value ? palette.accent : palette.dim;
     // The gear affordance mirrors it: current-tier glyph, brightening on hover / while settings is open.
     this.settingsButton.content = ` ${this.deps.theme.settingsIcon} `;
     this.settingsButton.fg =

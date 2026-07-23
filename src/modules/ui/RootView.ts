@@ -124,6 +124,7 @@ function $buildRootView(
   shortcutHelp: ShortcutHelp.Instance,
   overlayCoordinator: OverlayCoordinator.Instance,
   panelHost: PanelHost.Instance,
+  toggleTerminal: () => void,
 ): RootView {
   const root = renderer.root;
   const readPalette = () => theme.palette;
@@ -291,6 +292,8 @@ function $buildRootView(
     tooltip,
     theme,
     settingsPanel,
+    panelHost,
+    toggleTerminal,
   });
 
   // --- bottom panel slot (the composable PanelHost region) --------------------------------------

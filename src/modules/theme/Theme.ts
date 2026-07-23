@@ -32,6 +32,10 @@ class $Theme {
   get settingsIcon(): string {
     return ThemeIcons.Class.settingsIconFor(this.glyphLevel.value);
   }
+  /** Status-bar terminal-toggle glyph at the current glyph level (nerd terminal → ❯ → `>`). */
+  get terminalIcon(): string {
+    return ThemeIcons.Class.terminalIconFor(this.glyphLevel.value);
+  }
   /** Git changes-row action button glyphs at the current glyph level (nerd → unicode → ascii). */
   get actionIcons(): ActionIconSet {
     return ThemeIcons.Class.actionIconsFor(this.glyphLevel.value);

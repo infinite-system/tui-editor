@@ -129,6 +129,15 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     shortcutHelp: () => shortcutHelp.close(),
   });
 
+  // The ONE terminal-toggle action, shared by the panel.toggleTerminal chords (Ctrl+J/Ctrl+`/F8) AND
+  // the status-bar terminal button, so both are the same action with no divergent paths. It forward-
+  // references `ensureTerminal` (declared below): the body only runs on a chord/click, long after
+  // init completes, so the binding is resolved by then.
+  const toggleTerminal = (): void => {
+    ensureTerminal();
+    panelHost.toggle();
+  };
+
   const view = RootView.Class.buildRootView(
     renderer,
     workspaceSet,
@@ -146,6 +155,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     shortcutHelp,
     overlayCoordinator,
     panelHost,
+    toggleTerminal,
   );
 
   // Lazily create + register the terminal PaneContent on first toggle (idle cost is zero until then).
@@ -941,11 +951,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     },
     'editor.toggleWordWrap': () => workspaceSet.active.editor.toggleWordWrap(),
     // Toggle the bottom panel (terminal). Reserved so it fires from ANY mode — including from within a
-    // focused terminal (to hide it) — exactly like the quit escape hatch.
-    'panel.toggleTerminal': () => {
-      ensureTerminal();
-      panelHost.toggle();
-    },
+    // focused terminal (to hide it) — exactly like the quit escape hatch. Same closure the status-bar
+    // terminal button runs, so chord and click are one action.
+    'panel.toggleTerminal': toggleTerminal,
     'menu.previous': () => contextMenu.moveSelection(-1),
     'menu.next': () => contextMenu.moveSelection(1),
     'menu.run': () => contextMenu.runSelected(),
