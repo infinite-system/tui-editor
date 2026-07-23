@@ -9,7 +9,6 @@
 // invariant: A hover card reflects the language server's type at the pointed symbol (src/modules/ui/ui.invariants.md)
 import {
   BoxRenderable,
-  ScrollBarRenderable,
   StyledText,
   fg,
   type MouseEvent,
@@ -17,16 +16,15 @@ import {
   type CliRenderer,
 } from '@opentui/core';
 import { Reactive } from 'ivue';
-import { Logging } from '../system/Logging';
 import { ref } from 'vue';
 import { HitTransparentText } from './HitTransparentText';
 import { SelectableText } from './SelectableText';
-import { SelectionDragBehavior } from './SelectionDragBehavior';
+import { ScrollableTextViewport } from './ScrollableTextViewport';
 import { Clipboard } from '../system/Clipboard';
-import { ScrollbarGeometry } from './ScrollbarGeometry';
 import { Highlighter, type LangId, type Role } from '../syntax/Highlighter';
 import type { Palette } from '../theme/ThemePalettes';
 import type { Theme } from '../theme/Theme';
+import type { Settings } from '../settings/Settings';
 import type { LanguageHover, TextPosition, TextRange } from '../lsp/LanguageClient';
 
 /** The pointer must rest on ONE document position this long before the card shows (VS Code uses ~0.5s). */
@@ -50,6 +48,8 @@ const ANCHOR_OFFSET_COLUMNS = 2;
 export interface HoverCardDeps {
   renderer: CliRenderer;
   theme: Theme.Instance;
+  /** Scroll feel + scrollbar thickness come from the one settings source (via ScrollableTextViewport). */
+  settings: Settings.Instance;
   /** Resolve the language server's hover for a document position (Workspace.hoverAt). */
   requestHover: (position: TextPosition) => Promise<LanguageHover | null>;
   /** The syntax language of the active document — colours a fenced code block with no explicit tag. */
@@ -92,11 +92,6 @@ class $HoverCard {
   /** The screen CELL of the pointed symbol the card anchors to (placed below, flipping above). */
   private anchorX = 0;
   private anchorY = 0;
-  private scrollTop = 0;
-  /** Horizontal scroll offset (display columns) — the window of each line painted starts here. */
-  private scrollLeft = 0;
-  /** True this frame when content is wider than the viewport (drives the horizontal bar + drag axis). */
-  private horizontalScrollable = false;
   /** Interior column count painted this frame (the horizontal viewport width) — the drag/select map. */
   private interiorColumns = 1;
   private dwellSeconds = 0;
@@ -141,17 +136,11 @@ class $HoverCard {
   private readonly backdrop: HitTransparentText;
   private readonly box: BoxRenderable;
   private readonly content: SelectableText;
-  private readonly scrollbar: ScrollBarRenderable;
-  private readonly horizontalScrollbar: ScrollBarRenderable;
-  /** The SAME drag+edge-autoscroll behaviour the editor and diff use — dragging a selection past the
-   *  card's edges auto-scrolls the content (its scrollRows/scrollColumns callbacks are scrollBy/scrollLeftBy). */
-  private readonly drag: SelectionDragBehavior;
-  /** True while update() writes the bar's reported position, so the bar's onChange ignores our own sync. */
-  private applyingBarGeometry = false;
-  /** Maps a bar-reported position back to a true content row (ScrollbarGeometry's inflate scale). */
-  private barScale = 1;
-  /** Same as barScale for the horizontal bar (reported column → true column). */
-  private horizontalBarScale = 1;
+  /** The unified scroll surface — momentum, wheel (incl. alt→horizontal), both scrollbars (thickness
+   *  from Settings), and drag-select with edge autoscroll. The card is a thin adapter over it, owning
+   *  only its content windowing + selection MODEL. invariant: A scrollable text surface is
+   *  drag-selectable with edge auto-scroll (src/modules/ui/ui.invariants.md) */
+  private readonly viewport: ScrollableTextViewport.Instance;
 
   constructor(private readonly deps: HoverCardDeps) {
     const { renderer } = deps;
@@ -174,95 +163,72 @@ class $HoverCard {
     });
     this.content = new SelectableText(renderer, { id: 'hover-card-content', content: '', selectable: true });
     this.box.add(this.content);
-    // Colour the bar's TRACK the card's own background so the sub-cell half-block glyphs (▀/▄) drawn
-    // at the thumb's fractional ends blend into the card instead of showing the default near-black
-    // track as dark lines cutting across the thumb. update() re-applies these from the live palette.
-    this.scrollbar = new ScrollBarRenderable(renderer, {
-      id: 'hover-card-scrollbar', orientation: 'vertical', position: 'absolute', width: 1,
-      showArrows: false, visible: false,
-      trackOptions: { backgroundColor: deps.theme.palette.panel, foregroundColor: deps.theme.palette.dim },
-      onChange: (position) => {
-        if (this.applyingBarGeometry) return; // ignore our own per-frame scrollPosition sync
-        this.scrollTop = Math.max(0, Math.round(position * this.barScale));
-        this.requestPaint();
+    // The card composes the ONE scroll surface: momentum + wheel (incl. alt→horizontal) + both bars
+    // (thickness from Settings) + drag-select with edge autoscroll. The card supplies only its IDENTITY
+    // — content extent, bar colours, and its own selection MODEL + cell↔content mapping.
+    this.viewport = new ScrollableTextViewport.Class({
+      renderer,
+      settings: deps.settings,
+      parent: this.box,
+      id: 'hover-card',
+      extent: () => ({
+        contentRows: this.contentLines.length,
+        contentColumns: this.contentMaxWidth,
+        viewportRows: this.viewportRows(),
+        viewportColumns: this.viewportColumns(),
+      }),
+      // Track blends with the card bg (kills the black half-block lines); thumb is a subtle dim grey.
+      colors: () => ({ track: deps.theme.palette.panel, thumb: deps.theme.palette.dim }),
+      onScroll: () => this.requestPaint(),
+      selection: {
+        positionAtCell: (screenColumn, screenRow) => this.contentPositionAtCell(screenColumn, screenRow),
+        viewportRectangle: () => ({
+          leftColumn: this.content.x,
+          rightColumn: this.content.x + Math.max(1, this.interiorColumns) - 1,
+          topRow: this.content.y,
+          bottomRow: this.content.y + Math.max(1, this.viewportRows()) - 1,
+        }),
+        begin: (position) => {
+          this.selectionAnchor = { row: position.line, column: position.column };
+          this.selectionFocus = { row: position.line, column: position.column };
+          this.requestPaint();
+        },
+        extend: (position) => {
+          this.selectionFocus = { row: position.line, column: position.column };
+          this.requestPaint();
+        },
+        finish: () => {
+          // A bare click (anchor === focus) leaves no span: drop it so update() paints no highlight.
+          if (this.selectionAnchor && this.selectionFocus
+            && this.selectionAnchor.row === this.selectionFocus.row
+            && this.selectionAnchor.column === this.selectionFocus.column) {
+            this.selectionAnchor = null;
+            this.selectionFocus = null;
+          }
+          this.requestPaint();
+        },
       },
     });
-    this.box.add(this.scrollbar);
-    this.horizontalScrollbar = new ScrollBarRenderable(renderer, {
-      id: 'hover-card-scrollbar-h', orientation: 'horizontal', position: 'absolute', height: 1,
-      showArrows: false, visible: false,
-      trackOptions: { backgroundColor: deps.theme.palette.panel, foregroundColor: deps.theme.palette.dim },
-      onChange: (position) => {
-        if (this.applyingBarGeometry) return;
-        this.scrollLeft = Math.max(0, Math.round(position * this.horizontalBarScale));
-        this.requestPaint();
-      },
-    });
-    this.box.add(this.horizontalScrollbar);
     root.add(this.box);
 
     // The card receives its OWN pointer: moving into it (to scroll/select) must NOT dismiss it, and a
-    // wheel over it scrolls the content. It never touches the editor's cursor/selection.
+    // wheel over it scrolls the content (through the viewport). It never touches the editor's cursor.
     this.box.onMouseMove = () => { this.pointerOverCard = true; this.cardWasEntered = true; this.idleSeconds = 0; };
     this.box.onMouseOut = () => { this.pointerOverCard = false; this.idleSeconds = 0; this.requestPaint(); };
-    this.box.onMouseScroll = (event: MouseEvent) => {
-      const direction = event.scroll?.direction;
-      // Horizontal wheel gestures (or shift+wheel, which terminals encode as left/right) scroll the
-      // content sideways when it overflows; a plain up/down wheel scrolls vertically.
-      if (direction === 'left' || direction === 'right') this.scrollLeftBy(direction === 'left' ? -1 : 1);
-      else this.scrollBy(direction === 'up' ? -1 : 1);
-    };
-
-    // The content text is drag-selectable with edge auto-scroll, the SAME contract every scrollable
-    // text surface upholds (editor, diff). The drag maps screen cells to absolute content rows/columns,
-    // writes this card's own selection model, and scrolls the card by rows when the pointer drags past
-    // an edge. invariant: A scrollable text surface is drag-selectable with edge auto-scroll (src/modules/ui/ui.invariants.md)
-    this.drag = new SelectionDragBehavior({
-      viewportRectangle: () => ({
-        leftColumn: this.content.x,
-        rightColumn: this.content.x + Math.max(1, this.interiorColumns) - 1,
-        topRow: this.content.y,
-        bottomRow: this.content.y + Math.max(1, this.viewportRows()) - 1,
-      }),
-      positionAtCell: (screenColumn, screenRow) => this.contentPositionAtCell(screenColumn, screenRow),
-      horizontalScrollPosition: () => this.scrollLeft,
-      horizontalScrollingEnabled: () => this.horizontalScrollable, // scroll sideways when content overflows
-      beginSelection: (position) => {
-        this.selectionAnchor = { row: position.line, column: position.column };
-        this.selectionFocus = { row: position.line, column: position.column };
-        this.requestPaint();
-      },
-      extendSelection: (position) => {
-        this.selectionFocus = { row: position.line, column: position.column };
-        this.requestPaint();
-      },
-      finishSelection: () => {
-        // A bare click (anchor === focus) leaves no span: drop it so update() paints no highlight.
-        if (this.selectionAnchor && this.selectionFocus
-          && this.selectionAnchor.row === this.selectionFocus.row
-          && this.selectionAnchor.column === this.selectionFocus.column) {
-          this.selectionAnchor = null;
-          this.selectionFocus = null;
-        }
-        this.requestPaint();
-      },
-      scrollColumns: (columnDelta) => this.scrollLeftBy(columnDelta),
-      scrollRows: (rowDelta) => this.scrollBy(rowDelta),
-      haltCompetingScroll: () => {},
-    });
-    this.content.onMouseDown = (event: MouseEvent) => { this.pointerOverCard = true; this.cardWasEntered = true; this.drag.begin(event.x, event.y); };
-    this.content.onMouseDrag = (event: MouseEvent) => this.drag.drag(event.x, event.y);
-    this.content.onMouseUp = () => this.drag.end();
-    this.content.onMouseDragEnd = () => this.drag.end();
+    this.box.onMouseScroll = (event: MouseEvent) => this.viewport.handleWheel(event);
+    this.content.onMouseDown = (event: MouseEvent) => { this.pointerOverCard = true; this.cardWasEntered = true; this.viewport.beginDrag(event.x, event.y); };
+    this.content.onMouseDrag = (event: MouseEvent) => this.viewport.dragTo(event.x, event.y);
+    this.content.onMouseUp = () => this.viewport.endDrag();
+    this.content.onMouseDragEnd = () => this.viewport.endDrag();
   }
 
   /** Map a screen cell to an ABSOLUTE content position (row into contentLines, display column). Rows
    *  outside the painted window clamp to the content extent so an edge drag still resolves a position. */
   private contentPositionAtCell(screenColumn: number, screenRow: number): { line: number; column: number } | null {
     if (!this.visible || this.contentLines.length === 0) return null;
-    const start = Math.max(0, Math.min(this.scrollTop, this.maximumScrollTop()));
+    const start = Math.max(0, Math.min(this.viewport.scrollTop, this.maximumScrollTop()));
     const row = Math.max(0, Math.min(start + (screenRow - this.content.y), this.contentLines.length - 1));
-    const column = Math.max(0, this.scrollLeft + (screenColumn - this.content.x));
+    const column = Math.max(0, this.viewport.scrollLeft + (screenColumn - this.content.x));
     return { line: row, column };
   }
 
@@ -360,7 +326,8 @@ class $HoverCard {
     this.idleSeconds = 0;
     this.cardWasEntered = false;
     this.shownRange = null;
-    this.drag.end();
+    this.viewport.endDrag();
+    this.viewport.reset();
     this.selectionAnchor = null;
     this.selectionFocus = null;
     if (this.visible) {
@@ -372,8 +339,7 @@ class $HoverCard {
       // active frame in which update() would run. Hiding the OpenTUI renderables here + a forced
       // paint makes the dismiss deterministic without the reactive round-trip.
       this.box.visible = false;
-      this.scrollbar.visible = false;
-      this.horizontalScrollbar.visible = false;
+      this.viewport.hideBars();
       this.backdrop.visible = false;
       this.requestPaint();
     }
@@ -386,10 +352,10 @@ class $HoverCard {
    * contract), and false once the card is shown or the dwell is disarmed.
    */
   tick(deltaSeconds: number): boolean {
-    // A selection drag advances the shared edge-autoscroll and keeps the card engaged (the pointer may
-    // have dragged past the card's edge, so pointerOverCard can be false mid-drag).
-    const dragging = this.drag.active;
-    const dragKeepAlive = dragging ? this.drag.tick(deltaSeconds) : false;
+    // The viewport advances momentum (a wheel glide keeps decaying) AND the selection drag's
+    // edge-autoscroll, and keeps the card engaged (the pointer may be past the card's edge mid-drag).
+    const dragging = this.viewport.dragActive;
+    const viewportKeepAlive = this.viewport.tick(deltaSeconds);
 
     // Idle auto-dismiss for a SHOWN card: while the pointer is over the card / its symbol / dragging it
     // is engaged and the grace resets; when it leaves all three, count the grace and dismiss at the
@@ -443,7 +409,6 @@ class $HoverCard {
           this.cardWasEntered = false;
           this.selectionAnchor = null;
           this.selectionFocus = null;
-          this.scrollTop = 0;
           this.visible = true;
           this.pending = null; // dwell satisfied — stop counting
           this.requestPaint();
@@ -452,27 +417,13 @@ class $HoverCard {
       dwellKeepAlive = true;
     }
 
-    return dragKeepAlive || dwellKeepAlive || idleCounting;
-  }
-
-  /** Scroll the card's content by whole rows, clamped to the content extent. */
-  scrollBy(deltaRows: number): void {
-    if (!this.visible) return;
-    this.scrollTop = Math.max(0, Math.min(this.scrollTop + deltaRows, this.maximumScrollTop()));
-    this.requestPaint();
-  }
-
-  /** Scroll the card's content sideways by whole columns, clamped to the content extent. */
-  scrollLeftBy(deltaColumns: number): void {
-    if (!this.visible) return;
-    this.scrollLeft = Math.max(0, Math.min(this.scrollLeft + deltaColumns, this.maximumScrollLeft()));
-    this.requestPaint();
+    return viewportKeepAlive || dwellKeepAlive || idleCounting;
   }
 
   /** True while the pointer is over the card or a drag is in flight — the card is STICKY: a stray
    *  keypress or a click on it must not dismiss it (so Ctrl+C copies the selection, drag selects). */
   engaged(): boolean {
-    return this.visible && (this.pointerOverCard || this.drag.active);
+    return this.visible && (this.pointerOverCard || this.viewport.dragActive);
   }
 
   /** True when the card holds a non-empty selection span. */
@@ -592,8 +543,8 @@ class $HoverCard {
     // The plain text of each row (chunk texts joined) is the source a copied selection slices from.
     this.contentPlain = this.contentLines.map((chunks) => chunks.map((chunk) => chunk.text).join(''));
     this.contentMaxWidth = Math.max(1, widest);
-    // A freshly-rendered card starts unscrolled with no selection.
-    this.scrollLeft = 0;
+    // A freshly-rendered card starts unscrolled (both axes, momentum halted) with no selection.
+    this.viewport.reset();
     this.selectionAnchor = null;
     this.selectionFocus = null;
   }
@@ -627,8 +578,7 @@ class $HoverCard {
   update(palette: Palette): void {
     if (!this.visible) {
       this.box.visible = false;
-      this.scrollbar.visible = false;
-      this.horizontalScrollbar.visible = false;
+      this.viewport.hideBars();
       this.backdrop.visible = false;
       return;
     }
@@ -640,10 +590,7 @@ class $HoverCard {
 
     const interiorContentWidth = this.viewportColumns();
     const horizontalScrollable = this.contentMaxWidth > interiorContentWidth;
-    this.horizontalScrollable = horizontalScrollable;
-    this.interiorColumns = interiorContentWidth;
-    if (this.scrollTop > this.maximumScrollTop()) this.scrollTop = this.maximumScrollTop();
-    if (this.scrollLeft > this.maximumScrollLeft()) this.scrollLeft = this.maximumScrollLeft();
+    this.interiorColumns = interiorContentWidth; // the viewport clamps its own scroll against extent()
 
     // The vertical bar takes the trailing column, the horizontal bar the trailing row (shared corner).
     const interiorWidth = interiorContentWidth + (verticalScrollable ? 1 : 0);
@@ -671,8 +618,8 @@ class $HoverCard {
     this.box.borderColor = palette.borderActive;
 
     // Paint the visible window (vertical AND horizontal) of content as one StyledText.
-    const start = Math.max(0, Math.min(this.scrollTop, this.maximumScrollTop()));
-    const startColumn = Math.max(0, Math.min(this.scrollLeft, this.maximumScrollLeft()));
+    const start = Math.max(0, Math.min(this.viewport.scrollTop, this.maximumScrollTop()));
+    const startColumn = Math.max(0, Math.min(this.viewport.scrollLeft, this.maximumScrollLeft()));
     const chunks: TextChunk[] = [];
     const visibleLines = this.contentLines.slice(start, start + viewportRows);
     visibleLines.forEach((lineChunks, index) => {
@@ -682,68 +629,9 @@ class $HoverCard {
     this.content.content = new StyledText(chunks);
     this.paintSelection(start, viewportRows, startColumn, interiorContentWidth);
 
-    // Drive both scrollbars off the SAME per-frame geometry every pane bar uses; the interior region
-    // is the full content box, and scrollbarGeometry places the vertical bar on the trailing column and
-    // the horizontal bar on the trailing row, sharing the corner cell.
-    const region = { top: 0, left: 0, width: interiorWidth, height: interiorHeight };
-    if (verticalScrollable) {
-      const geometry = ScrollbarGeometry.Class.scrollbarGeometry(
-        'vertical', region,
-        { scrollSize: totalRows, viewportSize: viewportRows, scrollPosition: start },
-      );
-      if (geometry) {
-        this.scrollbar.visible = true;
-        // Track blends with the card bg (kills the black half-block lines); thumb is a subtle dim grey.
-        this.scrollbar.slider.backgroundColor = palette.panel;
-        this.scrollbar.slider.foregroundColor = palette.dim;
-        this.scrollbar.top = geometry.trackTop;
-        this.scrollbar.left = geometry.trackLeft;
-        this.scrollbar.height = geometry.trackLength;
-        this.scrollbar.width = 1;
-        this.applyingBarGeometry = true;
-        try {
-          this.scrollbar.scrollSize = totalRows;
-          this.scrollbar.viewportSize = geometry.reportedViewportSize;
-          this.scrollbar.scrollPosition = geometry.reportedPosition;
-        } finally {
-          this.applyingBarGeometry = false;
-        }
-        this.barScale = geometry.reportedToTrueScale;
-      } else {
-        this.scrollbar.visible = false;
-      }
-    } else {
-      this.scrollbar.visible = false;
-    }
-
-    if (horizontalScrollable) {
-      const geometry = ScrollbarGeometry.Class.scrollbarGeometry(
-        'horizontal', region,
-        { scrollSize: this.contentMaxWidth, viewportSize: interiorContentWidth, scrollPosition: startColumn },
-      );
-      if (geometry) {
-        this.horizontalScrollbar.visible = true;
-        this.horizontalScrollbar.slider.backgroundColor = palette.panel;
-        this.horizontalScrollbar.slider.foregroundColor = palette.dim;
-        this.horizontalScrollbar.top = geometry.trackTop;
-        this.horizontalScrollbar.left = geometry.trackLeft;
-        this.horizontalScrollbar.width = geometry.trackLength;
-        this.horizontalScrollbar.height = 1;
-        this.applyingBarGeometry = true;
-        try {
-          this.horizontalScrollbar.scrollSize = this.contentMaxWidth;
-          this.horizontalScrollbar.viewportSize = geometry.reportedViewportSize;
-          this.horizontalScrollbar.scrollPosition = geometry.reportedPosition;
-        } finally {
-          this.applyingBarGeometry = false;
-        }
-        this.horizontalBarScale = geometry.reportedToTrueScale;
-      } else {
-        this.horizontalScrollbar.visible = false;
-      }
-    } else {
-      this.horizontalScrollbar.visible = false;
-    }
+    // One call drives BOTH bars off the shared geometry with the settings-sourced thickness — the
+    // vertical bar on the interior's trailing column, the horizontal on its trailing row (shared corner).
+    this.viewport.updateScrollbars({ top: 0, left: 0, width: interiorWidth, height: interiorHeight });
   }
 }
 

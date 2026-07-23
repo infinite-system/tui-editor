@@ -692,6 +692,7 @@ function $buildRootView(
   const hoverCard = new HoverCard.Class({
     renderer,
     theme,
+    settings,
     requestHover: (position) => workspaceSet.active.hoverAt(position),
     languageForActive: () => LanguageRegistry.Class.forPath(workspaceSet.active.editor.document.path),
   });
