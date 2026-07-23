@@ -86,6 +86,9 @@ step "behavioral-contracts (felt invariants)" bash scripts/behavioral-contracts.
 if [ "${FAST:-0}" != "1" ]; then
   # 4) Driving SMOKES — the real user paths.
   step "smoke: editor"      bash scripts/smoke-editor.sh
+  # Bracket matching: cursor on a `{` highlights it + its balanced `}` (match background via FrameProbe);
+  # moving off clears it. Pure finder + real-tokenizer string/comment gate.
+  step "smoke: bracket-match" bash scripts/smoke-bracket-match.sh
   step "smoke: tabs"        bash scripts/smoke-tabs.sh
   step "smoke: workspace tabs" bash scripts/smoke-workspace-tabs.sh
   step "smoke: tree-scroll" bash scripts/smoke-tree-scroll.sh

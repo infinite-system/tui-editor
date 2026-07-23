@@ -252,3 +252,68 @@ is the single `setSize` edge, asserted not to run inside the frame effect.
 **Status:** provisional
 
 **Last refined:** 2026-07-21
+
+### A matched bracket pair is balanced within the same family
+
+**Invariant:** When the cursor is ON or immediately AFTER a bracket `()[]{}`, its match is the balanced
+partner found by scanning in the correct direction (forward for an opener, backward for a closer) and
+counting nesting depth WITHIN THE SAME FAMILY — a `(` counts only `(`/`)`, ignoring `[]`/`{}`. The scan
+is bounded by a cell cap so a pathological unbalanced file can never hang; an unbalanced bracket, a
+non-bracket cursor, or a cap hit yields no match. The finder is pure — cells and a code-bracket
+predicate are injected — so the whole algorithm is unit-testable with plain arrays.
+
+**Scope:** `BracketMatch.find` (pure core), `BracketMatch.findInDocument` (document wiring), and the
+`EditorPaneRenderer` bracket-highlight painting.
+
+**Mechanism:** `find` locates the active bracket (cell under the cursor, else the cell before it),
+picks the partner char and scan direction, and walks cells across line boundaries incrementing depth on
+a same-family opener and decrementing on its partner; depth 0 at the partner is the match. `findInDocument`
+supplies grapheme cells from the document and the predicate. `EditorPane` computes the match once per
+frame and passes the two cells to the renderer, which recolours only cells on a visible line.
+
+**Generates:** GitLens/VS-Code-style bracket matching that highlights the cursor's bracket and its true
+partner across lines; a bounded, hang-proof scan; a pure, exhaustively testable core.
+
+**Evidence:** `src/modules/editor/BracketMatch.test.ts` (nesting, adjacency, multi-line, per-family
+matching, unbalanced → null, scan cap → null); `scripts/smoke-bracket-match.sh` (cursor on a `{` paints
+the matching `}` cell; moving off clears it).
+
+**Impossible if true:** a match that crosses bracket families incorrectly counting `[` against `(`; a
+scan that hangs on an unbalanced file; a highlight when the cursor is not on a bracket.
+
+**Verification:** `bun test src/modules/editor/BracketMatch.test.ts && bash scripts/smoke-bracket-match.sh`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23
+
+### Bracket matching skips brackets inside strings and comments
+
+**Invariant:** A bracket counts for matching only when it is real code — a bracket inside a string or a
+comment is skipped, both as the cursor bracket and during the scan. This uses the existing per-line
+syntax tokenizer: a bracket counts only when its span role is `operator`. Plain text (no language) has
+no strings/comments, so every bracket counts there.
+
+**Scope:** `BracketMatch.findInDocument` (the `isCodeBracket` predicate backed by `Highlighter`), and
+the `find` core which consults the predicate for both the cursor bracket and every scanned bracket.
+
+**Mechanism:** `findInDocument` tokenizes a line (memoized within the call) and maps the bracket's UTF-16
+offset to its span; the predicate returns true only for role `operator`. `find` skips any bracket the
+predicate rejects — so a `)` inside `"a)b"` is never matched, and a bracket inside a `// comment` is
+ignored. LIMITATION (flagged in-file): the tokenizer is line-local, so a string/comment SPANNING lines
+is not tracked across the newline.
+
+**Generates:** matches that respect code structure — the `(` of a call is paired with its real `)`, not
+a parenthesis that happens to sit inside a nearby string literal.
+
+**Evidence:** `src/modules/editor/BracketMatch.test.ts` (a predicate-rejected bracket is skipped mid-scan;
+`findInDocument('f( "a)b" )')` matches the real `)` at column 9, not the string's `)` at column 5).
+
+**Impossible if true:** a call's `(` matching a `)` inside a string literal; a comment's bracket
+participating in a match on the same line.
+
+**Verification:** `bun test src/modules/editor/BracketMatch.test.ts`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-23
