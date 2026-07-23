@@ -26,6 +26,7 @@ import type { Palette } from '../theme/ThemePalettes';
 import type { Theme } from '../theme/Theme';
 import type { Settings } from '../settings/Settings';
 import type { LanguageHover, TextPosition, TextRange } from '../lsp/LanguageClient';
+import type { HoverDiagnostic } from '../workspace/Workspace';
 
 /** The pointer must rest on ONE document position this long before the card shows (VS Code uses ~0.5s). */
 export const HOVER_DWELL_SECONDS = 0.5;
@@ -52,6 +53,9 @@ export interface HoverCardDeps {
   settings: Settings.Instance;
   /** Resolve the language server's hover for a document position (Workspace.hoverAt). */
   requestHover: (position: TextPosition) => Promise<LanguageHover | null>;
+  /** Diagnostics covering a document position (Workspace.diagnosticsAt) — surfaced in the card so an
+   *  errored expression (whose hover type is often just `any`) still shows the real error message. */
+  diagnosticsAt: (position: TextPosition) => readonly HoverDiagnostic[];
   /** The syntax language of the active document — colours a fenced code block with no explicit tag. */
   languageForActive: () => LangId;
 }
@@ -395,15 +399,19 @@ class $HoverCard {
         const capturedAnchorY = this.pending.anchorY;
         void this.deps.requestHover(requestPosition).then((hover) => {
           if (capturedGeneration !== this.generation) return; // stale: the pointer moved on
-          if (!hover || !hover.contents.trim()) {
-            // No hover here — disarm so the frame loop can quiesce (no card, no re-request until a move).
+          // Diagnostics covering the hovered position (VS Code shows the error message first). An
+          // errored expression's hover type is often just `any`, so the diagnostic IS the useful text.
+          const diagnostics = this.deps.diagnosticsAt(requestPosition);
+          const hasHoverContents = !!hover && hover.contents.trim().length > 0;
+          if (!hasHoverContents && diagnostics.length === 0) {
+            // Nothing to show — disarm so the frame loop can quiesce (no re-request until a move).
             if (capturedGeneration === this.generation) this.pending = null;
             this.requestPaint();
             return;
           }
           // Show / REPLACE the card, applying the dwell's carried anchor now (never before).
-          this.renderContents(hover.contents);
-          this.shownRange = hover.range;
+          this.renderContents(hasHoverContents ? hover!.contents : '', diagnostics);
+          this.shownRange = hover?.range ?? null;
           this.anchorX = capturedAnchorX;
           this.anchorY = capturedAnchorY;
           this.cardWasEntered = false;
@@ -497,13 +505,31 @@ class $HoverCard {
    * prose is dimmed. The ``` fence markers themselves are dropped. Lines are kept in FULL — content
    * wider than the viewport scrolls horizontally under the horizontal scrollbar rather than truncating.
    */
-  private renderContents(markdown: string): void {
+  private renderContents(markdown: string, diagnostics: readonly HoverDiagnostic[] = []): void {
     this.rawContents = markdown;
     const palette = this.deps.theme.palette;
     const lines: TextChunk[][] = [];
     let insideFence = false;
     let fenceLanguage: LangId | null = null;
     let widest = 0;
+    // Diagnostics FIRST, severity-coloured (error red, warning amber) — the error message is what the
+    // user is hovering to see. A separator divides them from the type/docs below.
+    for (const diagnostic of diagnostics) {
+      const severityColor =
+        diagnostic.severity === 1 ? palette.error : diagnostic.severity === 2 ? palette.warning : palette.info;
+      const severityLabel =
+        diagnostic.severity === 1 ? 'error' : diagnostic.severity === 2 ? 'warning' : diagnostic.severity === 3 ? 'info' : 'hint';
+      diagnostic.message.replace(/\r\n/g, '\n').split('\n').forEach((messageLine, messageLineIndex) => {
+        const text = messageLineIndex === 0 ? `${severityLabel}: ${messageLine}` : `  ${messageLine}`;
+        widest = Math.max(widest, text.length);
+        lines.push([fg(severityColor)(text)]);
+      });
+    }
+    if (diagnostics.length > 0 && markdown.trim().length > 0) {
+      const separator = '─'.repeat(Math.max(3, Math.min(48, widest)));
+      widest = Math.max(widest, separator.length);
+      lines.push([fg(palette.dim)(separator)]);
+    }
     for (const rawLine of markdown.replace(/\r\n/g, '\n').split('\n')) {
       const fenceMatch = rawLine.match(/^\s*```(\S*)/);
       if (fenceMatch) {

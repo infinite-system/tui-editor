@@ -695,6 +695,7 @@ function $buildRootView(
     theme,
     settings,
     requestHover: (position) => workspaceSet.active.hoverAt(position),
+    diagnosticsAt: (position) => workspaceSet.active.diagnosticsAt(position),
     languageForActive: () => LanguageRegistry.Class.forPath(workspaceSet.active.editor.document.path),
   });
 

@@ -42,6 +42,12 @@ export interface DiagnosticLineMark {
   severity: 1 | 2 | 3 | 4;
 }
 
+/** A diagnostic surfaced in the hover card: its severity and message text. */
+export interface HoverDiagnostic {
+  severity: 1 | 2 | 3 | 4;
+  message: string;
+}
+
 /** The two full-text SIDES of a side-by-side diff shown by the DiffView (token forces a rebuild). */
 export interface DiffRequest {
   token: number;
@@ -198,6 +204,27 @@ class $Workspace {
     const client = this.ensureLanguageClient();
     if (!client.supportsDocument(editor.document)) return null;
     return client.hover(editor.document, position);
+  }
+
+  /** Diagnostics whose range covers a document position — surfaced in the hover card so an errored
+   *  expression (whose hover type is often just `any`) still shows the real error MESSAGE. */
+  diagnosticsAt(position: TextPosition): readonly HoverDiagnostic[] {
+    const editor = this.buffers.activeBuffer as Editor.Instance | null;
+    const client = this.languageClientInstance;
+    if (this.showingDiff.value || !client || !editor || !editor.hasDocument.value) return [];
+    void client.diagnosticsRevision.value; // reactive: re-query as diagnostics arrive
+    const total = client.diagnosticCountFor(editor.document);
+    if (total === 0) return [];
+    const covering: HoverDiagnostic[] = [];
+    for (const diagnostic of client.diagnosticSlice(editor.document, 0, total)) {
+      const { start, end } = diagnostic.range;
+      const afterStart =
+        position.line > start.line || (position.line === start.line && position.column >= start.column);
+      const beforeEnd =
+        position.line < end.line || (position.line === end.line && position.column <= end.column);
+      if (afterStart && beforeEnd) covering.push({ severity: diagnostic.severity, message: diagnostic.message });
+    }
+    return covering;
   }
 
   /** Open the located file through the existing tab path and reveal the declaration. */
