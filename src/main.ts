@@ -1,36 +1,14 @@
-// Entry point. PROD PROFILE BY DEFAULT: NODE_ENV selects Vue's build (dev adds per-ref/effect
-// bookkeeping — real CPU+RSS), so it is set BEFORE any vue-importing module loads (dynamic import
-// below keeps the ordering; export NODE_ENV=development to develop against the dev build).
+// Entry shim — ONLY what a class cannot own. (1) NODE_ENV selects Vue's build (dev adds per-ref/effect
+// bookkeeping — real CPU+RSS) at MODULE LOAD TIME, so it must be set before any vue-importing module
+// loads; the dynamic import below enforces that ordering (export NODE_ENV=development to develop against
+// the dev build). (2) The catch handles exactly one case — AppLoader itself failed to LOAD — where
+// by definition no class is reachable, so it is bare stderr + exit, depending on nothing. Everything
+// else (argv, boot, signals, fatal) lives in AppLoader: overridable and unit-tested.
 process.env.NODE_ENV ??= 'production';
 
-async function loadApp() {
-  const [{ Bootstrap }, { Logging }] = await Promise.all([
-    import('./modules/app/Bootstrap'),
-    import('./modules/system/Logging'),
-  ]);
-  return { Bootstrap, Logging };
-}
-
-async function main(): Promise<void> {
-  const appModules = await loadApp();
-  const rootArgument = process.argv[2];
-  const booted = await appModules.Bootstrap.Class.boot({
-    root: rootArgument,
-    onQuit: () => {
-      // Give the renderer a tick to restore the terminal, then exit.
-      setTimeout(() => process.exit(0), 20);
-    },
+import('./modules/app/AppLoader')
+  .then(({ AppLoader }) => AppLoader.Class.main())
+  .catch((error: unknown) => {
+    process.stderr.write(`fatal: ${String((error as { stack?: unknown })?.stack ?? error)}\n`);
+    process.exit(1);
   });
-
-  // Keep the process alive; the renderer owns the event loop via stdin.
-  process.on('SIGINT', () => void booted.shutdown());
-  process.on('SIGTERM', () => void booted.shutdown());
-}
-
-main().catch(async (error) => {
-  const { Logging } = await loadApp();
-  Logging.Class.error(`fatal: ${String(error?.stack ?? error)}`);
-  // eslint-disable-next-line no-console
-  process.stderr.write(`fatal: ${String(error?.stack ?? error)}\n`);
-  process.exit(1);
-});
