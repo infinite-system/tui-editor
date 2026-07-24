@@ -1,5 +1,11 @@
 # Implementation Plan — Invar TUI Code Workspace
 
+> **⚠ HISTORICAL DOCUMENT (frozen 2026-07-24).** This is the genesis-era plan; its environment
+> claims (Bun not installed, not a git repository), release scoping ("no integrated terminal"), and
+> milestone queues are long obsolete — the terminal, agent pane, and dozens of features shipped.
+> Retained for provenance. Current state: git + `project.handoff.md`'s CURRENT anchor +
+> `project.architecture.md`.
+
 Governing spec: [`project.brief.md`](./project.brief.md).
 Governing method: IBR + the `/invariants` skill. This document is the build plan; the
 enforceable contracts live in `project.invariants.md`, `project.lattice.md`, and each

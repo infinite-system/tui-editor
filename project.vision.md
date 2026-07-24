@@ -116,8 +116,16 @@ foundation.
 
 ## 6. The trajectory
 
-- **Now (Tier S):** one session, transcript pane, policy'd approvals, clickable evidence. The
-  weekend build. Guest mode (Claude Code in the PTY) keeps working forever beside it.
+- **Now (Tier S — SHIPPED as of 2026-07-24, honestly scoped):** one session, transcript pane
+  (scrolling, selectable/copyable, collapsible tool rows rendered as human phrases), interactive
+  y/n/a approvals on BOTH engines (Claude SDK `canUseTool` + codex app-server), live claude⇄codex
+  engine switch with transcript context port, audio narration, movable-cursor composer. Guest mode
+  (Claude Code in the PTY) keeps working beside it. **NOT yet shipped from the projection list
+  above (Tier M work, keep honest):** clickable file-reference evidence, diff-view projection of
+  agent edits, transcript search/replay/audit, invariant-record links. Shipped editor capability
+  wave alongside: Tokyo Night + truecolor detection + pixel image tiers (kitty/sixel), git branch
+  history viewer + live log freshness, move/duplicate line, status-bar blame, indent guides,
+  bracket matching.
 - **Then (Tier M):** persistence and replay; multi-session tabs; the first instrument tools
   (diagnostics, selection, openFile); diffs through the real diff view; context injection.
 - **Then (Tier L):** the fleet becomes visible — conductor workers as sessions in a dashboard,

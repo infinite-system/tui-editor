@@ -74,9 +74,13 @@ tests HIDE it. The craft is fine; wiring is the blind spot. These rules make it 
 - **MECHANICAL GATE (#1, enforced):** `scripts/check-unwired-capabilities.sh` (run inside
   conventions-gate) fails if any namespace+Static/Reactive module is referenced ONLY by its own file +
   test. Forward-milestones (LSP/Markdown) are allowlisted WITH a justification; the list only SHRINKS.
-- **SETTINGS APPLIED-EFFECT META-GATE (#2, being built as P3):** every Settings field MUST have an e2e
-  test that DRIVES its observable effect; a schema-enumeration meta-assertion fails the gate if any field
-  lacks one. This is why 8 dead settings went unnoticed — the existing tests only assert the ref changed.
+- **SETTINGS APPLIED-EFFECT META-GATE (#2, SHIPPED and enforced):** every Settings field MUST have an
+  e2e test that DRIVES its observable effect; the schema-enumeration meta-assertion in
+  `scripts/smoke-settings-applied.sh` fails the gate if any field lacks one — it enumerates the FULL
+  current schema (agent, narration, voice, appearance, all of it) and rides every merge-gate. (Origin
+  story: 8 dead settings once went unnoticed because tests only asserted the ref changed.) The
+  LSP/Markdown "forward-milestone" allowlist language above is likewise historical — both shipped
+  with live paths and driving smokes.
 
 ## Invariant-contract system (executable felt-invariants + the ratchet)
 

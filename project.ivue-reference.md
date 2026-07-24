@@ -6,6 +6,13 @@ in this repo. Companion: `project.decisions.md` (the 10 decisions), and `.claude
 
 ## Framing facts (get these right or you write bugs)
 
+> **2026-07-24 correction:** since ivue ≥ 2.1.0, **`Static()` ships in ivue itself** via the
+> `ivue/extras` subpath (`import { Static } from 'ivue/extras'`) — the statements below that predate
+> this (no `Static` in ivue / raw `$Class` for static capabilities / a vendored
+> `src/modules/system/Static.ts`) are historical. The enforced convention (see
+> `project.conventions.md` "Class kinds") is: stateless capability → `Class = Static($X)`; reactive
+> model → `Reactive($X)`; plain stateful class → `Class = $X`. The vendored copy was deleted.
+
 - **ivue's entire public runtime API is `Reactive()`** (plus type helpers). The engine is tiny
   and has zero deps of its own.
 - **ivue depends on Vue's reactivity at runtime.** `ref`, `shallowRef`, `computed`, `watch`,

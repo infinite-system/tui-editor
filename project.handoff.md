@@ -36,6 +36,12 @@ verify by driving; provenance decides main.
 
 ---
 
+> **⚠ EVERYTHING BELOW THIS LINE IS HISTORICAL (superseded 2026-07-24).** Known stale claims in the
+> sections below — do not act on them: ivue 2.0 + a vendored `Static.ts` (now ivue 2.1,
+> `Static` from `ivue/extras`, vendored copy deleted) · `renderer.start()` (now `auto()`) ·
+> gutter-only caret · lowercase coordinate filename · "editor-title decoupling unfinished" (it is
+> complete). The CURRENT anchor at the top + git are the only live sources.
+
 ## RESUME ANCHOR — 2026-07-23 (SUPERSEDED by the 2026-07-24 anchor above) — OVERNIGHT AUTONOMOUS RUN
 
 **Session shape:** conductor (main loop) directing a background FORK (`a0f12abb2a300d596`) + scoped

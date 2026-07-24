@@ -1,8 +1,11 @@
 # Build Progress — Invar TUI Code Workspace
 
-Live status ledger for the autonomous build. Updated every turn so state survives context
-compaction. **If you are resuming: read this, then `project.handoff.md`, then continue at the first
-unchecked item.** Full authority granted to finish end-to-end to the §5.1 gate.
+> **⚠ HISTORICAL LEDGER (frozen 2026-07-24).** The "RESUME HERE" / frontier / "Last commit" sections
+> below are from earlier build eras and are NO LONGER LIVE — items they list as pending (tabs, diff,
+> LSP, Markdown, conversions, selection-highlight, …) shipped long ago. **A cold resume must trust,
+> in order: (1) git itself (`git log --oneline -15`, `git tag -l 'finished/*'`), (2) the CURRENT
+> RESUME ANCHOR at the top of `project.handoff.md`, (3) `AGENTS.md` + `project.conventions.md`.**
+> This file is retained as the historical record of the early build; nothing below directs action.
 
 ## USER PIPELINE (durable — no user request drops; statused per item)
 
