@@ -99,9 +99,34 @@ function $mapNotification(notification: AppServerNotification, turnState: Mappin
       const turn = record(params.turn);
       const status = String(turn.status ?? 'completed');
       if (status === 'failed') {
-        return [{ kind: 'session-end', reason: 'error' }];
+        // A failed turn CARRIES ITS REASON (turn.error.message — e.g. "401 Unauthorized" with no
+        // auth). Discarding it rendered a blank reply: session-end alone paints nothing. Emit the
+        // SAME error event the SDK backend emits (the transcript already renders error rows — no
+        // new vocabulary), then end the session.
+        const turnError = record(turn.error);
+        const message =
+          typeof turnError.message === 'string' && turnError.message
+            ? turnError.message
+            : 'codex: the turn failed (no error detail from the app-server)';
+        return [
+          { kind: 'error', message },
+          { kind: 'session-end', reason: 'error' },
+        ];
       }
       return [{ kind: 'session-end', reason: status === 'interrupted' ? 'interrupted' : 'completed' }];
+    }
+    case 'error': {
+      // A server-level error NOTIFICATION (auth failures, stream errors) — previously unmapped, so
+      // the failure never reached the transcript. Both observed dialects are accepted:
+      // { error: { message } } and the flat { message }.
+      const nestedError = record(params.error);
+      const message =
+        typeof nestedError.message === 'string' && nestedError.message
+          ? nestedError.message
+          : typeof params.message === 'string' && params.message
+            ? params.message
+            : 'codex: the app-server reported an error (no detail)';
+      return [{ kind: 'error', message }];
     }
     default:
       return [];

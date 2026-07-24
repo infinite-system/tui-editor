@@ -10,7 +10,40 @@ describe('CodexAppServerMapping.mapNotification', () => {
     expect(map('thread/started', {})).toEqual([{ kind: 'session-start' }]);
     expect(map('turn/completed', { turn: { status: 'completed' } })).toEqual([{ kind: 'session-end', reason: 'completed' }]);
     expect(map('turn/completed', { turn: { status: 'interrupted' } })).toEqual([{ kind: 'session-end', reason: 'interrupted' }]);
-    expect(map('turn/completed', { turn: { status: 'failed' } })).toEqual([{ kind: 'session-end', reason: 'error' }]);
+    expect(map('turn/completed', { turn: { status: 'failed' } })).toEqual([
+      { kind: 'error', message: 'codex: the turn failed (no error detail from the app-server)' },
+      { kind: 'session-end', reason: 'error' },
+    ]);
+  });
+
+  test('a FAILED turn carries its reason to the transcript (the silent-blank-reply fix)', () => {
+    // Real wire shape from a no-auth run: turn.error.message holds the user-facing cause.
+    expect(
+      map('turn/completed', {
+        turn: {
+          status: 'failed',
+          error: { message: '401 Unauthorized: run `codex login` to authenticate' },
+        },
+      }),
+    ).toEqual([
+      { kind: 'error', message: '401 Unauthorized: run `codex login` to authenticate' },
+      { kind: 'session-end', reason: 'error' },
+    ]);
+  });
+
+  test("a server 'error' NOTIFICATION maps to an error event (both wire dialects)", () => {
+    // Nested dialect: { error: { message } } — codex-rs app-server v2.
+    expect(map('error', { error: { message: 'stream disconnected before completion' } })).toEqual([
+      { kind: 'error', message: 'stream disconnected before completion' },
+    ]);
+    // Flat dialect: { message }.
+    expect(map('error', { message: 'unexpected status 401 Unauthorized' })).toEqual([
+      { kind: 'error', message: 'unexpected status 401 Unauthorized' },
+    ]);
+    // Detail-less: still surfaces SOMETHING, never a silent drop.
+    expect(map('error', {})).toEqual([
+      { kind: 'error', message: 'codex: the app-server reported an error (no detail)' },
+    ]);
   });
 
   test('agentMessage deltas stream as text-deltas; the item completion does NOT re-emit streamed text', () => {

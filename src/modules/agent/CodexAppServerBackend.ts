@@ -23,6 +23,7 @@ import type { AgentBackend } from './AgentBackend';
 import { AgentPermissions } from './AgentPermissions';
 import type { AgentEvent, PermissionDecision } from './AgentEvents';
 import { CodexAppServerMapping, type ApprovalDescriptor, type MappingTurnState } from './CodexAppServerMapping';
+import { Files } from '../system/Files';
 
 export interface CodexAppServerOptions {
   /** Absolute path to the `codex` binary (resolved by the factory via Bun.which). */
@@ -91,7 +92,7 @@ class $CodexAppServerBackend implements AgentBackend {
     if (this.child && this.threadId) return;
     if (!this.child) {
       const child = Bun.spawn([this.options.codexPath, 'app-server'], {
-        cwd: this.options.cwd,
+        cwd: this.options.cwd ? Files.Class.absolute(this.options.cwd) : undefined,
         stdout: 'pipe',
         stderr: 'pipe',
         stdin: 'pipe',
@@ -126,7 +127,9 @@ class $CodexAppServerBackend implements AgentBackend {
     }
     if (!this.threadId) {
       const started = (await this.request('thread/start', {
-        cwd: this.options.cwd,
+        // ABSOLUTE path always: the app-server resolves a relative cwd against ITS OWN process cwd,
+        // not ours — a workspace opened as '.' would silently anchor the thread elsewhere.
+        ...(this.options.cwd ? { cwd: Files.Class.absolute(this.options.cwd) } : {}),
         ...(this.options.model ? { model: this.options.model } : {}),
       })) as { thread?: { id?: string } };
       this.threadId = started?.thread?.id ?? null;
