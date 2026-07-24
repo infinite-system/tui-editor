@@ -13,6 +13,7 @@ import { EchoAgentBackend } from './EchoAgentBackend';
 import { CliStreamBackend } from './CliStreamBackend';
 import { CodexStreamBackend } from './CodexStreamBackend';
 import { SdkStreamBackend } from './SdkStreamBackend';
+import { CodexAppServerBackend } from './CodexAppServerBackend';
 import { AgentSession } from './AgentSession';
 import { AgentPaneContent } from './AgentPaneContent';
 import type { AgentProvider } from '../settings/Settings';
@@ -38,7 +39,11 @@ export interface AgentCreateOptions {
  *  the echo (keeps the driving smoke hermetic — no subprocess, no billing). Overridable Static seam. */
 function $createBackend(options: AgentCreateOptions): AgentBackend {
   if (process.env.INVAR_AGENT_BACKEND === 'echo') return new EchoAgentBackend.Class();
-  const provider: AgentProvider = options.provider ?? 'auto';
+  // INVAR_AGENT_PROVIDER forces the engine regardless of the setting — the driving smokes use it to
+  // exercise a specific provider without editing the user's settings file.
+  const forcedProvider = process.env.INVAR_AGENT_PROVIDER;
+  const provider: AgentProvider =
+    forcedProvider === 'claude' || forcedProvider === 'codex' ? forcedProvider : options.provider ?? 'auto';
   const skipPermissions = options.skipPermissions ?? true;
   const model = options.model || undefined;
   const claudePath = Bun.which('claude');
@@ -47,8 +52,12 @@ function $createBackend(options: AgentCreateOptions): AgentBackend {
     process.env.INVAR_AGENT_BACKEND === 'cli'
       ? new CliStreamBackend.Class({ claudePath: path, cwd: options.cwd, skipPermissions, model })
       : new SdkStreamBackend.Class({ cwd: options.cwd, skipPermissions, model });
+  // Codex rides the app-server backend (permission-prompt parity: pause/approve over JSON-RPC); the
+  // exec pipe stays as the same `cli` escape hatch claude has.
   const buildCodex = (path: string): AgentBackend =>
-    new CodexStreamBackend.Class({ codexPath: path, cwd: options.cwd, skipPermissions, model });
+    process.env.INVAR_AGENT_BACKEND === 'cli'
+      ? new CodexStreamBackend.Class({ codexPath: path, cwd: options.cwd, skipPermissions, model })
+      : new CodexAppServerBackend.Class({ codexPath: path, cwd: options.cwd, skipPermissions, model });
   if (provider === 'claude' && claudePath) return buildClaude(claudePath);
   if (provider === 'codex' && codexPath) return buildCodex(codexPath);
   // auto, or the requested CLI is missing: prefer Claude, then Codex, then echo.

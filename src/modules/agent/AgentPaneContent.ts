@@ -272,8 +272,9 @@ class $AgentPaneContent implements PaneContent {
   }
 
   /** The permission mode line: "⏵⏵ bypass permissions on" ↔ "? ask permissions" (Shift+Tab cycles).
-   *  Ask-mode pauses consequential tools behind an interactive y/n/a prompt — but only backends that can
-   *  pause (claude via the SDK, the echo) support it; on others (codex) the label says so honestly. */
+   *  Ask-mode pauses consequential tools behind an interactive y/n/a prompt — claude (SDK) AND codex
+   *  (app-server) both support it now; only a backend with no pause mechanism (the `cli` escape-hatch
+   *  pipes) shows the honest bypass-only note. */
   private modeLineSegments(context: PaneRenderContext): ThinkingSegment[] {
     const bypass = this.permissionMode?.value ?? false;
     const arrow = context.glyphLevel === 'ascii' ? '>>' : '⏵⏵';
@@ -282,7 +283,7 @@ class $AgentPaneContent implements PaneContent {
       ? `${arrow} bypass permissions on`
       : askSupported
         ? '? ask permissions'
-        : 'bypass permissions off (prompts: claude only)';
+        : 'bypass permissions off (prompts unavailable on this backend)';
     return [
       { text: ' '.repeat(TRANSCRIPT_PAD_LEFT), color: context.palette.dim, bold: false },
       { text, color: bypass ? context.palette.accent : askSupported ? context.palette.info : context.palette.dim, bold: bypass },
