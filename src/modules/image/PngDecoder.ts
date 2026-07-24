@@ -8,13 +8,9 @@
 // invariant: A raster image renders as half-block cells sized to the pane (src/modules/image/image.invariants.md)
 import { inflateSync } from 'node:zlib';
 import { Static } from 'ivue/extras';
-
-/** A decoded raster image: dimensions plus a straight-alpha RGBA buffer of length width*height*4. */
-export interface DecodedImage {
-  width: number;
-  height: number;
-  rgba: Uint8Array;
-}
+// Type-only import of the seam's contract shape — erased at runtime, so no import cycle with the
+// ImageDecoders registry (which imports this decoder as its '.png' instance).
+import type { DecodedImage } from './ImageDecoders';
 
 class $PngDecoder {
   static decode = $decode;

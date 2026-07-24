@@ -10,6 +10,7 @@ import { Editor } from '../editor/Editor';
 import { OpenBufferSet } from './OpenBufferSet';
 import { NavigationHistory, type Location } from '../navigation/NavigationHistory';
 import { Files } from '../system/Files';
+import { ImageDecoders } from '../image/ImageDecoders';
 import { GitRepository } from '../git/GitRepository';
 import { GitWatcher } from '../git/GitWatcher';
 import { CommitLog } from '../git/CommitLog';
@@ -315,14 +316,16 @@ class $Workspace {
     );
   }
 
-  /** The active buffer is a previewable image (a .png for now) — RootView renders it as half-block
-   *  cells instead of the binary-file text. Never true during a diff or with no document open. */
+  /** The active buffer is a previewable image — any extension the ImageDecoders registry supports
+   *  (.png/.jpg/.jpeg today; the registry is the ONE source of truth, no extension list here) —
+   *  RootView renders it as half-block cells instead of the binary-file text. Never true during a
+   *  diff or with no document open. */
   // invariant: An image buffer replaces the code text and leaves other files untouched (src/modules/image/image.invariants.md)
   get activeFileIsImage(): boolean {
     return (
       !this.showingDiff.value &&
       this.editor.hasDocument.value &&
-      Files.Class.extname(this.editor.document.path).toLowerCase() === '.png'
+      ImageDecoders.Class.supports(Files.Class.extname(this.editor.document.path))
     );
   }
 

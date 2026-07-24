@@ -3,7 +3,7 @@
 // letterbox with panel-background cells. These lock the encoding the pane renderer depends on.
 import { describe, test, expect } from 'bun:test';
 import { HalfBlockRenderer } from './HalfBlockRenderer';
-import type { DecodedImage } from './PngDecoder';
+import type { DecodedImage } from './ImageDecoders';
 
 /** The RGB triple of a chunk's foreground/background colour buffer. */
 function colorOf(colorBuffer: { buffer: Record<number, number> }): [number, number, number] {

@@ -9,7 +9,7 @@
 // invariant: A raster image renders as half-block cells sized to the pane (src/modules/image/image.invariants.md)
 import { StyledText, fg, bg, type TextChunk } from '@opentui/core';
 import { Static } from 'ivue/extras';
-import type { DecodedImage } from './PngDecoder';
+import type { DecodedImage } from './ImageDecoders';
 
 /** The upper-half-block glyph: foreground paints the top pixel, background the bottom pixel. */
 const UPPER_HALF_BLOCK = '▀';

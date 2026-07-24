@@ -16,6 +16,7 @@
     "@opentui/core": "^0.4.5",
     "@xterm/headless": "^6.0.0",
     "ivue": "^2.1.0",
+    "jpeg-js": "^0.4.4",
     "vue": "3.6.0-rc.1",
     "web-tree-sitter": "^0.26.11"
   },

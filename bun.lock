@@ -9,6 +9,7 @@
         "@opentui/core": "^0.4.5",
         "@xterm/headless": "^6.0.0",
         "ivue": "^2.1.0",
+        "jpeg-js": "^0.4.4",
         "vue": "3.6.0-rc.1",
         "web-tree-sitter": "^0.26.11",
       },
@@ -238,6 +239,8 @@
     "ivue": ["ivue@2.1.0", "", { "peerDependencies": { "vue": "^3.2.0", "vue-demi": "*" }, "optionalPeers": ["vue-demi"], "bin": { "ivue": "bin/ivue.mjs" } }, "sha512-Ab5iapydi0IPbijkwVGG2KeJQDyWUcOwsompWN0naiDtpmsPdZV+v/ryKRwfZHgFVWXqQApj6XvcKLOlLS5jlQ=="],
 
     "jose": ["jose@6.2.4", "", {}, "sha512-N8acGzVsQy6M/fjFcxtysNc4Q379TcM5dM/qKkNtsHFji88yANnXTr7BLeP75iPnFwBfQzM/jg2BZ9+HZrHCZA=="],
+
+    "jpeg-js": ["jpeg-js@0.4.4", "", {}, "sha512-WZzeDOEtTOBK4Mdsar0IqEU5sMr3vSV2RqkAIzUEV2BHnUfKGyswWFPFwK5EeDo93K3FohSHbLAjj0s1Wzd+dg=="],
 
     "json-schema-to-ts": ["json-schema-to-ts@3.1.1", "", { "dependencies": { "@babel/runtime": "^7.18.3", "ts-algebra": "^2.0.0" } }, "sha512-+DWg8jCJG2TEnpy7kOm/7/AxaYoaRbjVB4LFZLySZlWn8exGs3A4OLJR966cVvU26N7X9TWxl+Jsw7dzAqKT6g=="],
 
