@@ -18,6 +18,9 @@ Change a convention → change it HERE (and note the why in decisions.md).
   GitCommands.Class; }`.
 
 ## Class kinds & file shape (NEW-FILE RULE)
+- The three namespace forms below govern *Public classes use the namespace pattern*
+  (`project.invariants.md`). Circular-import safety is a separate late-read rule; even an acyclic
+  class publishes through the same namespace seam.
 - NEW FILE RULE: exported STATELESS behavior is born as `class $X { static … }` + `export namespace
   X { export const $Class = $X; export const Class = Static($X); }` — never a bare
   `export function` bag. State: Reactive domain models via `Reactive($X)` (mutable `let Class`);

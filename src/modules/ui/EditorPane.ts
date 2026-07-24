@@ -23,7 +23,7 @@ import type { Settings } from '../settings/Settings';
 export interface EditorPaneDeps {
   renderer: CliRenderer;
   editorArea: BoxRenderable;
-  codeBody: SelectableText;
+  codeBody: SelectableText.Model;
   workspaceSet: WorkspaceSet.Instance;
   findBar: FindBar.Instance;
   settings: Settings.Instance;
@@ -41,7 +41,7 @@ class $EditorPane {
   // renderEditor and read by the caret block, applySelection, and the mouse hit-test — so all
   // consumers agree on what is where. Empty when wrap is off.
   private wrapRowsWindow: VisualRow[] = [];
-  private readonly drag: SelectionDragBehavior;
+  private readonly drag: SelectionDragBehavior.Model;
   // Multi-click selection state: successive clicks at the same spot within the window escalate
   // single → double (word) → triple (line).
   private lastClickTimeMs = 0;
@@ -223,9 +223,9 @@ class $EditorPane {
   // One shared drag/autoscroll behavior serves this editor and DiffView. The hosts differ only in
   // coordinate mapping and scroll storage; pointer lifecycle, edge zones, rate, and re-extension are
   // identical. invariant: One writer per scroll regime per frame (src/modules/ui/ui.invariants.md)
-  private buildDragBehavior(): SelectionDragBehavior {
+  private buildDragBehavior(): SelectionDragBehavior.Model {
     const { workspaceSet, codeBody, editorViewportHeight, editorViewportWidth } = this.deps;
-    return new SelectionDragBehavior({
+    return new SelectionDragBehavior.Class({
       viewportRectangle: () => ({
         leftColumn: codeBody.x,
         rightColumn: codeBody.x + Math.max(1, editorViewportWidth()) - 1,

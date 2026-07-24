@@ -73,31 +73,32 @@ repeatedly and asserts RSS stabilizes and subprocess/watcher/effect counts retur
 ### Eager circular runtime reads fail during init
 
 **Invariant:** If a module reads another module's runtime value during evaluation while their
-imports form a cycle, then initialization can throw (`Cannot access 'X' before initialization`);
-reads deferred to getter/method bodies are always safe.
+imports form a cycle, then the read is initialization-order-dependent and can throw
+(`Cannot access 'X' before initialization`).
 
-**Scope:** All cross-module references in the class graph (the app's entity web is cyclic:
-panes reference the app root, the app root creates panes).
+**Scope:** Runtime imports across every cyclic module path. Type-only imports and acyclic imports
+are outside this reality statement.
 
-**Mechanism:** A TS `namespace` compiles to a hoisted `var` filled by an IIFE, safe to hold
-from module-eval instant; but a top-level `new B.Class()`, `const C = B.Class`, or
-`export default B.Class` re-introduces an eager edge that a cycle can break
-(`../ivue` modules docs). Circular *inheritance* remains genuinely impossible.
+**Mechanism:** ECMAScript modules evaluate an import graph in dependency order while imported
+bindings remain subject to initialization timing. A top-level `new B.Class()`, `const C =
+B.Class`, or `export default B.Class` can therefore read through a cycle before `B` has
+initialized. Circular inheritance remains impossible for the same eager reason.
 
-**Generates:** *Imported dependencies are read late*; the namespace pattern; the ban on
-snapshotting `X.Class` at module scope.
+**Generates:** *Imported dependencies are read late*; the ban on constructing or snapshotting
+`X.Class` at module scope.
 
-**Evidence:** `../ivue/docs_v2/guide/modules.md#circular-references-resolve-by-construction`.
+**Evidence:** `project.brief.md` `Circular Dependency Rule`;
+`../ivue/docs_v2/guide/modules.md#circular-references-resolve-by-construction`.
 
-**Impossible if true:** A module-load-order that changes program behavior when every
-cross-module read sits in a getter/method body and nothing snapshots `X.Class` at top level.
+**Impossible if true:** A guarantee that an eager runtime read through an import cycle succeeds
+before the imported binding initializes.
 
 **Verification:** A build/lint check that flags top-level `new *.Class` / `const * = *.Class` /
 `export default *.Class`; plus the app boots under any module order.
 
 **Status:** provisional
 
-**Last refined:** 2026-07-21
+**Last refined:** 2026-07-24
 
 ### An async result can outlive the state it described
 
@@ -357,6 +358,42 @@ order.
 
 **Last refined:** 2026-07-21
 
+### Public classes use the namespace pattern
+
+**Invariant:** If Invar publishes a project-owned class, then it exposes a private `class $X`
+through `namespace X` with `$Class = $X` and one honest `Class` binding: `Static($X)` for a
+stateless capability, `Reactive($X)` for a reactive model, or `$X` for a plain stateful class.
+
+**Scope:** Every public class under `src/modules/`. External library classes, interfaces, types,
+and data-only role collections are outside this rule.
+
+**Mechanism:** The namespace keeps the public domain name stable while `$Class` exposes the raw
+inheritance root and `Class` exposes the selected construction form. The three bindings preserve
+the actual distinction between stateless capability, reactive model, and plain stateful class.
+The pattern was discovered through ivue, but Invar adopts it independently of reactivity and
+independently of whether a module currently participates in an import cycle.
+
+**Generates:** One class shape across the codebase; `new X.Class()` construction; `extends
+X.$Class` specialization; the `Static` / `Reactive` / raw class-kind distinction; PascalCase
+class filenames matching their namespaces.
+
+**Rejected alternatives:** Directly exporting a class constructor — removes the raw-versus-selected
+form and forces consumers to change shape when the class later gains reactivity, static binding,
+or specialization.
+
+**Evidence:** `project.conventions.md` `Class kinds and file shape`; `src/modules/app/AppLoader.ts`;
+`scripts/check-exported-capabilities.mjs`.
+
+**Impossible if true:** A direct `export class X`; a public class module without `X.$Class` and
+`X.Class`; a `Class` binding whose `Static`, `Reactive`, or raw form contradicts the class's
+actual state and lifetime.
+
+**Verification:** `node scripts/check-exported-capabilities.mjs && bash scripts/conventions-gate.sh`.
+
+**Status:** established
+
+**Last refined:** 2026-07-24
+
 ### Construction goes through overridable seams
 
 **Invariant:** If an object assembles a dependency, then it does so through an overridable seam
@@ -365,10 +402,11 @@ decision in a constructor.
 
 **Scope:** All domain-model and capability construction.
 
-**Mechanism:** ivue's real seam is the mutable `namespace.Class` binding (`new X.Class()` reads
-the live slot; a plugin/kernel swaps it) plus owner-constructs-child (`new Task.Class(this,
-data)`). Our chosen convention adds `createX()` factory methods for constructor-time assembly,
-overridable via subclass/`super` — `createX()` is our idiom, not an ivue feature.
+**Mechanism:** *Public classes use the namespace pattern* supplies the mutable `namespace.Class`
+binding (`new X.Class()` reads the live slot; a plugin/kernel swaps it) plus
+owner-constructs-child (`new Task.Class(this, data)`). Our chosen convention adds `createX()`
+factory methods for constructor-time assembly, overridable via subclass/`super` — `createX()` is
+our idiom, not an ivue feature.
 
 **Generates:** The `Class`-slot swap for plugins; `createX()` factory methods; owner-injects-self
 child construction; testable replacement of ids/clocks/engines.

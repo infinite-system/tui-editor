@@ -32,7 +32,7 @@ export interface SelectionDragBehaviorOptions {
   lineGraphemeCount?: (lineIndex: number) => number;
 }
 
-export class SelectionDragBehavior {
+class $SelectionDragBehavior {
   private pointerPosition: { screenColumn: number; screenRow: number } | null = null;
   private selectionAnchor: SelectionDragPosition | null = null;
   private columnScrollRemainder = 0;
@@ -160,4 +160,10 @@ export class SelectionDragBehavior {
   private cellsPerSecond(overshoot: number): number {
     return Math.sign(overshoot) * Math.min(120, 25 + 18 * (Math.abs(overshoot) - 1));
   }
+}
+
+export namespace SelectionDragBehavior {
+  export const $Class = $SelectionDragBehavior;
+  export let Class = $Class;
+  export type Model = InstanceType<typeof Class>;
 }

@@ -12,7 +12,7 @@
 // gutter.
 import { TextRenderable } from '@opentui/core';
 
-export class SelectableText extends TextRenderable {
+class $SelectableText extends TextRenderable {
   // invariant: The selected range renders with a background (ui.invariants.md)
   setSelectionRange(anchorX: number, anchorY: number, focusX: number, focusY: number): void {
     this.lastLocalSelection = { anchorX, anchorY, focusX, focusY, isActive: true };
@@ -26,4 +26,10 @@ export class SelectableText extends TextRenderable {
     this.textBufferView.resetLocalSelection();
     this.requestRender();
   }
+}
+
+export namespace SelectableText {
+  export const $Class = $SelectableText;
+  export let Class = $Class;
+  export type Model = InstanceType<typeof Class>;
 }

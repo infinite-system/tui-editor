@@ -6,7 +6,7 @@
 // invariant: A tooltip never intercepts input (src/modules/ui/ui.invariants.md)
 import { TextRenderable, type OptimizedBuffer } from '@opentui/core';
 
-export class HitTransparentText extends TextRenderable {
+class $HitTransparentText extends TextRenderable {
   override render(buffer: OptimizedBuffer, deltaTime: number): void {
     const context = this._ctx;
     const originalAddToHitGrid = context.addToHitGrid;
@@ -17,4 +17,10 @@ export class HitTransparentText extends TextRenderable {
       context.addToHitGrid = originalAddToHitGrid;
     }
   }
+}
+
+export namespace HitTransparentText {
+  export const $Class = $HitTransparentText;
+  export let Class = $Class;
+  export type Model = InstanceType<typeof Class>;
 }

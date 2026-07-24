@@ -16,9 +16,11 @@ runtime performance reinforce each other — coherent ownership → fewer accide
 - Because *language and git tools are separate failable processes* + *the immediate layer never
   blocks the deferred layer*, highlighting/diagnostics are **two layers**: immediate Tree-sitter
   (synchronous, always present) and deferred LSP/ESLint/git (async, revision-stamped, optional).
-- Because *eager circular runtime reads fail during init*, modules use the **namespace pattern**
-  with late reads and a **seal-before-construct kernel** — the only shape in which the cyclic
-  entity graph (panes ↔ app root ↔ workspaces) and the plugin system coexist.
+- Because *public classes use the namespace pattern*, every class publishes the same raw and
+  selected forms whether it is reactive, static, or plain. Separately, because *eager circular
+  runtime reads fail during init*, dependencies are read late; with the
+  **seal-before-construct kernel**, those rules let the cyclic entity graph (panes ↔ app root ↔
+  workspaces) and the plugin system coexist.
 - Because *completion is proven not declared*, the build carries an **evidence gate + independent
   review panel** (`project.implementation-plan.md` §5).
 

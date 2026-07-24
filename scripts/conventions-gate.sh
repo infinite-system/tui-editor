@@ -21,11 +21,12 @@ else
   echo "CONVENTIONS WARN: bunx not found — skipping tsc (install bun so the gate can typecheck)"
 fi
 
-# 1) EXPORTED-CAPABILITY RULE: callable module exports are never bare functions/expressions/aliases;
-#    stateless behavior is indexed by a namespace+Static class. Type-aware detection distinguishes
-#    callable behavior from genuine data collections (keybinding defaults/overlays need no allowlist).
+# 1) PUBLIC-CLASS / EXPORTED-CAPABILITY RULE: project classes are published through the namespace
+#    pattern; callable module exports are never bare functions/expressions/aliases. Type-aware
+#    detection distinguishes class/callable behavior from genuine data collections (keybinding
+#    defaults/overlays need no allowlist).
 if ! node scripts/check-exported-capabilities.mjs >/tmp/conventions-gate-exported-capabilities.$$.log 2>&1; then
-  echo "CONVENTIONS FAIL: bare exported callable behavior — publish it through namespace+Static:"
+  echo "CONVENTIONS FAIL: direct class/callable export — publish it through the namespace pattern:"
   cat /tmp/conventions-gate-exported-capabilities.$$.log
   fail=1
 fi

@@ -31,7 +31,7 @@ export interface MarkdownReferenceHit {
 
 // invariant: Preview rendering follows visible rows (src/modules/markdown/markdown.invariants.md)
 class $MarkdownRenderable extends BoxRenderable {
-  readonly bodyRenderable: SelectableText;
+  readonly bodyRenderable: SelectableText.Model;
   private visibleRowsSnapshot: PreviewRow[] = [];
   private hoveredReferenceKey: string | null = null;
   private findEngineProvider: (() => FindInBuffer.Instance | null) | null = null;
@@ -52,7 +52,7 @@ class $MarkdownRenderable extends BoxRenderable {
       overflow: 'hidden',
       ...options,
     });
-    this.bodyRenderable = new SelectableText(renderer, {
+    this.bodyRenderable = new SelectableText.Class(renderer, {
       id: 'markdown-preview-body',
       width: '100%',
       height: '100%',

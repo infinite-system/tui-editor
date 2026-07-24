@@ -18,7 +18,10 @@ in this repo. Companion: `project.decisions.md` (the 10 decisions), and `.claude
 
 ## 1. The three class kinds + the namespace pattern
 
-Invariant shape: **canonical raw class + mutable `Class` slot + late dependency read.**
+Project invariant: **every public class has a canonical raw class and one honest `Class`
+selection slot**. This shape was discovered through ivue, but Invar applies it independently to
+reactive models, static capabilities, and plain stateful classes. Late dependency reads are a
+separate invariant that composes with this shape; they are not the reason every class uses it.
 
 **(a) Reactive domain model** — the default for observable, identity-bearing, disposable state:
 ```ts

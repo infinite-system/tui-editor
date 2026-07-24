@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-// Exported stateless behavior must be published through a namespace+Static capability seam.
-// TypeScript's checker lets this gate distinguish callable behavior from genuine exported data,
-// including callable aliases whose syntax alone does not reveal their type.
+// Public classes use the namespace pattern, and exported stateless behavior uses its
+// namespace+Static form. TypeScript's checker lets this gate distinguish class/callable behavior
+// from genuine exported data, including aliases whose syntax alone does not reveal their type.
+// invariant: Public classes use the namespace pattern (project.invariants.md)
 
 import { createRequire } from 'node:module';
 import { relative, resolve, sep } from 'node:path';
@@ -87,6 +88,11 @@ function callableTypeAt(node) {
   return typeChecker.getSignaturesOfType(type, typescript.SignatureKind.Call).length > 0;
 }
 
+function constructableTypeAt(node) {
+  const type = typeChecker.getTypeAtLocation(node);
+  return typeChecker.getSignaturesOfType(type, typescript.SignatureKind.Construct).length > 0;
+}
+
 function resolvedSymbolAt(node) {
   const symbol = typeChecker.getSymbolAtLocation(node);
   if (symbol === undefined) return undefined;
@@ -101,6 +107,13 @@ function callableSymbolAt(node) {
   if (symbol === undefined) return false;
   const type = typeChecker.getTypeOfSymbolAtLocation(symbol, node);
   return typeChecker.getSignaturesOfType(type, typescript.SignatureKind.Call).length > 0;
+}
+
+function constructableSymbolAt(node) {
+  const symbol = resolvedSymbolAt(node);
+  if (symbol === undefined) return false;
+  const type = typeChecker.getTypeOfSymbolAtLocation(symbol, node);
+  return typeChecker.getSignaturesOfType(type, typescript.SignatureKind.Construct).length > 0;
 }
 
 const violations = [];
@@ -118,6 +131,19 @@ function recordViolation(sourceFile, node, exportedName, exportShape) {
 
 function inspectNode(sourceFile, node) {
   if (
+    typescript.isClassDeclaration(node) &&
+    node.parent === sourceFile &&
+    hasModifier(node, typescript.SyntaxKind.ExportKeyword)
+  ) {
+    recordViolation(
+      sourceFile,
+      node,
+      node.name?.text ?? 'default',
+      'directly exported class',
+    );
+  }
+
+  if (
     typescript.isFunctionDeclaration(node) &&
     hasModifier(node, typescript.SyntaxKind.ExportKeyword)
   ) {
@@ -133,19 +159,23 @@ function inspectNode(sourceFile, node) {
 
   if (
     typescript.isVariableStatement(node) &&
-    hasModifier(node, typescript.SyntaxKind.ExportKeyword)
+    hasModifier(node, typescript.SyntaxKind.ExportKeyword) &&
+    node.parent === sourceFile
   ) {
     for (const declaration of node.declarationList.declarations) {
       if (!typescript.isIdentifier(declaration.name)) continue;
       if (
         (declaration.initializer !== undefined && isFunctionExpression(declaration.initializer)) ||
-        callableTypeAt(declaration.name)
+        callableTypeAt(declaration.name) ||
+        constructableTypeAt(declaration.name)
       ) {
         recordViolation(
           sourceFile,
           declaration,
           declaration.name.text,
-          'exported callable variable',
+          constructableTypeAt(declaration.name)
+            ? 'exported constructable variable'
+            : 'exported callable variable',
         );
       }
     }
@@ -186,19 +216,48 @@ function inspectNode(sourceFile, node) {
 
   if (
     typescript.isExportDeclaration(node) &&
+    node.parent === sourceFile &&
     node.exportClause !== undefined &&
     typescript.isNamedExports(node.exportClause) &&
     !node.isTypeOnly
   ) {
     for (const exportSpecifier of node.exportClause.elements) {
-      if (exportSpecifier.isTypeOnly || !callableSymbolAt(exportSpecifier.name)) continue;
+      if (
+        exportSpecifier.isTypeOnly ||
+        (
+          !callableSymbolAt(exportSpecifier.name) &&
+          !constructableSymbolAt(exportSpecifier.name)
+        )
+      ) {
+        continue;
+      }
       recordViolation(
         sourceFile,
         exportSpecifier,
         exportSpecifier.name.text,
-        'callable export alias',
+        constructableSymbolAt(exportSpecifier.name)
+          ? 'constructable export alias'
+          : 'callable export alias',
       );
     }
+  }
+
+  if (
+    typescript.isExportAssignment(node) &&
+    node.parent === sourceFile &&
+    (
+      callableTypeAt(node.expression) ||
+      constructableTypeAt(node.expression)
+    )
+  ) {
+    recordViolation(
+      sourceFile,
+      node,
+      'default',
+      constructableTypeAt(node.expression)
+        ? 'default constructable export'
+        : 'default callable export',
+    );
   }
 
   typescript.forEachChild(node, (childNode) => inspectNode(sourceFile, childNode));
@@ -216,7 +275,7 @@ violations.sort((left, right) =>
 
 if (violations.length > 0) {
   process.stderr.write(
-    'Exported callable behavior must be indexed by a namespace+Static capability class:\n',
+    'Public classes and exported callable behavior must be indexed by a namespace class seam:\n',
   );
   for (const violation of violations) {
     process.stderr.write(

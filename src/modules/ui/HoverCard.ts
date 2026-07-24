@@ -137,9 +137,9 @@ class $HoverCard {
   }
 
   // Owned renderables (constructed + mounted here).
-  private readonly backdrop: HitTransparentText;
+  private readonly backdrop: HitTransparentText.Model;
   private readonly box: BoxRenderable;
-  private readonly content: SelectableText;
+  private readonly content: SelectableText.Model;
   /** The unified scroll surface — momentum, wheel (incl. alt→horizontal), both scrollbars (thickness
    *  from Settings), and drag-select with edge autoscroll. The card is a thin adapter over it, owning
    *  only its content windowing + selection MODEL. invariant: A scrollable text surface is
@@ -156,7 +156,7 @@ class $HoverCard {
     // It MUST be hit-transparent (HitTransparentText masks addToHitGrid) so the pointer passes THROUGH
     // it to the editor beneath — otherwise a plain BoxRenderable captures every wheel/move and the card
     // traps the doc: you couldn't scroll the code or hover a different symbol while a card was open.
-    this.backdrop = new HitTransparentText(renderer, {
+    this.backdrop = new HitTransparentText.Class(renderer, {
       id: 'hover-card-backdrop', content: '', position: 'absolute', left: 0, top: 0,
       width: '100%', height: '100%', visible: false, zIndex: 134, selectable: false,
     });
@@ -165,7 +165,11 @@ class $HoverCard {
       id: 'hover-card', position: 'absolute', border: true, borderStyle: 'rounded',
       flexDirection: 'column', visible: false, zIndex: 135,
     });
-    this.content = new SelectableText(renderer, { id: 'hover-card-content', content: '', selectable: true });
+    this.content = new SelectableText.Class(renderer, {
+      id: 'hover-card-content',
+      content: '',
+      selectable: true,
+    });
     this.box.add(this.content);
     // The card composes the ONE scroll surface: momentum + wheel (incl. alt→horizontal) + both bars
     // (thickness from Settings) + drag-select with edge autoscroll. The card supplies only its IDENTITY

@@ -259,7 +259,7 @@ function $buildRootView(
   // buffer holds only code — OpenTUI's native selection then never shades the gutter on a
   // multi-line span, and code-local selection coords are pure display columns.
   const gutterBody = new TextRenderable(renderer, { id: 'editor-gutter', content: '' });
-  const codeBody = new SelectableText(renderer, {
+  const codeBody = new SelectableText.Class(renderer, {
     id: 'editor-code',
     content: '',
     // selectable:false — OpenTUI's OWN mouse-drag selection is a second writer of selection state

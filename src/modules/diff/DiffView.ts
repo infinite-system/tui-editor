@@ -85,7 +85,7 @@ interface DiffPaneRenderables {
   title: TextRenderable;
   content: BoxRenderable;
   gutter: TextRenderable;
-  code: SelectableText;
+  code: SelectableText.Model;
 }
 
 /** The bright accent for a changed row's GUTTER MARKER (line number tint) — the same hues the git
@@ -162,8 +162,8 @@ class $DiffView {
   private readonly overviewRulerRenderable: TextRenderable;
   private readonly verticalScrollbarRenderable: ScrollBarRenderable;
   private readonly horizontalScrollbarRenderable: ScrollBarRenderable;
-  private readonly previousSelectionDragBehavior: SelectionDragBehavior;
-  private readonly currentSelectionDragBehavior: SelectionDragBehavior;
+  private readonly previousSelectionDragBehavior: SelectionDragBehavior.Model;
+  private readonly currentSelectionDragBehavior: SelectionDragBehavior.Model;
   // Presentation geometry only. Projection and hit-testing share these values, but update() does
   // not mutate reactive model state and therefore cannot create a render-invalidation loop.
   private headerSegments: HeaderSegment[] = [];
@@ -387,7 +387,7 @@ class $DiffView {
       wrapMode: 'none',
       selectable: false,
     });
-    const code = new SelectableText(this.renderer, {
+    const code = new SelectableText.Class(this.renderer, {
       id: `diff-${side}-code`,
       content: '',
       wrapMode: 'none',
@@ -892,9 +892,9 @@ class $DiffView {
     return side === 'previous' ? this.previousPaneRenderables : this.currentPaneRenderables;
   }
 
-  private createSelectionDragBehavior(side: 'previous' | 'current'): SelectionDragBehavior {
+  private createSelectionDragBehavior(side: 'previous' | 'current'): SelectionDragBehavior.Model {
     // invariant: Diff selection reuses editor drag behavior (src/modules/diff/diff.invariants.md)
-    return new SelectionDragBehavior({
+    return new SelectionDragBehavior.Class({
       viewportRectangle: () => {
         const codeRenderable = this.paneRenderables(side).code;
         return {

@@ -82,7 +82,7 @@ class $ScrollableTextViewport {
   private horizontalMomentum: ScrollMomentum = AT_REST;
   private readonly verticalBar: ScrollBarRenderable;
   private readonly horizontalBar: ScrollBarRenderable;
-  private readonly drag: SelectionDragBehavior;
+  private readonly drag: SelectionDragBehavior.Model;
   /** True while update() writes a bar's reported position, so its onChange ignores our own sync. */
   private applyingBarGeometry = false;
   private verticalBarScale = 1;
@@ -113,7 +113,7 @@ class $ScrollableTextViewport {
 
     // One shared drag/autoscroll behaviour — the same module the editor and diff use. The host owns
     // the selection MODEL; this only writes it and scrolls when the pointer drags past an edge.
-    this.drag = new SelectionDragBehavior({
+    this.drag = new SelectionDragBehavior.Class({
       viewportRectangle: () => deps.selection.viewportRectangle(),
       positionAtCell: (screenColumn, screenRow) => deps.selection.positionAtCell(screenColumn, screenRow),
       horizontalScrollPosition: () => this.scrollLeftValue,

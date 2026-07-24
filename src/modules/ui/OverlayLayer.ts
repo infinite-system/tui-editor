@@ -74,7 +74,7 @@ class $OverlayLayer {
   private readonly contextMenuBackdrop: BoxRenderable;
   private readonly contextMenuBox: BoxRenderable;
   private readonly contextMenuList: TextRenderable;
-  private readonly tooltipText: HitTransparentText;
+  private readonly tooltipText: HitTransparentText.Model;
 
   // Hit geometry the renderers drew this frame, read by the pointer handlers so a drawn cell and its
   // hit-rect never disagree (the one-geometry-source rule). Written in update(), read on mouse events.
@@ -225,7 +225,7 @@ class $OverlayLayer {
     };
 
     // Tooltip — display-only + hit-transparent.
-    this.tooltipText = new HitTransparentText(renderer, {
+    this.tooltipText = new HitTransparentText.Class(renderer, {
       id: 'tooltip', content: '', position: 'absolute', visible: false, zIndex: 140, selectable: false,
     });
     root.add(this.tooltipText);

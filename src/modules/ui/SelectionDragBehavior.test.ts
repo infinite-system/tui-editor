@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { SelectionDragBehavior, type SelectionDragPosition } from './SelectionDragBehavior';
 
 function createBehavior(): {
-  behavior: SelectionDragBehavior;
+  behavior: SelectionDragBehavior.Model;
   begun: SelectionDragPosition[];
   extended: SelectionDragPosition[];
   rowSteps: number[];
@@ -14,7 +14,7 @@ function createBehavior(): {
   const rowSteps: number[] = [];
   const columnSteps: number[] = [];
   const finished = { count: 0 };
-  const behavior = new SelectionDragBehavior({
+  const behavior = new SelectionDragBehavior.Class({
     viewportRectangle: () => ({ leftColumn: 10, rightColumn: 19, topRow: 5, bottomRow: 14 }),
     positionAtCell: (screenColumn, screenRow) => ({ line: screenRow - 5, column: screenColumn - 10 }),
     horizontalScrollPosition: () => 3,

@@ -43,7 +43,7 @@ class $MarkdownSplitView {
   private readonly dividerRenderable: BoxRenderable;
   private readonly paneSplitter: SplitterModel.Instance;
   private readonly previewSelectionEditor: Editor.Instance;
-  private readonly previewSelectionDragBehavior: SelectionDragBehavior;
+  private readonly previewSelectionDragBehavior: SelectionDragBehavior.Model;
   private dividerHovered = false;
   private dividerDragActive = false;
   private lastLaidOutWidth = -1;
@@ -143,9 +143,9 @@ class $MarkdownSplitView {
     });
   }
 
-  private createSelectionDragBehavior(): SelectionDragBehavior {
+  private createSelectionDragBehavior(): SelectionDragBehavior.Model {
     // invariant: Markdown preview selection reuses editor drag behavior (src/modules/markdown/markdown.invariants.md)
-    return new SelectionDragBehavior({
+    return new SelectionDragBehavior.Class({
       viewportRectangle: () => ({
         leftColumn: this.previewRenderable.bodyRenderable.x,
         rightColumn:

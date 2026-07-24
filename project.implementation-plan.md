@@ -69,6 +69,9 @@ are the identifiers — referenced by name everywhere, matching code annotations
   Generates the flyweight architecture, viewport rendering, hot/warm/cold/disposed tiers,
   lazy LSP, packed spans. Forbids: a reactive object per cell/token/line; an LSP alive for a
   cold workspace; idle CPU above ~zero; memory that grows with file/repo size.
+- **Public classes use the namespace pattern** — every project-owned class publishes raw
+  `$Class` and one honest selected `Class` form (`Reactive`, `Static`, or plain), independently
+  of whether the module graph is cyclic.
 - **Imported dependencies are read late** — no top-level construction, no eager read of
   another module's `Class` binding during evaluation. Forbids a `new ImportedClass()` at
   module scope.
