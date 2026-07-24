@@ -505,6 +505,7 @@ function $buildRootView(
         } else {
           composerDragging = false; // 'other' rows (spinner/rule/mode line) start no selection
           transcriptDragging = false;
+          agent.onPointerDown(localColumn, localRow); // reach the mode-line engine segment (click to cycle)
         }
       } else {
         const content = panelHost.resolvedCells[index]?.content;

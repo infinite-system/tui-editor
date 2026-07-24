@@ -80,8 +80,14 @@ function $project(
     // previous turn) AND a blank line AFTER every user turn (so a just-posted "You" turn is followed by
     // space before the reply/thinking, not only agent→agent gaps). Tool-use/tool-result stay tight under
     // their assistant. The blank is a real projected line, so it wraps/scrolls/selects with the content.
-    if (entryIndex > 0 && (entry.role === 'user' || entry.role === 'error')) blank();
+    if (entryIndex > 0 && (entry.role === 'user' || entry.role === 'error' || entry.role === 'system')) blank();
     switch (entry.role) {
+      case 'system':
+        // A dim, centered aside (e.g. an engine-switch banner) — "— <text> —", framed by em-dashes.
+        for (const wrapped of wrap(`— ${entry.text} —`, width))
+          lines.push({ text: wrapped, color: palette.dim, bold: false, entryIndex: -1, toggleable: false });
+        blank();
+        break;
       case 'user':
         lines.push({ text: 'You', color: palette.accent, bold: true, entryIndex, toggleable: false });
         for (const wrapped of wrap(entry.text, width))

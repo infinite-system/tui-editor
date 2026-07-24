@@ -40,7 +40,7 @@ export type AgentEvent =
 export type AgentEndReason = 'completed' | 'interrupted' | 'error';
 
 /** The role of an append-only transcript entry — the projection surface every UI reads. */
-export type TranscriptRole = 'user' | 'assistant' | 'tool-use' | 'tool-result' | 'permission-request' | 'error';
+export type TranscriptRole = 'user' | 'assistant' | 'tool-use' | 'tool-result' | 'permission-request' | 'system' | 'error';
 
 /** Where a permission request stands. Pending renders the interactive prompt; a resolved entry stays in
  *  the transcript as a compact record of the decision. */
@@ -56,6 +56,9 @@ export type TranscriptEntry =
   | { readonly role: 'tool-use'; readonly id: string; readonly name: string; readonly input: unknown }
   | { readonly role: 'tool-result'; readonly id: string; readonly result: string; readonly isError: boolean }
   | { readonly role: 'permission-request'; readonly id: string; readonly toolName: string; readonly input: unknown; status: PermissionRequestStatus }
+  /** A session-level NOTE the pane injects (not from a backend) — e.g. an engine switch banner. Renders
+   *  as a dim, centered aside; carries no agent semantics. */
+  | { readonly role: 'system'; readonly text: string }
   | { readonly role: 'error'; readonly text: string };
 
 /** The lifecycle state of a session, derived from the event stream. Drives composer availability and

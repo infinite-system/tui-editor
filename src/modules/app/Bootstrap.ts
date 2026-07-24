@@ -43,7 +43,7 @@ import { AgentFactory } from '../agent/AgentFactory';
 import { GitBlame } from '../git/GitBlame';
 import { BracketMatch } from '../editor/BracketMatch';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
-import { AgentPaneContent } from '../agent/AgentPaneContent';
+import { AgentPaneContent, type AgentEnginePort } from '../agent/AgentPaneContent';
 import { TtsFactory } from '../narration/TtsFactory';
 import type { TtsBackend } from '../narration/TtsBackend';
 import { NarrationProjection } from '../narration/NarrationProjection';
@@ -252,6 +252,51 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     testVoiceBackend = TtsFactory.Class.createBackend({ voice: settings.agentNarrationVoice.value, rate: settings.agentNarrationRate.value });
     testVoiceBackend.speak('Narration voice test — the quick brown fox jumps over the lazy dog.');
   };
+
+  // --- Live engine switcher (claude ⇄ codex) --------------------------------------------------------
+  // The two supported engines available on this box (INVAR_AGENT_ENGINES forces the list for the driving
+  // smoke, so it can prove the switch mechanics with the hermetic echo backend).
+  const availableEngines = (): string[] => {
+    const forced = process.env.INVAR_AGENT_ENGINES;
+    if (forced) return forced.split(',').map((entry) => entry.trim()).filter(Boolean);
+    const list: string[] = [];
+    if (Bun.which('claude')) list.push('claude');
+    if (Bun.which('codex')) list.push('codex');
+    return list;
+  };
+  // The CONCRETE current engine (an 'auto' setting resolves to the first available, claude-preferred).
+  const currentEngine = (): string => {
+    const setting = settings.agentProvider.value;
+    if (setting === 'claude' || setting === 'codex') return setting;
+    return availableEngines()[0] ?? 'claude';
+  };
+  // Swap the backend behind the SAME AgentSession (transcript preserved), then write the setting back.
+  const cycleEngine = (): boolean => {
+    if (!agentPaneContent) return false;
+    const available = availableEngines();
+    if (available.length < 2) return false;
+    const current = currentEngine();
+    const next = available[(Math.max(0, available.indexOf(current)) + 1) % available.length];
+    if (!next || next === current) return false;
+    const nextBackend = AgentFactory.Class.createBackend({
+      cwd: workspaceSet.active.root,
+      provider: next as typeof settings.agentProvider.value,
+      skipPermissions: () => settings.agentSkipPermissions.value,
+      model: settings.agentModel.value,
+    });
+    if (agentPaneContent.agentSession.swapBackend(nextBackend, next)) {
+      settings.agentProvider.value = next as typeof settings.agentProvider.value; // write-back (persists)
+      return true;
+    }
+    nextBackend.dispose(); // swap refused (busy) — don't leak the backend we built
+    return false;
+  };
+  const enginePort: AgentEnginePort = {
+    get provider() { return currentEngine(); },
+    get canCycle() { return availableEngines().length >= 2; },
+    cycle: cycleEngine,
+  };
+
   const ensureAgent = (): void => {
     if (agentRegistered) return;
     agentRegistered = true;
@@ -266,6 +311,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     if (agentPane instanceof AgentPaneContent.Class) {
       agentPaneContent = agentPane;
       agentPane.attachPermissionMode(settings.agentSkipPermissions); // mode line + Shift+Tab toggle
+      agentPane.attachEnginePort(enginePort); // mode-line engine segment + click/Ctrl+E cycle
       narration = new NarrationProjection.Class(
         agentPane.agentSession,
         settings.agentAudioNarration,
@@ -552,6 +598,8 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       // Interactive permission prompt state (drives the permission-flow smoke): the pending tool name
       // (empty when none) — flips on when ask-mode pauses a tool, off when y/n/a resolves it.
       agentPendingPermissionTool: agentPaneContent?.agentSession.pendingPermission?.toolName ?? '',
+      // The live engine label (drives the engine-switch smoke) — flips claude⇄codex on cycle.
+      agentEngine: agentPaneContent?.currentEngine ?? '',
     });
   };
 

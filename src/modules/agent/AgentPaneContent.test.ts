@@ -207,3 +207,77 @@ describe('AgentPaneContent — permission prompt keyboard routing', () => {
     expect(port.calls.some((call) => call.startsWith('rows:-'))).toBe(true); // review keys stay live
   });
 });
+
+/** A fake engine port recording cycle() calls. */
+class FakeEnginePort {
+  provider = 'claude';
+  canCycle = true;
+  cycles = 0;
+  cycle(): boolean { this.cycles += 1; this.provider = this.provider === 'claude' ? 'codex' : 'claude'; return true; }
+}
+
+describe('AgentPaneContent — engine switcher', () => {
+  test('the mode line shows the current engine + a cycle affordance; currentEngine reflects it', () => {
+    const { pane } = makePane();
+    const enginePort = new FakeEnginePort();
+    pane.attachEnginePort(enginePort);
+    const painted = paintedText(pane.render(context()));
+    expect(painted).toContain('engine: claude');
+    expect(painted).toContain('⇄'); // cyclable affordance
+    expect(pane.currentEngine).toBe('claude');
+  });
+
+  test('Ctrl+E cycles the engine', () => {
+    const { pane } = makePane();
+    const enginePort = new FakeEnginePort();
+    pane.attachEnginePort(enginePort);
+    pane.render(context());
+    pane.handleKey({ name: 'e', ctrl: true } as never);
+    expect(enginePort.cycles).toBe(1);
+    expect(pane.currentEngine).toBe('codex');
+  });
+
+  test('a click on the engine segment (mode-line row) cycles; a click off it does not', () => {
+    const { pane } = makePane();
+    const enginePort = new FakeEnginePort();
+    pane.attachEnginePort(enginePort);
+    pane.render(context());
+    // The mode line is the second-to-last row; the engine segment starts at the left gutter (col 2).
+    const modeRow = context().height - 2;
+    expect(pane.onPointerDown(3, modeRow)).toBe(true); // on "engine: claude ⇄"
+    expect(enginePort.cycles).toBe(1);
+    // A click far to the right on the same row (the hint text) does not cycle.
+    pane.render(context());
+    const before = enginePort.cycles;
+    pane.onPointerDown(context().width - 3, modeRow);
+    expect(enginePort.cycles).toBe(before);
+  });
+
+  test('a non-cyclable port (one engine) shows a passive label, no affordance, and clicks/keys no-op', () => {
+    const { pane } = makePane();
+    const enginePort = new FakeEnginePort();
+    enginePort.canCycle = false;
+    pane.attachEnginePort(enginePort);
+    const painted = paintedText(pane.render(context()));
+    expect(painted).toContain('engine: claude');
+    expect(painted).not.toContain('⇄');
+    pane.handleKey({ name: 'e', ctrl: true } as never); // cycleEngine → port.cycle still called but…
+    // The pane calls cycle(); the port itself decides. Here canCycle=false but our fake still flips —
+    // the REAL guard (availability) lives in Bootstrap's port. The pane's hit-test, however, refuses the
+    // click when canCycle is false:
+    const before = enginePort.cycles;
+    pane.onPointerDown(3, context().height - 2);
+    expect(enginePort.cycles).toBe(before); // click ignored when not cyclable
+  });
+});
+
+describe('AgentPaneContent — system (engine switch) note renders', () => {
+  test('a system entry renders as a dim centered aside', () => {
+    const { pane, backend } = makePane();
+    backend.emit({ kind: 'text-delta', text: 'hello' });
+    backend.emit({ kind: 'session-end', reason: 'completed' });
+    pane.agentSession.swapBackend(new MockAgentBackend.Class(), 'codex');
+    const painted = paintedText(pane.render(context()));
+    expect(painted).toContain('— switched to codex — context ported —');
+  });
+});

@@ -48,6 +48,18 @@ export interface AgentScrollPort {
   scrollToBottom(): void;
 }
 
+/** The engine seam: the host binds this so the pane can show the current engine + cycle it (claude⇄codex)
+ *  mid-session. cycle() swaps the backend behind the same AgentSession (transcript preserved) and writes
+ *  the provider setting back; it returns false when it can't (busy, or only one engine available). */
+export interface AgentEnginePort {
+  /** The current provider label ('claude' | 'codex'), shown in the mode line. */
+  readonly provider: string;
+  /** True when there are ≥2 engines to switch between (else the segment is a passive label). */
+  readonly canCycle: boolean;
+  /** Switch to the next available engine; false if it could not (busy / nothing to switch to). */
+  cycle(): boolean;
+}
+
 /** Which surface a pane-local row belongs to (for pointer/selection routing). */
 export type AgentPaneRegion =
   | { readonly kind: 'transcript'; readonly localRow: number }
@@ -87,6 +99,10 @@ class $AgentPaneContent implements PaneContent {
 
   /** The shared scroll engine (bound by the host). Null until attached — then render tail-anchors. */
   private scrollPort: AgentScrollPort | null = null;
+  /** The engine seam (bound by the host) — current provider + cycle. Null until attached. */
+  private enginePort: AgentEnginePort | null = null;
+  /** The mode-line engine segment's click region, resolved last render (for the click-to-cycle hit-test). */
+  private lastEngineSegment: { row: number; startColumn: number; endColumn: number } | null = null;
   /** The permission-mode setting (bound by the host) — drives the mode line + Shift+Tab toggle. */
   private permissionMode: Ref<boolean> | null = null;
 
@@ -144,6 +160,22 @@ class $AgentPaneContent implements PaneContent {
   /** Bind the permission-mode setting (reactive) so the mode line reflects it and Shift+Tab toggles it. */
   attachPermissionMode(mode: Ref<boolean>): void {
     this.permissionMode = mode;
+  }
+  /** Bind the engine seam so the mode line shows the engine + click/Ctrl+E cycle it. */
+  attachEnginePort(port: AgentEnginePort): void {
+    this.enginePort = port;
+  }
+  /** The current engine label (for the frame dump / smoke), or '' when unbound. */
+  get currentEngine(): string {
+    return this.enginePort?.provider ?? '';
+  }
+  /** Cycle to the next engine (click or Ctrl+E); reveals the switch note. Returns whether it switched. */
+  private cycleEngine(): boolean {
+    if (!this.enginePort?.cycle()) return false;
+    this.transcriptSelection.clear();
+    this.scrollPort?.scrollToBottom(); // reveal the "switched to X" system note
+    this.viewRevision.value += 1;
+    return true;
   }
 
   /** The engine changed the scroll position (wheel/momentum/keys) — bump the reactive paint signal so
@@ -257,6 +289,7 @@ class $AgentPaneContent implements PaneContent {
       row: this.lastComposerStart + composerLayout.caretRow,
     };
 
+    const modeLineRow = this.lastComposerStart + composerLayout.rowCount + 1; // below composer + bottom rule
     return AgentPaneRenderer.Class.render({
       palette: context.palette,
       padLeft: TRANSCRIPT_PAD_LEFT,
@@ -266,29 +299,45 @@ class $AgentPaneContent implements PaneContent {
       waitingNote,
       rule,
       composer: composerLayout.rows,
-      modeLine: this.modeLineSegments(context),
+      modeLine: this.modeLineSegments(context, modeLineRow),
       focused: context.focused,
     });
   }
 
-  /** The permission mode line: "⏵⏵ bypass permissions on" ↔ "? ask permissions" (Shift+Tab cycles).
-   *  Ask-mode pauses consequential tools behind an interactive y/n/a prompt — claude (SDK) AND codex
-   *  (app-server) both support it now; only a backend with no pause mechanism (the `cli` escape-hatch
-   *  pipes) shows the honest bypass-only note. */
-  private modeLineSegments(context: PaneRenderContext): ThinkingSegment[] {
+  /** The mode line: an ENGINE segment (claude⇄codex, click / Ctrl+E cycles) followed by the PERMISSION
+   *  segment ("⏵⏵ bypass permissions on" ↔ "? ask permissions", Shift+Tab cycles). Records the engine
+   *  segment's cell range so onPointerDown can hit-test a click on it. */
+  private modeLineSegments(context: PaneRenderContext, modeLineRow: number): ThinkingSegment[] {
     const bypass = this.permissionMode?.value ?? false;
     const arrow = context.glyphLevel === 'ascii' ? '>>' : '⏵⏵';
     const askSupported = this.session.permissionPromptsSupported;
-    const text = bypass
+    const permissionText = bypass
       ? `${arrow} bypass permissions on`
       : askSupported
         ? '? ask permissions'
         : 'bypass permissions off (prompts unavailable on this backend)';
-    return [
-      { text: ' '.repeat(TRANSCRIPT_PAD_LEFT), color: context.palette.dim, bold: false },
-      { text, color: bypass ? context.palette.accent : askSupported ? context.palette.info : context.palette.dim, bold: bypass },
-      { text: '  (shift+tab to cycle)', color: context.palette.dim, bold: false },
-    ];
+
+    const segments: ThinkingSegment[] = [{ text: ' '.repeat(TRANSCRIPT_PAD_LEFT), color: context.palette.dim, bold: false }];
+    // Engine segment (only when bound). The cycle affordance shows when >1 engine is switchable.
+    this.lastEngineSegment = null;
+    if (this.enginePort) {
+      const cyclable = this.enginePort.canCycle;
+      const cycleGlyph = cyclable ? (context.glyphLevel === 'ascii' ? ' <->' : ' ⇄') : '';
+      const engineText = `engine: ${this.enginePort.provider}${cycleGlyph}`;
+      const startColumn = TRANSCRIPT_PAD_LEFT;
+      const endColumn = startColumn + Array.from(engineText).length;
+      this.lastEngineSegment = { row: modeLineRow, startColumn, endColumn };
+      segments.push({ text: engineText, color: cyclable ? context.palette.accent : context.palette.dim, bold: cyclable });
+      segments.push({ text: '  ·  ', color: context.palette.dim, bold: false });
+    }
+    segments.push({
+      text: permissionText,
+      color: bypass ? context.palette.accent : askSupported ? context.palette.info : context.palette.dim,
+      bold: bypass,
+    });
+    const hint = this.enginePort?.canCycle ? '  (shift+tab · ctrl+e)' : '  (shift+tab to cycle)';
+    segments.push({ text: hint, color: context.palette.dim, bold: false });
+    return segments;
   }
 
   /** Pending tool calls = tool-use entries with no matching tool-result yet, in emission order.
@@ -336,6 +385,12 @@ class $AgentPaneContent implements PaneContent {
         this.permissionMode.value = !this.permissionMode.value;
         this.viewRevision.value += 1;
       }
+      return true;
+    }
+    // Ctrl+E cycles the engine (claude ⇄ codex), swapping the backend behind the same transcript. No-op
+    // while busy (the session guards the swap) — so it never disrupts an in-flight turn.
+    if (key.ctrl && !key.meta && !key.option && key.name === 'e') {
+      this.cycleEngine();
       return true;
     }
     // A PENDING PERMISSION owns the keyboard: y = allow · a = always-allow (session) · n / Escape =
@@ -443,9 +498,14 @@ class $AgentPaneContent implements PaneContent {
     return true;
   }
 
-  /** A pointer-down inside the pane at content-local (column, row): toggle a tool row's expand state.
-   *  Called by the host only for a BARE click in the TRANSCRIPT region (a drag becomes a selection). */
-  onPointerDown(_column: number, row: number): boolean {
+  /** A pointer-down inside the pane at content-local (column, row): click the mode-line ENGINE segment to
+   *  cycle engines, or toggle a tool row's expand state. Called by the host for a BARE click in the
+   *  transcript region AND for any click on the inert 'other' rows (so the mode-line segment is reachable). */
+  onPointerDown(column: number, row: number): boolean {
+    const engine = this.lastEngineSegment;
+    if (engine && this.enginePort?.canCycle && row === engine.row && column >= engine.startColumn && column < engine.endColumn) {
+      return this.cycleEngine();
+    }
     const line = this.lastBodyRows[row];
     if (!line || !line.toggleable || line.entryIndex < 0) return false;
     if (this.expandedIndices.has(line.entryIndex)) this.expandedIndices.delete(line.entryIndex);

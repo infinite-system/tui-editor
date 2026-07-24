@@ -12,17 +12,22 @@ import { Reactive } from 'ivue';
 import { ref } from 'vue';
 import type { AgentBackend } from './AgentBackend';
 import type { AgentEvent, AgentStatus, PermissionDecision, TranscriptEntry } from './AgentEvents';
+import { TranscriptContextSerializer } from './TranscriptContextSerializer';
 
 class $AgentSession {
-  /** The one append-only transcript. Mutated only by fold()/send() here; read-only everywhere else. */
+  /** The one append-only transcript. Mutated only by fold()/send()/swapBackend() here; read-only
+   *  everywhere else. */
   private readonly entries: TranscriptEntry[] = [];
   /** True while the trailing assistant entry is still accumulating text-deltas. */
   private assistantTurnOpen = false;
   /** Live respond callbacks for pending permission requests, keyed by request id. The transcript entry
    *  is pure data; the callable lives HERE (the session is the one router of the user's decision). */
   private readonly pendingPermissionResponders = new Map<string, (decision: PermissionDecision) => void>();
+  /** A bounded context preamble to prepend to the NEXT prompt after an engine swap, so the new engine
+   *  inherits the conversation. Consumed (cleared) on the first send after the swap. */
+  private pendingContextPreamble: string | null = null;
 
-  constructor(private readonly backend: AgentBackend) {
+  constructor(private backend: AgentBackend) {
     this.backend.onEvent((event) => this.fold(event));
   }
 
@@ -79,7 +84,27 @@ class $AgentSession {
     respond(decision);
   }
 
-  /** Submit a user turn. Ignored while a turn is already in flight (one turn at a time). */
+  /** Swap the underlying backend mid-session (an engine switch), KEEPING the transcript. The old backend
+   *  is disposed, the new one wired, a visible system note is appended, and a bounded context preamble is
+   *  armed so the new engine inherits the conversation on the next send. Ignored while a turn is busy
+   *  (switch only at rest). Returns whether the swap happened. */
+  swapBackend(nextBackend: AgentBackend, providerLabel: string): boolean {
+    if (this.busy || nextBackend === this.backend) return false;
+    // Serialize the conversation BEFORE the switch note, so the preamble carries real context only.
+    const preamble = TranscriptContextSerializer.Class.serialize(this.entries);
+    this.backend.dispose();
+    this.backend = nextBackend;
+    this.assistantTurnOpen = false;
+    this.backend.onEvent((event) => this.fold(event));
+    this.entries.push({ role: 'system', text: `switched to ${providerLabel} — context ported` });
+    this.pendingContextPreamble = preamble || null;
+    this.renderRevision.value++;
+    return true;
+  }
+
+  /** Submit a user turn. Ignored while a turn is already in flight (one turn at a time). After an engine
+   *  swap, the first send prepends the context preamble to what the BACKEND receives (the user's own
+   *  entry stays clean — the preamble is machinery, not something the user typed). */
   send(prompt: string): void {
     const trimmed = prompt.trim();
     if (!trimmed || this.busy) return;
@@ -87,7 +112,9 @@ class $AgentSession {
     this.entries.push({ role: 'user', text: trimmed });
     this.status.value = 'streaming';
     this.renderRevision.value++;
-    this.backend.send(trimmed);
+    const toBackend = this.pendingContextPreamble ? `${this.pendingContextPreamble}\n\n${trimmed}` : trimmed;
+    this.pendingContextPreamble = null;
+    this.backend.send(toBackend);
   }
 
   /** Request the in-flight turn stop. */

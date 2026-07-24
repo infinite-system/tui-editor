@@ -158,3 +158,14 @@ describe('permission-request projection', () => {
     expect(denied[0]!.text).toContain('✗ denied');
   });
 });
+
+describe('system (engine-switch) note projection', () => {
+  test('a system entry renders one dim, em-dash-framed aside (not toggleable, synthetic index)', () => {
+    const lines = project([{ role: 'system', text: 'switched to codex — context ported' }], 70);
+    const banner = lines.find((line) => line.text.includes('switched to codex'));
+    expect(banner).toBeDefined();
+    expect(banner!.text).toBe('— switched to codex — context ported —');
+    expect(banner!.toggleable).toBe(false);
+    expect(banner!.entryIndex).toBe(-1);
+  });
+});

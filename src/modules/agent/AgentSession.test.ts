@@ -190,3 +190,66 @@ describe('AgentSession — interactive permission requests', () => {
     expect(session.permissionPromptsSupported).toBe(false); // the mock declares no support
   });
 });
+
+describe('AgentSession — engine swap (live provider switch)', () => {
+  test('swapBackend keeps the transcript, disposes the old backend, adds a system note, and rewires', () => {
+    const { session, backend } = makeSession();
+    session.send('remember ZEBRA-42');
+    backend.emit({ kind: 'text-delta', text: 'ok, remembered' });
+    backend.emit({ kind: 'session-end', reason: 'completed' });
+    const beforeCount = session.transcript.length;
+
+    const next = new MockAgentBackend.Class();
+    expect(session.swapBackend(next, 'codex')).toBe(true);
+    expect(backend.disposed).toBe(true); // old backend torn down
+    expect(session.transcript.length).toBe(beforeCount + 1); // + the system note
+    expect(session.transcript.at(-1)).toMatchObject({ role: 'system', text: 'switched to codex — context ported' });
+    // The earlier turns are still there (transcript preserved across the swap).
+    expect(session.transcript.some((entry) => entry.role === 'user' && entry.text === 'remember ZEBRA-42')).toBe(true);
+
+    // New events now fold through the NEW backend.
+    session.send('what did I ask you to remember?');
+    next.emit({ kind: 'text-delta', text: 'ZEBRA-42' });
+    expect(next.sent.length).toBe(1);
+  });
+
+  test('the first send AFTER a swap prepends the context preamble to the BACKEND prompt (user entry stays clean)', () => {
+    const { session, backend } = makeSession();
+    session.send('the secret is ORCHID');
+    backend.emit({ kind: 'session-end', reason: 'completed' });
+
+    const next = new MockAgentBackend.Class();
+    session.swapBackend(next, 'codex');
+    session.send('tell me the secret');
+
+    // The user's own transcript entry is exactly what they typed — no preamble leaked into it.
+    expect(session.transcript.some((entry) => entry.role === 'user' && entry.text === 'tell me the secret')).toBe(true);
+    // The BACKEND received the preamble (carrying ORCHID) prepended to the prompt.
+    expect(next.sent[0]).toContain('Context ported from the previous engine');
+    expect(next.sent[0]).toContain('ORCHID');
+    expect(next.sent[0]).toContain('tell me the secret');
+
+    // The preamble is ONE-SHOT: the next send after that carries no preamble.
+    backend.emit({ kind: 'session-end', reason: 'completed' }); // (no-op, old backend)
+    next.emit({ kind: 'session-end', reason: 'completed' });
+    session.send('another message');
+    expect(next.sent[1]).toBe('another message');
+  });
+
+  test('swapBackend is refused while a turn is busy (switch only at rest) and does not leak', () => {
+    const { session } = makeSession();
+    session.send('go'); // now streaming/busy
+    const next = new MockAgentBackend.Class();
+    expect(session.swapBackend(next, 'codex')).toBe(false);
+    expect(session.transcript.at(-1)).not.toMatchObject({ role: 'system' });
+  });
+
+  test('permissionPromptsSupported reflects the CURRENT backend after a swap', () => {
+    const { session } = makeSession();
+    expect(session.permissionPromptsSupported).toBe(false); // mock declares none
+    const capable = new MockAgentBackend.Class();
+    (capable as unknown as { supportsPermissionPrompts: boolean }).supportsPermissionPrompts = true;
+    session.swapBackend(capable, 'codex');
+    expect(session.permissionPromptsSupported).toBe(true);
+  });
+});
