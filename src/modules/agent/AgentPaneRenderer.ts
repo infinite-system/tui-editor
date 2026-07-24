@@ -82,8 +82,15 @@ function $render(context: AgentPaneRenderContext): StyledText {
     chunks.push(fg(palette.fg)('\n'));
   });
 
-  // The animated thinking line, directly above the composer frame while busy.
+  // Focus colour drives the prompt AND the frame rules together — accent while the pane owns the
+  // keyboard, dim on blur — so the whole composer frame reads as one focused unit.
+  const promptColor = focused ? palette.accent : palette.dim;
+
+  // The animated thinking line, breathing-room ABOVE it and exactly one spacer below (the user-specced
+  // rhythm: blank · thinking · blank · rule). Idle keeps the original two spacers so the frame sits at
+  // the same airy distance from the transcript either way (total chrome height is unchanged by busy).
   if (thinking) {
+    chunks.push(fg(palette.fg)('\n')); // blank ABOVE the thinking line
     if (leftPad) chunks.push(fg(palette.fg)(leftPad));
     pushSegments(chunks, thinking);
     chunks.push(fg(palette.fg)('\n'));
@@ -96,15 +103,13 @@ function $render(context: AgentPaneRenderContext): StyledText {
     chunks.push(fg(palette.fg)('\n'));
   }
 
-  // Composer frame: TWO blank spacers, an (inset) top rule, the wrapped composer rows (inset), a bottom
-  // rule, the mode line, and a blank bottom-pad row — airy margins above and below the composer canvas.
-  chunks.push(fg(palette.fg)('\n')); // blank spacer 1
-  chunks.push(fg(palette.fg)('\n')); // blank spacer 2
+  // Composer frame: spacer(s), an (inset) top rule, the wrapped composer rows (inset), a bottom rule,
+  // the mode line, and a blank bottom-pad row — airy margins above and below the composer canvas.
+  chunks.push(fg(palette.fg)('\n')); // blank spacer (always)
+  if (!thinking) chunks.push(fg(palette.fg)('\n')); // second spacer only when idle (busy already led with one)
   if (leftPad) chunks.push(fg(palette.fg)(leftPad));
-  chunks.push(fg(palette.dim)(rule));
+  chunks.push(fg(promptColor)(rule));
   chunks.push(fg(palette.fg)('\n'));
-
-  const promptColor = focused ? palette.accent : palette.dim;
   composer.forEach((row) => {
     if (leftPad) chunks.push(fg(palette.fg)(leftPad));
     chunks.push(fg(promptColor)(row.isFirstLine ? '❯ ' : '  '));
@@ -113,7 +118,7 @@ function $render(context: AgentPaneRenderContext): StyledText {
   });
 
   if (leftPad) chunks.push(fg(palette.fg)(leftPad));
-  chunks.push(fg(palette.dim)(rule));
+  chunks.push(fg(promptColor)(rule));
   chunks.push(fg(palette.fg)('\n'));
   pushSegments(chunks, modeLine);
   chunks.push(fg(palette.fg)('\n')); // trailing newline → a blank bottom-pad row at the very bottom
