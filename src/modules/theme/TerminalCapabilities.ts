@@ -1,10 +1,22 @@
-// Detects terminal color depth and glyph support so palettes and icons can degrade.
+// Detects terminal color depth, glyph support, and the image graphics tier so palettes, icons, and
+// the image preview can degrade.
 // invariant: Terminal color and glyph support varies (project.invariants.md)
 // invariant: Terminal capability can only be inferred from the environment (src/modules/theme/theme.invariants.md)
+// invariant: Graphics tier prefers the reported capability and degrades to cells (src/modules/theme/theme.invariants.md)
 import { Environment } from '../system/Environment';
 
 export type ColorDepth = 'truecolor' | '256' | '16';
 export type GlyphLevel = 'nerd' | 'unicode' | 'ascii';
+/** How the image preview reaches the screen, richest first: kitty APC graphics → sixel → half-block cells. */
+export type GraphicsTier = 'kitty' | 'sixel' | 'halfblock';
+
+/** The slice of OpenTUI's terminal-capability report that graphics-tier detection consumes.
+ *  Structural (not the @opentui/core type) so tests can pose any matrix without a renderer. */
+export interface ReportedGraphicsCapabilities {
+  kitty_graphics: boolean;
+  sixel: boolean;
+  multiplexer: string;
+}
 
 class $TerminalCapabilities {
   static detectColorDepth(): ColorDepth {
@@ -30,6 +42,33 @@ class $TerminalCapabilities {
     const language = Environment.Class.env('LANG') ?? '';
     if (/utf-?8/i.test(language)) return 'unicode';
     return 'ascii';
+  }
+
+  /** Resolve the image-preview graphics tier. Precedence:
+   *  1. `TUI_GRAPHICS_TIER` env override (the test seam and user escape hatch) — beats everything,
+   *     including the tmux guard, so smokes driven inside the tmux harness can force any tier.
+   *  2. tmux (either the reported multiplexer or `$TMUX`): half-block — graphics passthrough under
+   *     tmux is unreliable, a scoped limitation, not a detection failure.
+   *  3. OpenTUI's reported capabilities (the terminal's own answer — never second-guessed by env).
+   *  4. No report yet (the async query has not round-tripped, or the caller has no renderer):
+   *     conservative env heuristics, else the universal half-block floor. Detection may only ever
+   *     move UP a tier when the report lands — the floor never flashes a wrong rich tier. */
+  static detectGraphicsTier(reported: ReportedGraphicsCapabilities | null): GraphicsTier {
+    const forced = Environment.Class.env('TUI_GRAPHICS_TIER');
+    if (forced === 'kitty' || forced === 'sixel' || forced === 'halfblock') return forced;
+    if (Environment.Class.env('TMUX')) return 'halfblock';
+    if (reported) {
+      if (reported.multiplexer !== 'none' && reported.multiplexer !== 'unknown') return 'halfblock';
+      if (reported.kitty_graphics) return 'kitty';
+      if (reported.sixel) return 'sixel';
+      return 'halfblock';
+    }
+    const term = Environment.Class.env('TERM') ?? '';
+    if (/^xterm-(kitty|ghostty)$/i.test(term)) return 'kitty';
+    if (Environment.Class.env('KITTY_WINDOW_ID')) return 'kitty';
+    const termProgram = Environment.Class.env('TERM_PROGRAM') ?? '';
+    if (/^(wezterm|iterm\.app)$/i.test(termProgram)) return 'sixel';
+    return 'halfblock';
   }
 }
 

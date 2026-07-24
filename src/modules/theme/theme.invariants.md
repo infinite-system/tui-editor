@@ -29,18 +29,60 @@ safe defaults over guessed maximums; user-overridable depth/level setters.
 **Evidence:** `src/modules/theme/TerminalCapabilities.ts` (`detectColorDepth`, `detectGlyphLevel`
 read only `Environment.Class.env(...)` and return a default).
 
-**Impossible if true:** A capability value derived from an authoritative in-band terminal query
-rather than an environment guess; detection that returns nothing (undefined) when every env hint
-is absent.
+**Impossible if true:** A color-depth or glyph-level value derived from an authoritative in-band
+terminal query rather than an environment guess; detection that returns nothing (undefined) when
+every env hint is absent. (Graphics-tier detection is DIFFERENT reality — graphics support IS
+portably queryable in-band — and is governed by its own record below.)
 
-**Verification:** Inspect `TerminalCapabilities` — every branch reads an env var or returns a
-literal default; no I/O or terminal round-trip exists.
+**Verification:** Inspect `TerminalCapabilities.detectColorDepth` / `detectGlyphLevel` — every
+branch reads an env var or returns a literal default; no I/O or terminal round-trip exists.
 
 **Status:** provisional
 
-**Last refined:** 2026-07-21
+**Last refined:** 2026-07-24
 
 ## Chosen invariants
+
+### Graphics tier prefers the reported capability and degrades to cells
+
+**Invariant:** If the image preview resolves a graphics tier, then the precedence is fixed:
+`TUI_GRAPHICS_TIER` override → tmux guard (half-block; passthrough is unreliable) → OpenTUI's
+reported terminal capabilities (never second-guessed by env) → conservative env heuristics →
+the half-block floor; and while the async capability report has not arrived the tier may only
+sit AT or BELOW where the report would put it — detection upgrades, it never flashes a rich
+tier that must be taken back.
+
+**Scope:** `TerminalCapabilities.detectGraphicsTier` (the precedence), the `reportedGraphics`
+ref + `capabilities` event wiring and the tier ladder ask in `RootView` (the consumption).
+Unlike color depth and glyph level, the primary signal here is OpenTUI's in-band query result —
+graphics support is the capability terminals DO portably report (DA1 sixel flag, kitty graphics
+query), which is why this record is not an instance of *Terminal capability can only be inferred
+from the environment*.
+
+**Mechanism:** `detectGraphicsTier(reported)` takes the report as a parameter (pure, testable);
+`RootView` holds the report in a `shallowRef` updated by the renderer's `capabilities` event, and
+`update()` reads it inside the frame effect, so the answer arriving re-renders and upgrades the
+tier. The env heuristics run ONLY on a null report; the floor is `halfblock`, which every
+terminal renders.
+
+**Generates:** the kitty → sixel → half-block ladder in `ImageRenderers`; smokes that force any
+tier via `TUI_GRAPHICS_TIER` even inside the tmux harness; zero risk of graphics escapes reaching
+a terminal that never announced support.
+
+**Evidence:** `src/modules/theme/__tests__/GraphicsTier.test.ts` (the full precedence matrix:
+report beats env in both directions, tmux guard, override beats tmux, floor on silence);
+`src/modules/theme/TerminalCapabilities.ts` (`detectGraphicsTier`).
+
+**Impossible if true:** a kitty or sixel payload emitted because an env var guessed richer than
+the terminal's own report; a rich tier active under tmux without the explicit override; a
+detection result that a later capability report DOWNGRADES (report-then-degrade); a second
+tier-precedence list outside `detectGraphicsTier`.
+
+**Verification:** `bun test src/modules/theme/__tests__/GraphicsTier.test.ts`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-24
 
 ### Appearance comes only from theme data
 

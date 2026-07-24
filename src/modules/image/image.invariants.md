@@ -1,8 +1,10 @@
 # Image preview — Invariants
 
 Load-bearing rules for `src/modules/image/` (the `ImageDecoders` extension→decoder registry, the
-dependency-free PNG decoder, the jpeg-js-backed JPEG decoder, the half-block cell renderer, and the
-memoised `ImagePreview` seam) and its editor mount (the image branch in `src/modules/ui/RootView.ts`).
+dependency-free PNG decoder, the jpeg-js-backed JPEG decoder, the shared `ImageResample` seam, the
+half-block cell renderer, the `ImageRenderers` graphics-tier ladder with its kitty/sixel encoders,
+the `PixelImageMount` placement manager, and the memoised `ImagePreview` seam) and its editor mount
+(the image + pixel branches in `src/modules/ui/RootView.ts`).
 Stands on `project.invariants.md` (one-way data flow, cost tracks the observed set, seams are drawn at
 the shared generator) and the ui rendering records. Prototype scope: non-interlaced 8-bit PNG and
 baseline/progressive JPEG shown in the active editor buffer as truecolor half-block cells.
@@ -55,6 +57,52 @@ inspects PNG or JPEG structure instead of the decoded RGBA.
 **Last refined:** 2026-07-24
 
 ## Chosen invariants
+
+### A pixel tier places and deletes graphics explicitly
+
+**Invariant:** If a graphics tier richer than half-block shows the preview, then every placement
+is emitted through the renderer's serialized writer only when its placement key (tier, path,
+fitted rect, background) changes — never per frame — and only after pending frames settle (the
+blanked cells land first); every placement that has identity is deleted when replaced, when the
+buffer stops being the previewed image, and in a delete-all sweep on app dispose, so no image can
+outlive the app onto the user's shell; and the cells under the graphics render blank so frame
+repaints never fight the image.
+
+**Scope:** `PixelImageMount` (the only stateful piece: key, generation, placed id), the tier
+encoders behind `ImageRenderers` (`KittyGraphics` — placement identity, explicit delete;
+`SixelEncoder` — inert painted pixels whose honest cleanup is emitting nothing), and the pixel
+branch + `onDispose` wiring in `RootView`. The half-block floor is out of scope — cells need no
+placement management.
+
+**Mechanism:** `PixelImageMount.sync` computes the fitted rect through `ImageResample.fitWithin`,
+no-ops on an unchanged key, otherwise builds delete-previous + place payloads and emits them
+after `afterFramesSettled()` under a generation guard (a superseded placement never reaches the
+terminal). `clear()` deletes immediately and cancels in-flight places; `dispose()` clears then
+emits the encoder's removeAll sweep. Kitty payloads are ≤4096-byte base64 chunks with q=2 (the
+terminal never answers into the input parser) and C=1 + cursor save/restore (the cursor never
+moves). RootView blanks `codeBody` under any pixel tier and clears the mount on every non-image
+frame.
+
+**Generates:** flicker-free tier rendering above an unchanged half-block floor; a quit that
+leaves the user's shell clean; per-frame cost of a string-key compare; encoders that stay pure
+(all screen state lives in one mount).
+
+**Evidence:** `src/modules/image/PixelImageMount.test.ts` (emit-once-per-key, settle-gated
+emission, delete-before-replace, generation cancellation, clear/dispose sweeps, letterbox
+centring); `src/modules/image/KittyGraphics.test.ts` (chunk ceiling, m= flags, round-trip,
+delete commands); `src/modules/image/SixelEncoder.test.ts` (golden DCS outputs, palette scale,
+band clipping, transparency compositing).
+
+**Impossible if true:** a graphics payload emitted on a frame whose placement key did not change;
+a kitty placement surviving buffer switch or app quit; a placement emitted before the frame that
+blanks its cells; two encoders disagreeing about who owns screen state (any stateful encoder); a
+base64 chunk over 4096 bytes.
+
+**Verification:** `bun test src/modules/image/PixelImageMount.test.ts src/modules/image/KittyGraphics.test.ts src/modules/image/SixelEncoder.test.ts`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-24
 
 ### An image buffer replaces the code text and leaves other files untouched
 

@@ -10,6 +10,7 @@
 import { StyledText, fg, bg, type TextChunk } from '@opentui/core';
 import { Static } from 'ivue/extras';
 import type { DecodedImage } from './ImageDecoders';
+import { ImageResample } from './ImageResample';
 
 /** The upper-half-block glyph: foreground paints the top pixel, background the bottom pixel. */
 const UPPER_HALF_BLOCK = '▀';
@@ -58,55 +59,6 @@ function rgbToHex(red: number, green: number, blue: number): string {
   return `#${componentToHex(red)}${componentToHex(green)}${componentToHex(blue)}`;
 }
 
-// Box-downsample the source image to a fittedWidth × fittedHeightSubpixels grid, averaging every source
-// pixel that falls in each target cell's box (straight-alpha), then compositing over the panel
-// background so transparency reads as the panel colour. Returns a flat RGB grid (3 bytes per subpixel).
-function downsampleAndComposite(
-  image: DecodedImage,
-  fittedWidth: number,
-  fittedHeightSubpixels: number,
-  backgroundRed: number,
-  backgroundGreen: number,
-  backgroundBlue: number,
-): Uint8Array {
-  const grid = new Uint8Array(fittedWidth * fittedHeightSubpixels * 3);
-  const { width, height, rgba } = image;
-  for (let fittedY = 0; fittedY < fittedHeightSubpixels; fittedY++) {
-    const sourceRowStart = Math.floor((fittedY * height) / fittedHeightSubpixels);
-    const sourceRowEnd = Math.max(sourceRowStart + 1, Math.floor(((fittedY + 1) * height) / fittedHeightSubpixels));
-    for (let fittedX = 0; fittedX < fittedWidth; fittedX++) {
-      const sourceColumnStart = Math.floor((fittedX * width) / fittedWidth);
-      const sourceColumnEnd = Math.max(sourceColumnStart + 1, Math.floor(((fittedX + 1) * width) / fittedWidth));
-      let redTotal = 0;
-      let greenTotal = 0;
-      let blueTotal = 0;
-      let alphaTotal = 0;
-      let sampleCount = 0;
-      for (let sourceY = sourceRowStart; sourceY < sourceRowEnd; sourceY++) {
-        for (let sourceX = sourceColumnStart; sourceX < sourceColumnEnd; sourceX++) {
-          const sourceOffset = (sourceY * width + sourceX) * 4;
-          const alpha = rgba[sourceOffset + 3]! / 255;
-          redTotal += rgba[sourceOffset]! * alpha;
-          greenTotal += rgba[sourceOffset + 1]! * alpha;
-          blueTotal += rgba[sourceOffset + 2]! * alpha;
-          alphaTotal += alpha;
-          sampleCount++;
-        }
-      }
-      // Average colour weighted by alpha, then composite the averaged coverage over the panel background.
-      const coverage = sampleCount > 0 ? alphaTotal / sampleCount : 0;
-      const averageRed = alphaTotal > 0 ? redTotal / alphaTotal : 0;
-      const averageGreen = alphaTotal > 0 ? greenTotal / alphaTotal : 0;
-      const averageBlue = alphaTotal > 0 ? blueTotal / alphaTotal : 0;
-      const gridOffset = (fittedY * fittedWidth + fittedX) * 3;
-      grid[gridOffset] = averageRed * coverage + backgroundRed * (1 - coverage);
-      grid[gridOffset + 1] = averageGreen * coverage + backgroundGreen * (1 - coverage);
-      grid[gridOffset + 2] = averageBlue * coverage + backgroundBlue * (1 - coverage);
-    }
-  }
-  return grid;
-}
-
 function $render(context: HalfBlockRenderContext): HalfBlockRender {
   const { image, panelBackground } = context;
   const columns = Math.max(1, context.columns);
@@ -114,13 +66,14 @@ function $render(context: HalfBlockRenderContext): HalfBlockRender {
   const [backgroundRed, backgroundGreen, backgroundBlue] = parseHexColor(panelBackground);
   const panelHex = rgbToHex(backgroundRed, backgroundGreen, backgroundBlue);
 
-  // Fit the source into a columns × (2·rows) subpixel box, preserving aspect. A subpixel is square, so
-  // the scale is the tighter of the horizontal and vertical fits; the rest becomes letterbox.
+  // Fit the source into a columns × (2·rows) subpixel box, preserving aspect (a subpixel is square),
+  // then box-average + composite through the shared resample seam — the same generator the pixel
+  // tiers consume, at subpixel units.
   const subpixelRows = rows * 2;
-  const scale = Math.min(columns / image.width, subpixelRows / image.height);
-  const fittedWidth = Math.max(1, Math.min(columns, Math.round(image.width * scale)));
-  const fittedHeightSubpixels = Math.max(1, Math.min(subpixelRows, Math.round(image.height * scale)));
-  const grid = downsampleAndComposite(
+  const fitted = ImageResample.Class.fitWithin(image.width, image.height, columns, subpixelRows);
+  const fittedWidth = fitted.width;
+  const fittedHeightSubpixels = fitted.height;
+  const grid = ImageResample.Class.toRgbGrid(
     image, fittedWidth, fittedHeightSubpixels, backgroundRed, backgroundGreen, backgroundBlue,
   );
 

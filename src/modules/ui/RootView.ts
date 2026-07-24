@@ -37,6 +37,10 @@ import { ActivityBar } from './ActivityBar';
 import { EditorPane } from './EditorPane';
 import { EditorContentMount } from './EditorContentMount';
 import { ImagePreview } from '../image/ImagePreview';
+import { ImageRenderers } from '../image/ImageRenderers';
+import { PixelImageMount } from '../image/PixelImageMount';
+import { TerminalCapabilities, type ReportedGraphicsCapabilities } from '../theme/TerminalCapabilities';
+import { shallowRef } from 'vue';
 import { ScrollbarSync } from './ScrollbarSync';
 import { OverlayLayer } from './OverlayLayer';
 import { HoverCard } from './HoverCard';
@@ -1011,15 +1015,36 @@ function $buildRootView(
     // invariant: An image buffer replaces the code text and leaves other files untouched (src/modules/image/image.invariants.md)
     const activeFileIsImage = workspaceSet.active.activeFileIsImage;
     const rendered = activeFileIsImage ? null : editorController.renderEditor();
+    // Any non-image frame deletes a lingering pixel placement (cheap no-op when nothing is placed).
+    if (!activeFileIsImage) pixelMount.clear();
     if (activeFileIsImage) {
       gutterBody.width = 0;
       gutterBody.content = '';
-      codeBody.content = imagePreview.render(
-        workspaceSet.active.editor.document.path,
-        Math.max(1, editorViewportWidth()),
-        Math.max(1, editorViewportHeight()),
-        palette.panel,
-      );
+      const imagePath = workspaceSet.active.editor.document.path;
+      const previewColumns = Math.max(1, editorViewportWidth());
+      const previewRows = Math.max(1, editorViewportHeight());
+      // The tier ladder: kitty → sixel → half-block. A pixel tier renders BLANK cells under the
+      // out-of-band graphics (so cell repaints never fight the image) and hands placement to the
+      // mount; the half-block floor (and every decode failure) renders through the cells exactly
+      // as before. The ladder is one registry ask — no tier list lives here.
+      // invariant: Graphics tier prefers the reported capability and degrades to cells (src/modules/theme/theme.invariants.md)
+      const graphicsTier = TerminalCapabilities.Class.detectGraphicsTier(reportedGraphics.value);
+      const pixelEncoder = ImageRenderers.Class.encoderFor(graphicsTier);
+      const decodedImage = pixelEncoder ? imagePreview.decodedImage(imagePath) : null;
+      if (pixelEncoder && decodedImage) {
+        codeBody.content = '';
+        pixelMount.sync({
+          tier: graphicsTier,
+          encoder: pixelEncoder,
+          image: decodedImage,
+          path: imagePath,
+          region: { x: codeBody.x, y: codeBody.y, columns: previewColumns, rows: previewRows },
+          panelBackground: palette.panel,
+        });
+      } else {
+        pixelMount.clear();
+        codeBody.content = imagePreview.render(imagePath, previewColumns, previewRows, palette.panel);
+      }
     } else if (rendered) {
       gutterBody.width = gutterWidth();
       gutterBody.content = rendered.gutter;
@@ -1257,6 +1282,40 @@ function $buildRootView(
   // Half-block image preview for the active buffer when it is an image file. Memoises decode + render
   // so the frame effect that reads it pays a map lookup, never a re-decode.
   const imagePreview = new ImagePreview.Class();
+
+  // Pixel-tier image preview (kitty graphics / sixel above the half-block floor). The graphics tier
+  // derives from OpenTUI's reported capabilities — held in a ref because the report arrives ASYNC via
+  // the `capabilities` event, and update() reading the ref inside the frame effect is what upgrades
+  // the tier the moment the terminal answers (half-block floor until then; degrade-up, never flash).
+  // invariant: Graphics tier prefers the reported capability and degrades to cells (src/modules/theme/theme.invariants.md)
+  const readReportedGraphics = (): ReportedGraphicsCapabilities | null => {
+    const capabilities = renderer.capabilities;
+    if (!capabilities) return null;
+    return {
+      kitty_graphics: capabilities.kitty_graphics,
+      sixel: capabilities.sixel,
+      multiplexer: capabilities.multiplexer,
+    };
+  };
+  const reportedGraphics = shallowRef<ReportedGraphicsCapabilities | null>(readReportedGraphics());
+  renderer.on('capabilities', () => {
+    reportedGraphics.value = readReportedGraphics();
+  });
+  // The emission surface: OpenTUI's writeOut routes through the native zig writer — the SAME queue
+  // as frame bytes, so an out-of-band graphics payload serializes between frames, never mid-frame.
+  // The method is TypeScript-private (OpenTUI exposes no public raw-write), hence the structural cast.
+  const pixelMount = new PixelImageMount.Class({
+    writePayload: (data) => {
+      (renderer as unknown as { writeOut(chunk: string): boolean }).writeOut(data);
+    },
+    afterFramesSettled: () => renderer.idle(),
+    cellPixelSize: () => {
+      const resolution = renderer.resolution;
+      if (!resolution || renderer.width <= 0 || renderer.height <= 0) return null;
+      return { width: resolution.width / renderer.width, height: resolution.height / renderer.height };
+    },
+  });
+  app.onDispose(() => pixelMount.dispose());
 
   const editorController = new EditorPane.Class({
     renderer,

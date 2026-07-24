@@ -39,6 +39,13 @@ class $ImagePreview {
     return text;
   }
 
+  /** The memoised decoded image for `path`, or null when it cannot be decoded (the caller then
+   *  falls back to `render`, whose cell output carries the friendly error message). */
+  decodedImage(path: string): DecodedImage | null {
+    const outcome = this.decode(path);
+    return 'image' in outcome ? outcome.image : null;
+  }
+
   private decode(path: string): DecodeOutcome {
     if (path === this.decodedPath && this.decodeOutcome) return this.decodeOutcome;
     let outcome: DecodeOutcome;

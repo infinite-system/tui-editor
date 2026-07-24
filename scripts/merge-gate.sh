@@ -112,6 +112,7 @@ if [ "${FAST:-0}" != "1" ]; then
   step "smoke: hover" bash scripts/smoke-hover.sh
   step "smoke: diagnostics" bash scripts/smoke-diagnostics.sh
   step "smoke: image-preview" bash scripts/smoke-image-preview.sh
+  step "smoke: pixel-preview" bash scripts/smoke-pixel-preview.sh
   step "smoke: agent"       bash scripts/smoke-agent.sh
   step "smoke: agent-pane-ux" bash scripts/smoke-agent-pane-ux.sh
   step "smoke: agent-permissions" bash scripts/smoke-agent-permissions.sh
