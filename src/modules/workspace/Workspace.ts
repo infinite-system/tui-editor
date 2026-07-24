@@ -21,6 +21,7 @@ import type { Settings } from '../settings/Settings';
 import { GitRows } from '../git/GitRows';
 import { GitLogRows, type CommitLogRow } from '../git/GitLogRows';
 import { GitCommands } from '../git/GitCommands';
+import { GitParsers } from '../git/GitParsers';
 import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { EditorWrap } from '../editor/EditorWrap';
 import { Logging } from '../system/Logging';
@@ -464,7 +465,12 @@ class $Workspace {
   // Watches the working tree so EXTERNAL changes (editor saves elsewhere, other processes, branch
   // switches, on-disk edits) live-refresh the git panel + tree decorations — not just our own actions.
   protected createGitWatcher(root: string, repository: GitRepository.Instance) {
-    return new GitWatcher.Class(root, repository);
+    // After every completed reconcile (event flush or the 5s floor), probe the commit log's tip —
+    // the cheap SHA compare that keeps the HISTORY list following external commits/pulls/rebases.
+    // invariant: The commit log follows repository reality (src/modules/git/git.invariants.md)
+    return new GitWatcher.Class(root, repository, {
+      onReconciled: () => void this.reconcileLogTip(),
+    });
   }
   private gitWatcher: GitWatcher.Model | null = null;
 
@@ -652,7 +658,9 @@ class $Workspace {
       this.focus.value = 'files';
     } else if (view === 'git') {
       this.focus.value = 'git';
-      void this.git.value?.refresh();
+      // Status first, THEN the tip probe: reconcileLogTip reads git.head, so it must run after the
+      // refresh lands — this is the panel-open catch-up for history that moved while it was hidden.
+      void this.git.value?.refresh().then(() => this.reconcileLogTip());
       void this.commitLog.value?.ensureRange(0, 50);
     }
   }
@@ -716,6 +724,89 @@ class $Workspace {
     if (!commitLog) return;
     const firstCommitIndex = GitLogRows.Class.commitIndexAtFlatRow(this.expandedEntries(), Math.max(0, flatTop));
     void commitLog.ensureRange(firstCommitIndex, count);
+  }
+
+  // --- commit-log tip staleness + the read-only branch VIEWER --------------------------------
+  // invariant: The commit log follows repository reality (src/modules/git/git.invariants.md)
+  // invariant: The log branch viewer is read-only (src/modules/git/git.invariants.md)
+
+  /**
+   * Poll the cheap invariant, refresh the expensive projection only when it moved: compare the
+   * VIEWED ref's real tip SHA against the tip the log window displays; on a mismatch (external
+   * commit, pull, ff-push, rebase, amend — any history movement) drop the cached pages + inline
+   * expansions and refetch the current window. Runs from the watcher's reconcile completions and
+   * from panel-open catch-up. ONLY while the git panel is visible — a hidden panel spawns nothing
+   * (cost tracks the actively observed set). Following HEAD costs zero extra subprocesses (the tip
+   * rides the status reconcile); a viewed non-HEAD branch costs one local `rev-parse`. LOCAL refs
+   * only — never a network fetch on a timer.
+   */
+  async reconcileLogTip(): Promise<void> {
+    if (this.sidebarView.value !== 'git') return;
+    const git = this.git.value;
+    const commitLog = this.commitLog.value;
+    if (!git || !commitLog) return;
+    const viewedBranch = commitLog.branch.value;
+    let actualTipSha = '';
+    if (viewedBranch === undefined) {
+      actualTipSha = git.head.value; // fresh from the status reconcile that just landed — free
+    } else {
+      const result = await GitCommands.Class.revParse(commitLog.cwd, `refs/heads/${viewedBranch}`);
+      if (result.code !== 0) {
+        this.selectLogBranch(null); // the viewed branch vanished externally — fall back to HEAD
+        return;
+      }
+      actualTipSha = result.stdout.trim();
+    }
+    if (!actualTipSha) return; // no repository / detached probe failure — nothing to compare
+    const loadedTipSha = commitLog.loadedTipSha;
+    if (loadedTipSha === null || loadedTipSha === actualTipSha) return;
+    // History moved: commit indices shifted, so cached pages AND index-keyed expansions are stale.
+    this.commitExpansion.value?.reset();
+    commitLog.reset();
+    this.ensureLogWindow(this.gitPanel.logScrollTop.value);
+  }
+
+  /** Local branch names for the log-branch selector — fetched on demand (a click or cycle), never
+   *  polled. Empty outside a repository. */
+  async localLogBranches(): Promise<string[]> {
+    const commitLog = this.commitLog.value;
+    if (!commitLog) return [];
+    const result = await GitCommands.Class.localBranches(commitLog.cwd);
+    if (result.code !== 0) return [];
+    return GitParsers.Class.parseLocalBranches(result.stdout);
+  }
+
+  /**
+   * Point the commit-log VIEWER at another local branch's history (null = return to following
+   * HEAD). READ-ONLY viewing: this re-sources the same virtualized log pipeline from another ref —
+   * it NEVER runs `git switch`/`checkout`, so the working tree, index, and HEAD are untouched.
+   * Selecting the checked-out branch normalizes to HEAD-following (they are the same history).
+   */
+  selectLogBranch(branchName: string | null): void {
+    const commitLog = this.commitLog.value;
+    if (!commitLog) return;
+    const checkedOutBranch = this.git.value?.branch.value ?? '';
+    const normalizedBranch =
+      branchName === null || branchName === checkedOutBranch ? undefined : branchName;
+    if (commitLog.branch.value === normalizedBranch) return;
+    this.commitExpansion.value?.reset(); // expansion is commit-INDEX keyed — stale across refs
+    commitLog.setBranch(normalizedBranch);
+    this.gitPanel.region.value = 'log';
+    this.gitPanel.logIndex.value = 0;
+    this.gitPanel.logScrollTop.value = 0;
+    this.ensureLogWindow(0);
+  }
+
+  /** Cycle the log viewer through the local branches (wraps; landing on the checked-out branch
+   *  returns to HEAD-following). Keyboard mirror of the header's branch menu. */
+  async cycleLogBranch(): Promise<void> {
+    const branchNames = await this.localLogBranches();
+    if (branchNames.length === 0) return;
+    const checkedOutBranch = this.git.value?.branch.value ?? '';
+    const viewedBranch = this.commitLog.value?.branch.value ?? checkedOutBranch;
+    const viewedIndex = branchNames.indexOf(viewedBranch);
+    const nextBranch = branchNames[(viewedIndex + 1) % branchNames.length];
+    if (nextBranch !== undefined) this.selectLogBranch(nextBranch);
   }
 
   /** Enter/click on a flat log row: a commit header toggles its LAZY expansion (fetch on demand,

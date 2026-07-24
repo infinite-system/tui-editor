@@ -888,6 +888,7 @@ function $buildRootView(
     changesTop: 0, // first screen row (sidebar-relative, border-inclusive) of the changes list
     changesRows: 0, // visible change rows
     dividerRow: 0,
+    logHeaderRow: -1, // branch-selector header row of the log region (-1 = none rendered)
     logTop: 0,
     logRows: 0,
   };

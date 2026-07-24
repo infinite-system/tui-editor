@@ -278,6 +278,88 @@ collapse racing its own fetch and re-expanding from a stale result.
 
 **Last refined:** 2026-07-21
 
+### The commit log follows repository reality
+
+**Invariant:** If the git panel is visible and the VIEWED ref's tip commit changes by any means
+(an external commit from another terminal, a pull, a fast-forward, a rebase, an amend), then the
+history list drops its cached pages and refetches the visible window within one reconcile cycle —
+and while the panel is hidden the tip check spawns no subprocess at all.
+
+**Scope:** `Workspace.reconcileLogTip` and its call sites: the `GitWatcher.onReconciled` hook
+(every completed background reconcile — debounced event flush or the 5s floor) and the panel-open
+catch-up in `Workspace.showSidebarView` / Bootstrap's `git.togglePanel`.
+
+**Mechanism:** Poll the cheap invariant, never the expensive projection: the check compares the
+viewed ref's real tip SHA against `CommitLog.loadedTipSha` (cache index 0 — what the pane
+displays). Following HEAD reads `git.head`, which the status reconcile already carries (zero extra
+subprocesses); viewing another local branch costs one `git rev-parse refs/heads/<branch>` — LOCAL
+refs only, never a network fetch on a timer. Only a mismatch resets the log cache + the
+index-keyed expansions and refetches the current window. `sidebarView !== 'git'` returns before
+any probe (cost tracks the actively observed set); a stale cache left behind is caught by the
+panel-open catch-up.
+
+**Generates:** External commits/pulls/rebases appearing in the history pane without reopening it;
+no per-interval `git log` when nothing moved; no polling cost while the panel is hidden; the same
+freshness for a viewed non-checked-out branch.
+
+**Evidence:** `src/modules/workspace/Workspace.ts` (`reconcileLogTip`, `createGitWatcher`,
+`showSidebarView`); `src/modules/git/GitWatcher.ts` (`flushRefresh`, `onReconciled` option);
+`src/modules/git/CommitLog.ts` (`loadedTipSha`, `reset`); `onReconciled fires after a completed
+background refresh and never after disposal` in `src/modules/git/__tests__/GitWatcher.test.ts`;
+driven end-to-end by `scripts/smoke-git-log.sh` (external commit on HEAD and on the viewed
+branch, no in-app action).
+
+**Impossible if true:** The history pane still showing yesterday's tip after an external commit
+while the panel sits open; a hidden git panel spawning tip probes on the reconcile interval; the
+reconcile timer triggering a network fetch; an unchanged tip refetching the log window.
+
+**Verification:** `bash scripts/smoke-git-log.sh`; `bun test src/modules/git`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-24
+
+### The log branch viewer is read-only
+
+**Invariant:** If the commit pane shows another local branch's history, then every byte of that
+view was produced by read commands parameterized on the ref (`log`, `show`, `rev-parse`,
+`for-each-ref`) through the SAME virtualized log pipeline — the working tree, index, and HEAD are
+never modified, and the non-HEAD view is always visibly labeled with a return path to HEAD.
+
+**Scope:** `CommitLog.branch`/`setBranch`, `Workspace.selectLogBranch`/`cycleLogBranch`/
+`localLogBranches`, the `history: <branch>` header in `GitPaneRenderer`, and the branch menu +
+header hit-target in `Sidebar`.
+
+**Mechanism:** The viewer re-sources `CommitLog` by ONE parameter (the ref) through the existing
+offset-windowed fetch — no second log pipeline. `git switch`/`checkout` is OUT OF SCOPE for this
+control by design: switching the working tree from a history dropdown would mutate the user's
+files as a side effect of *looking*, so changing what HEAD points at is an impossibility for this
+control, not a missing feature. Selecting the checked-out branch normalizes to HEAD-following;
+Esc returns to HEAD before it leaves the panel; commit drill-down routes by SHA (`show <sha>`),
+which resolves identically whatever is checked out.
+
+**Generates:** Browsing any branch's history (and its commits' diffs) with zero risk to
+uncommitted work; the header `history: <branch> (view only)` distinction; the tip-SHA freshness
+check applying to the viewed ref.
+
+**Evidence:** `src/modules/git/CommitLog.ts` (`branch`, `setBranch`, `fetchPage`);
+`src/modules/git/GitCommands.ts` (`localBranches`, `revParse` — read-only argv, no mutation
+verbs); `src/modules/workspace/Workspace.ts` (`selectLogBranch`, `cycleLogBranch`);
+`src/modules/ui/GitPaneRenderer.ts` (the log header row); `src/modules/ui/Sidebar.ts`
+(`openLogBranchMenu`); `setBranch re-sources the SAME pipeline` in
+`src/modules/git/CommitLog.test.ts`; `scripts/smoke-git-log.sh` asserts `branch --show-current`,
+`status --porcelain`, and `rev-parse HEAD` are byte-identical after a full view/return cycle.
+
+**Impossible if true:** Selecting a branch in the viewer emitting `switch`, `checkout`, `reset`,
+or any worktree mutation; the pane showing another branch's history without the header saying so;
+a second, forked log implementation for non-HEAD refs.
+
+**Verification:** `bash scripts/smoke-git-log.sh`; `bun test src/modules/git/CommitLog.test.ts`
+
+**Status:** provisional
+
+**Last refined:** 2026-07-24
+
 ### Destructive working-tree operations require confirmation
 
 **Invariant:** If an operation destroys uncommitted work (discard a file's changes, clean an

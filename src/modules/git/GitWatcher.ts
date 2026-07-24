@@ -21,6 +21,11 @@ import type { GitRepository } from './GitRepository';
 export interface GitWatcherOptions {
   debounceMs?: number;
   reconcileIntervalMilliseconds?: number;
+  /** Called after each COMPLETED background reconcile (debounced event flush or the periodic
+   *  floor). The owner hangs cheap follow-up checks here — e.g. the commit-log tip-SHA staleness
+   *  probe — so they ride the existing reconcile cadence instead of owning a second timer. Never
+   *  called after dispose(). */
+  onReconciled?: () => void;
 }
 
 // Directories always skipped when git cannot answer whether a path is ignored (no repository, or
@@ -39,12 +44,14 @@ class $GitWatcher {
   private disposed = false;
   private readonly debounceMs: number;
   private readonly reconcileIntervalMilliseconds: number;
+  private readonly onReconciled: (() => void) | null;
 
   constructor(
     readonly cwd: string,
     private readonly repository: GitRepository.Model,
     options: GitWatcherOptions = {},
   ) {
+    this.onReconciled = options.onReconciled ?? null;
     this.debounceMs = Math.max(0, options.debounceMs ?? 80);
     this.reconcileIntervalMilliseconds = Math.max(
       1,
@@ -220,7 +227,12 @@ class $GitWatcher {
 
   private flushRefresh(): void {
     this.debounceTimer = null;
-    if (!this.disposed) void this.repository.refresh({ background: true });
+    if (this.disposed) return;
+    void this.repository.refresh({ background: true }).then(() => {
+      // The follow-up (log tip-SHA probe) runs only after the status reconcile LANDED, so it reads
+      // fresh ground truth (head) — and never after disposal (no zombie refresh chain).
+      if (!this.disposed) this.onReconciled?.();
+    });
   }
 
   protected onWatcherError(directory: string): void {

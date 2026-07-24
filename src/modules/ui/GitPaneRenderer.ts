@@ -25,6 +25,9 @@ export interface GitPanelGeometry {
   changesTop: number;
   changesRows: number;
   dividerRow: number;
+  /** Sidebar-relative row of the log's branch-selector HEADER (`history: <branch>`), or -1 when no
+   *  commit log renders. The log LIST rows start one row below it. */
+  logHeaderRow: number;
   logTop: number;
   logRows: number;
 }
@@ -96,7 +99,7 @@ function $logContentWidth(workspace: Workspace.Instance): number {
 
 function $renderGitPanel(context: GitPaneRenderContext): { text: StyledText; geometry: GitPanelGeometry } {
   const { workspace, palette, innerWidth, bodyHeight, scrollbarThickness, gitActionAreaWidth, actionIcons, checkboxIcons } = context;
-  const emptyGeometry: GitPanelGeometry = { changesTop: 0, changesRows: 0, dividerRow: 0, logTop: 0, logRows: 0 };
+  const emptyGeometry: GitPanelGeometry = { changesTop: 0, changesRows: 0, dividerRow: 0, logHeaderRow: -1, logTop: 0, logRows: 0 };
   const chunks: TextChunk[] = [];
   const pushRow = (
     text: string,
@@ -214,9 +217,20 @@ function $renderGitPanel(context: GitPaneRenderContext): { text: StyledText; geo
   // commit is its header plus indented file rows (or a loading row while its lazy fetch is in
   // flight). The SAME pure row model serves the renderer here and the hit-tester/keyboard, windowed
   // by logScrollTop; only the visible commits' records (and the bounded expanded set) are consulted.
-  const logHeight = Math.max(1, bodyHeight - topHeight - 1);
   const commitLog = workspace.commitLog.value;
+  // The branch-selector HEADER takes the log region's first row (when a log exists at all).
+  const logHeight = Math.max(1, bodyHeight - topHeight - 1 - (commitLog ? 1 : 0));
   if (commitLog) {
+    // `history: <branch>` — WHICH ref the list below is sourced from. Following HEAD renders dim
+    // (the ambient state); viewing another branch renders in the modified accent with an explicit
+    // read-only note, so a non-checked-out history is never mistaken for the working branch's.
+    // Click cycles via the branch menu; 'b' cycles; Esc returns to HEAD.
+    // invariant: The log branch viewer is read-only (src/modules/git/git.invariants.md)
+    const viewedBranch = commitLog.branch.value;
+    const followingHead = viewedBranch === undefined;
+    const branchLabel = followingHead ? git.branch.value || 'HEAD' : `${viewedBranch} (view only)`;
+    pushRow(` history: ${branchLabel} ▾`, followingHead ? palette.dim : palette.modified);
+
     const flatTop = gitPanel.logScrollTop.value;
     const expandedEntries = workspace.commitExpansion.value?.entries.value ?? [];
     // O(window): at most logHeight commit records cover the flat window (expansion only DECREASES
@@ -269,10 +283,12 @@ function $renderGitPanel(context: GitPaneRenderContext): { text: StyledText; geo
   }
 
   // Geometry for the hit-testers (sidebar-relative rows; +1 = sidebar top border, +1 branch row).
+  const dividerRow = 1 + 1 + changesVisible;
   const geometry: GitPanelGeometry = {
     changesTop,
     changesRows: changesVisible,
-    dividerRow: 1 + 1 + changesVisible,
+    dividerRow,
+    logHeaderRow: commitLog ? dividerRow + 1 : -1,
     logTop: gitPanel.logScrollTop.value,
     logRows: logHeight,
   };

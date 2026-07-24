@@ -11,7 +11,11 @@ import { GitCommands } from './GitCommands';
 import { GitParsers, type CommitRecord } from './GitParsers';
 import { GitWindow } from './GitWindow';
 
-export type CommitPageFetch = (skip: number, limit: number) => Promise<CommitRecord[]>;
+export type CommitPageFetch = (
+  skip: number,
+  limit: number,
+  branch?: string,
+) => Promise<CommitRecord[]>;
 
 export interface CommitLogOptions {
   branch?: string;
@@ -23,6 +27,29 @@ class $CommitLog {
     readonly cwd: string,
     readonly options: CommitLogOptions = {},
   ) {}
+
+  // invariant: The log branch viewer is read-only (src/modules/git/git.invariants.md)
+  /** The LOCAL branch this log window is sourced from; undefined = follow HEAD (the checked-out
+   *  branch). This is the ONE ref parameter threaded through the shared page-fetch generator — the
+   *  branch viewer re-sources the SAME virtualized pipeline instead of forking a second one. */
+  get branch() {
+    return ref<string | undefined>(this.options.branch);
+  }
+
+  /** Re-source the window from another local branch (undefined = follow HEAD). The sparse cache
+   *  indexes offsets from the VIEWED ref's tip, so a branch change invalidates every entry. */
+  setBranch(branchName: string | undefined): void {
+    if (this.branch.value === branchName) return;
+    this.branch.value = branchName;
+    this.reset();
+  }
+
+  // invariant: The commit log follows repository reality (src/modules/git/git.invariants.md)
+  /** The tip SHA this window currently DISPLAYS (cache index 0), or null before the first page
+   *  loads. Comparing it against the viewed ref's real tip is the cheap staleness check. */
+  get loadedTipSha(): string | null {
+    return this.cache.value.get(0)?.sha ?? null;
+  }
 
   // invariant: Cost tracks the actively observed set (project.invariants.md)
   // Sparse cache: commit index -> record. Identity is replaced on every write so observers re-run.
@@ -52,10 +79,12 @@ class $CommitLog {
     return records;
   }
 
-  /** Fetch one page `[skip, skip+limit)`. Overridable via constructor `fetch` (tests inject a fake). */
+  /** Fetch one page `[skip, skip+limit)` from the VIEWED branch (undefined = HEAD). Overridable via
+   *  constructor `fetch` (tests inject a fake; it receives the branch as its third argument). */
   protected async fetchPage(skip: number, limit: number): Promise<CommitRecord[]> {
-    if (this.options.fetch) return this.options.fetch(skip, limit);
-    const result = await GitCommands.Class.log({ cwd: this.cwd, branch: this.options.branch, skip, limit });
+    const branch = this.branch.value;
+    if (this.options.fetch) return this.options.fetch(skip, limit, branch);
+    const result = await GitCommands.Class.log({ cwd: this.cwd, branch, skip, limit });
     if (result.code !== 0) return [];
     return GitParsers.Class.parseLog(result.stdout);
   }

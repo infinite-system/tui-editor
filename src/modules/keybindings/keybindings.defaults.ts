@@ -156,6 +156,8 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 'right' }, action: 'git.expandRight', context: 'git' },
   { chord: { key: 'left' }, action: 'git.collapseLeft', context: 'git' },
   { chord: { key: 'd' }, action: 'git.discard', context: 'git' },
+  // Cycle WHICH branch's history the commit log shows (read-only viewer; Esc returns to HEAD).
+  { chord: { key: 'b' }, action: 'git.cycleLogBranch', context: 'git' },
   { chord: { key: 'escape' }, action: 'git.leave', context: 'git' },
 
   // --- editor: movement (shift left unspecified = extend composes as a parameter) ---

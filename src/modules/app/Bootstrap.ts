@@ -432,6 +432,10 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       gitLogIndex: workspaceSet.active.gitPanel.logIndex.value,
       gitLogLoaded: workspaceSet.active.commitLog.value?.loadedCount ?? 0,
       gitLogExpanded: workspaceSet.active.commitExpansion.value?.entries.value.length ?? 0,
+      // The read-only branch VIEWER ('' = following HEAD) and the tip SHA the log DISPLAYS —
+      // driven contracts assert external-commit freshness and branch re-sourcing through these.
+      gitLogBranch: workspaceSet.active.commitLog.value?.branch.value ?? '',
+      gitLogTipSha: workspaceSet.active.commitLog.value?.loadedTipSha ?? '',
       gitRegion: workspaceSet.active.gitPanel.region.value,
       gitSelectedPaths: [...workspaceSet.active.gitPanel.selectedPaths.value],
       contextMenuOpen: contextMenu.open.value,
@@ -565,6 +569,15 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     // Inline commit expansion is produced asynchronously (the lazy name-status fetch lands after
     // Enter); observe the entries so the loading row is replaced by file rows without a keypress.
     void workspaceSet.active.commitExpansion.value?.entries.value;
+    // The commit log's sparse cache, end marker, and viewed branch are also async producers (page
+    // fetches + the tip-SHA reconcile land after the fact) — observe them so an EXTERNAL commit or
+    // a branch-viewer switch repaints the history list without any keypress.
+    const commitLogWindow = workspaceSet.active.commitLog.value;
+    if (commitLogWindow) {
+      void commitLogWindow.cache.value;
+      void commitLogWindow.knownEnd.value;
+      void commitLogWindow.branch.value;
+    }
     const gitPanel = workspaceSet.active.gitPanel;
     void gitPanel.changesIndex.value;
     void gitPanel.logIndex.value;
@@ -923,7 +936,11 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     'git.togglePanel': () => {
       workspaceSet.active.toggleGit();
       if (workspaceSet.active.focus.value === 'git') {
-        void workspaceSet.active.git.value?.refresh();
+        // Status first, THEN the tip probe (panel-open catch-up for history that moved while the
+        // panel was hidden) — reconcileLogTip reads git.head, so it runs after the refresh lands.
+        void workspaceSet.active.git.value
+          ?.refresh()
+          .then(() => workspaceSet.active.reconcileLogTip());
         void workspaceSet.active.commitLog.value?.ensureRange(0, 50);
       }
     },
@@ -993,7 +1010,19 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       normalizeChangesIndex();
       workspaceSet.active.requestDiscardAtRow(workspaceSet.active.gitPanel.changesIndex.value);
     },
-    'git.leave': () => workspaceSet.active.focusFiles(),
+    // Esc unwinds modally: viewing another branch's history returns to HEAD first; a second Esc
+    // leaves the panel. Mirrors overlay dismissal (innermost transient state closes first).
+    'git.leave': () => {
+      const activeWorkspace = workspaceSet.active;
+      if (activeWorkspace.commitLog.value?.branch.value !== undefined) {
+        activeWorkspace.selectLogBranch(null);
+        return;
+      }
+      activeWorkspace.focusFiles();
+    },
+    // 'b' cycles WHICH branch's history the log shows (read-only viewer — never a checkout);
+    // wraps through every local branch, landing on the checked-out one = back to following HEAD.
+    'git.cycleLogBranch': () => void workspaceSet.active.cycleLogBranch(),
     'tree.up': () => {
       workspaceSet.active.haltTreeScroll();
       workspaceSet.active.tree.moveSelection(-1);

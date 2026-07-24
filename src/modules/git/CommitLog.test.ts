@@ -70,6 +70,43 @@ describe('CommitLog', () => {
     expect(log.loadedCount).toBeLessThan(60); // bounded, not 5010
   });
 
+  test('setBranch re-sources the SAME pipeline: cache resets, fetch receives the new ref', async () => {
+    const fetchedBranches: Array<string | undefined> = [];
+    const fetch: CommitPageFetch = async (skip, limit, branch) => {
+      fetchedBranches.push(branch);
+      const records: CommitRecord[] = [];
+      for (let index = skip; index < skip + limit; index++) {
+        records.push({ ...makeCommit(index), subject: `${branch ?? 'HEAD'} ${index}` });
+      }
+      return records;
+    };
+    const log = new CommitLog.Class('/repo', { fetch });
+    await log.ensureRange(0, 3);
+    expect(log.rows(0, 1)[0]!.subject).toBe('HEAD 0');
+
+    log.setBranch('feature');
+    expect(log.rows(0, 3)).toEqual([undefined, undefined, undefined]); // cache dropped
+    expect(log.knownEnd.value).toBe(Number.POSITIVE_INFINITY); // end re-discovered per ref
+    await log.ensureRange(0, 3);
+    expect(log.rows(0, 1)[0]!.subject).toBe('feature 0');
+    expect(fetchedBranches).toEqual([undefined, 'feature']);
+
+    log.setBranch('feature'); // same ref — a no-op, never a spurious reset
+    expect(log.rows(0, 1)[0]).toBeDefined();
+
+    log.setBranch(undefined); // back to following HEAD
+    expect(log.rows(0, 1)[0]).toBeUndefined();
+  });
+
+  test('loadedTipSha is the displayed tip (cache index 0), null before the first page', async () => {
+    const log = new CommitLog.Class('/repo', { fetch: fakeFetch(10, []) });
+    expect(log.loadedTipSha).toBeNull();
+    await log.ensureRange(0, 3);
+    expect(log.loadedTipSha).toBe('sha0');
+    log.reset();
+    expect(log.loadedTipSha).toBeNull();
+  });
+
   test('stale ensureRange is discarded (only the newest mutates state)', async () => {
     // A slow first fetch (resolves later) must NOT overwrite a newer fetch's result.
     let releaseSlow: (() => void) | null = null;

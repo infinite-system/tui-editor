@@ -93,6 +93,9 @@ if [ "${FAST:-0}" != "1" ]; then
   step "smoke: scrollbars"  bash scripts/smoke-scrollbars.sh
   step "smoke: wrap"        bash scripts/smoke-wrap.sh
   step "smoke: git-watch"   bash scripts/smoke-git-watch.sh
+  # Commit-log freshness (external commits appear via the tip-SHA reconcile) + the read-only
+  # branch VIEWER (cycle/menu/Esc, by-SHA drill-down, worktree/HEAD byte-identical after).
+  step "smoke: git-log"     bash scripts/smoke-git-log.sh
   step "smoke: find"        bash scripts/smoke-find.sh
   step "smoke: mode coherence" bash scripts/smoke-mode-coherence.sh
   step "smoke: shortcut-help" bash scripts/smoke-shortcut-help.sh

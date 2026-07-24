@@ -235,10 +235,19 @@ function $parseLog(output: string): CommitRecord[] {
   return commits;
 }
 
+/** One branch name per line (`for-each-ref --format=%(refname:short)` output). */
+function $parseLocalBranches(output: string): string[] {
+  return output
+    .split('\n')
+    .map((branchName) => branchName.trim())
+    .filter((branchName) => branchName.length > 0);
+}
+
 class $GitParsers {
   static parseStatusPorcelainV2 = $parseStatusPorcelainV2;
   static parseLog = $parseLog;
   static parseNameStatus = $parseNameStatus;
+  static parseLocalBranches = $parseLocalBranches;
 }
 
 export namespace GitParsers {

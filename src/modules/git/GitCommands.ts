@@ -138,6 +138,23 @@ class $GitCommands {
     return this.run(cwd, ['branch', '--show-current']);
   }
 
+  /** LOCAL branch names only (`refs/heads`), sorted — the read-only branch viewer's source list.
+   *  Never touches remotes and never spawns a network fetch. */
+  static localBranches(cwd: string): Promise<GitCommandResult> {
+    return this.run(cwd, [
+      'for-each-ref',
+      'refs/heads',
+      '--format=%(refname:short)',
+      '--sort=refname',
+    ]);
+  }
+
+  /** The commit SHA a LOCAL ref points at (`HEAD`, `refs/heads/<branch>`). The cheap tip probe the
+   *  log-staleness reconcile polls — one local ref read, never a log walk, never the network. */
+  static revParse(cwd: string, ref: string): Promise<GitCommandResult> {
+    return this.run(cwd, ['rev-parse', '--verify', '--quiet', ref]);
+  }
+
   static stage(cwd: string, paths: string[]): Promise<GitCommandResult> {
     if (paths.length === 0) return Promise.resolve({ code: 0, stdout: '', stderr: '' });
     return this.run(cwd, ['add', '--', ...paths]);

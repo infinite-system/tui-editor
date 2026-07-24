@@ -43,7 +43,9 @@ class $Sidebar {
   }
 
   // Map a sidebar-relative screen row to a git-panel target using the SAME geometry the renderer wrote.
-  private gitRowAt(screenY: number): { region: 'changes' | 'log'; index: number } | null {
+  private gitRowAt(
+    screenY: number,
+  ): { region: 'changes' | 'log' | 'logHeader'; index: number } | null {
     const { sidebar, gitPanelGeometry } = this.deps;
     const geometry = gitPanelGeometry();
     const row = screenY - sidebar.y;
@@ -51,6 +53,12 @@ class $Sidebar {
       return { region: 'changes', index: geometry.changesTop + (row - 2) };
     }
     if (row > geometry.dividerRow) {
+      // A rendered branch-selector header takes the log region's first row; the flat list shifts
+      // one row down. Without a commit log (logHeaderRow -1) the old direct mapping stands.
+      if (geometry.logHeaderRow >= 0) {
+        if (row === geometry.logHeaderRow) return { region: 'logHeader', index: 0 };
+        return { region: 'log', index: geometry.logTop + (row - geometry.logHeaderRow - 1) };
+      }
       return { region: 'log', index: geometry.logTop + (row - geometry.dividerRow - 1) };
     }
     return null;
@@ -102,6 +110,38 @@ class $Sidebar {
         else if (itemId === 'git.openDiff' && firstSelectedIndex >= 0) void workspaceSet.active.openChangeAtRow(firstSelectedIndex);
       }),
     );
+  }
+
+  // Click on the log's `history: <branch>` header: a modal branch menu (same ContextMenu machinery
+  // as the changes right-click / tab-overflow dropdown — keyboard-navigable, Esc closes). The
+  // VIEWED branch carries ●, the CHECKED-OUT branch ✓. Selecting re-sources the log VIEW only —
+  // never a `git switch` (read-only viewer); picking the checked-out branch returns to HEAD-follow.
+  // invariant: The log branch viewer is read-only (src/modules/git/git.invariants.md)
+  private openLogBranchMenu(pointerX: number, pointerY: number): void {
+    const { workspaceSet, overlayCoordinator, contextMenu, renderer } = this.deps;
+    const activeWorkspace = workspaceSet.active;
+    void activeWorkspace.localLogBranches().then((branchNames) => {
+      if (branchNames.length === 0) return;
+      const checkedOutBranch = activeWorkspace.git.value?.branch.value ?? '';
+      const viewedBranch = activeWorkspace.commitLog.value?.branch.value ?? checkedOutBranch;
+      const items: ContextMenuItem[] = branchNames.map((branchName) => ({
+        id: `git.viewLogBranch:${branchName}`,
+        label: `${branchName === viewedBranch ? '●' : ' '} ${branchName}${branchName === checkedOutBranch ? ' ✓' : ''}`,
+        enabled: true,
+      }));
+      overlayCoordinator.openExclusiveOverlay('contextMenu', () =>
+        contextMenu.openAt(
+          items,
+          pointerX,
+          pointerY,
+          { width: renderer.width, height: renderer.height },
+          (itemIdentifier) => {
+            const selectedBranch = itemIdentifier.slice('git.viewLogBranch:'.length);
+            activeWorkspace.selectLogBranch(selectedBranch);
+          },
+        ),
+      );
+    });
   }
 
   // Shift+click: select the file rows in the range between the focused row and the clicked row
@@ -188,6 +228,10 @@ class $Sidebar {
         workspaceSet.active.focusGit();
         const hit = this.gitRowAt(event.y);
         if (!hit) return;
+        if (hit.region === 'logHeader') {
+          this.openLogBranchMenu(event.x, event.y); // the read-only branch VIEWER's selector
+          return;
+        }
         if (hit.region === 'changes') {
           workspaceSet.active.haltGitChangesScroll();
           const rows = this.deps.gitChangeRowsNow();

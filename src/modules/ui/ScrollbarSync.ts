@@ -326,7 +326,9 @@ class $ScrollbarSync {
     });
     const logFlatEnd = workspaceSet.active.logFlatEnd();
     const logRegion = {
-      top: geometry.dividerRow,
+      // The branch-selector header (when rendered) takes the log region's first row — the LIST the
+      // scrollbar tracks starts one row below the divider in that case.
+      top: geometry.logHeaderRow >= 0 ? geometry.dividerRow + 1 : geometry.dividerRow,
       left: 0,
       width: sidebarInnerWidth,
       height: Math.max(1, geometry.logRows),

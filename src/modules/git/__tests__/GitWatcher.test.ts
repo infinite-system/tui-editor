@@ -116,6 +116,43 @@ test('watcher disposal cancels a pending refresh', async () => {
   }
 });
 
+test('onReconciled fires after a completed background refresh and never after disposal', async () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'invar-git-watch-'));
+  let refreshCount = 0;
+  let reconciledCount = 0;
+  const repository = {
+    async refresh(): Promise<void> {
+      refreshCount++;
+    },
+  } as unknown as GitRepository.Model;
+
+  class TestGitWatcher extends GitWatcher.$Class {
+    trigger(): void {
+      this.scheduleRefresh();
+    }
+  }
+
+  const watcher = new TestGitWatcher(cwd, repository, {
+    debounceMs: 5,
+    onReconciled: () => {
+      reconciledCount++;
+    },
+  });
+  try {
+    watcher.trigger();
+    await waitUntil(() => reconciledCount === 1);
+    expect(refreshCount).toBe(1); // the follow-up rode the SAME completed refresh, no extra one
+
+    watcher.trigger();
+    watcher.dispose(); // disposal wins the race: the pending debounce never flushes
+    await wait(40);
+    expect(reconciledCount).toBe(1);
+  } finally {
+    watcher.dispose();
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test('reconcile floor refreshes after watcher failure and stops on disposal', async () => {
   const cwd = makeRepository();
   const repository = new GitRepository.Class(cwd);
