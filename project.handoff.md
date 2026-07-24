@@ -3,7 +3,40 @@
 Full authority to build the whole thing to completion (brief Definition of Done + the §5.1 gate).
 Files on disk survive context compaction; this file + `project.progress.md` are the durable memory.
 
-## RESUME ANCHOR — 2026-07-23 (CURRENT) — OVERNIGHT AUTONOMOUS RUN (user asleep)
+## RESUME ANCHOR — 2026-07-24 (CURRENT) — POST-BIG-RUN REVIEW PHASE
+
+**Ground-truth against git first — anchors lag. `origin/main` was `95f4879` at this writing.**
+
+**State: the 2026-07-23→24 big run is FULLY LANDED.** In one continuous session: bracketed paste +
+Hex dictation (app-wide), narration fixes (Escape-only barge-in, prose-not-markdown, inline-code
+speakable), voice picker + speech rate + mouse-editable sectioned settings, the whole agent-pane
+rebuild (shared ScrollableTextViewport momentum scroll + selectable/copyable transcript+composer via
+TextSelectionModel/WrapText seams, multi-line composer with movable cursor + word motion/deletion,
+framed chrome, 19-word IBR thinking indicator, human-readable AgentToolSummary), terminal gutter
+padding, Tokyo Night (accurate spec) + truecolor auto-detection, JPEG preview via ImageDecoders +
+real-pixel tiers (kitty→sixel→half-block via OpenTUI capability report), interactive permission
+prompts (Claude Agent SDK canUseTool y/n/a + session auto-allow) with CODEX PARITY (app-server
+approvals), live claude⇄codex engine switch with transcript context port, git log tip-SHA freshness +
+read-only branch viewer, AppLoader (overridable entry), namespace-pattern enforcement (hardened gate,
+zero stragglers), and ALL FOUR experiments adopted (move-line, git-blame, indent-guides + indentGuide
+palette role, bracket-match). Every branch parked (NEVER deleted — see AGENTS.md #6) and tagged
+finished/ or orphaned/.
+
+**Current phase (goal-hooked): verify → independent review → refine.** Three independent codex
+reviewers (correctness / architecture-seams / perf+docs) run against main; their reports are triaged
+(severity: fatal/scoping/flag), best advice implemented through the normal gate door. Known follow-up
+candidates: full perf-baselines run (the whole run used SKIP_PERF=1 — perf is UNMEASURED), the
+perf-baselines "measurement gap" WARN, themed terminal ANSI-16, bracket-rotation + syntax sub-roles
+from the Tokyo spec, kitty-tier over-SSH verification.
+
+**Doctrine reminders for any cold resume:** re-read /conductor SKILL.md (doctrine you merely remember
+is doctrine you will violate); one gate at a time, conductor's own heavy work included; load-canary
+watchlist = smoke-wrap + smoke-selection (re-run solo before believing a red); branches never deleted;
+verify by driving; provenance decides main.
+
+---
+
+## RESUME ANCHOR — 2026-07-23 (SUPERSEDED by the 2026-07-24 anchor above) — OVERNIGHT AUTONOMOUS RUN
 
 **Session shape:** conductor (main loop) directing a background FORK (`a0f12abb2a300d596`) + scoped
 workers. **USER IS ASLEEP → full autonomy: make ALL calls yourself, do NOT ask/defer. The fork has
