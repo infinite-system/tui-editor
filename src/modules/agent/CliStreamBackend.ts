@@ -8,7 +8,8 @@
 // fixtures; only the subprocess pumping is shell-bound (verified by driving). No ANSI anywhere.
 //
 // invariant: Agent events cross exactly one backend seam (src/modules/agent/agent.invariants.md)
-import { type AgentBackend, resolveLivePermission } from './AgentBackend';
+import type { AgentBackend } from './AgentBackend';
+import { AgentPermissions } from './AgentPermissions';
 import type { AgentEvent } from './AgentEvents';
 import { ClaudeStreamMapping } from './ClaudeStreamMapping';
 
@@ -54,7 +55,7 @@ class $CliStreamBackend implements AgentBackend {
     this.stderrTail = '';
     const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
     // Resolve the permission mode LIVE at send time so a Shift+Tab toggle since creation is honored.
-    if (resolveLivePermission(this.options.skipPermissions)) args.push('--dangerously-skip-permissions');
+    if (AgentPermissions.Class.resolveLive(this.options.skipPermissions)) args.push('--dangerously-skip-permissions');
     if (this.options.model) args.push('--model', this.options.model);
     if (this.sessionId) args.push('--resume', this.sessionId); // continue the conversation
     let child: ReturnType<typeof Bun.spawn>;

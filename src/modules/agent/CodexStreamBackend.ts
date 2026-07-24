@@ -9,7 +9,8 @@
 // resume) to avoid guessing the resume CLI shape before it can be verified.
 //
 // invariant: Agent events cross exactly one backend seam (src/modules/agent/agent.invariants.md)
-import { type AgentBackend, resolveLivePermission } from './AgentBackend';
+import type { AgentBackend } from './AgentBackend';
+import { AgentPermissions } from './AgentPermissions';
 import type { AgentEvent } from './AgentEvents';
 import { CodexStreamMapping } from './CodexStreamMapping';
 
@@ -43,7 +44,7 @@ class $CodexStreamBackend implements AgentBackend {
     this.stderrTail = '';
     const args = ['exec', '--json', '--skip-git-repo-check'];
     // Resolve the permission mode LIVE at send time so a Shift+Tab toggle since creation is honored.
-    if (resolveLivePermission(this.options.skipPermissions)) args.push('--dangerously-bypass-approvals-and-sandbox');
+    if (AgentPermissions.Class.resolveLive(this.options.skipPermissions)) args.push('--dangerously-bypass-approvals-and-sandbox');
     if (this.options.model) args.push('-m', this.options.model);
     args.push(prompt); // prompt as the final positional argument
     let child: ReturnType<typeof Bun.spawn>;
