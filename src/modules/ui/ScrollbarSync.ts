@@ -200,18 +200,30 @@ class $ScrollbarSync {
   syncPaneViewportGeometry(): boolean {
     const { workspaceSet, theme } = this.deps;
     let changed = false;
+    // This runs EVERY animation frame (editor flings, momentum glides). Only the VISIBLE sidebar
+    // view's dataset may be rebuilt/scanned here — the hidden view's rows/extents are not observed,
+    // so recomputing them at frame rate is pure waste (an editor fling was re-allocating the whole
+    // git change-row array and rescanning the expanded tree per frame). The skipped view's extents
+    // converge on the frame it becomes visible (this same hook runs after that layout).
+    // invariant: Cost tracks the actively observed set (project.invariants.md)
+    const sidebarViewValue = workspaceSet.active.sidebarView.value;
+    const filesVisible = sidebarViewValue === 'files';
+    const gitViewVisible = sidebarViewValue === 'git';
     const sidebarInnerWidth = Math.max(1, this.deps.sidebarWidth() - 2);
-    const treeViewportHeight = Math.max(1, (this.deps.sidebar.height as number) - 2);
-    const treeViewportWidth = Math.max(1, sidebarInnerWidth - this.deps.scrollbarThicknessCells());
-    if (workspaceSet.active.tree.viewportHeight.value !== treeViewportHeight) {
-      workspaceSet.active.tree.viewportHeight.value = treeViewportHeight;
-      changed = true;
+    if (filesVisible) {
+      const treeViewportHeight = Math.max(1, (this.deps.sidebar.height as number) - 2);
+      const treeViewportWidth = Math.max(1, sidebarInnerWidth - this.deps.scrollbarThicknessCells());
+      if (workspaceSet.active.tree.viewportHeight.value !== treeViewportHeight) {
+        workspaceSet.active.tree.viewportHeight.value = treeViewportHeight;
+        changed = true;
+      }
+      if (workspaceSet.active.tree.viewportWidth.value !== treeViewportWidth) {
+        workspaceSet.active.tree.viewportWidth.value = treeViewportWidth;
+        changed = true;
+      }
+      workspaceSet.active.tree.clampHorizontalScroll();
     }
-    if (workspaceSet.active.tree.viewportWidth.value !== treeViewportWidth) {
-      workspaceSet.active.tree.viewportWidth.value = treeViewportWidth;
-      changed = true;
-    }
-    workspaceSet.active.tree.clampHorizontalScroll();
+    if (!gitViewVisible) return changed;
 
     const gitAvailable = workspaceSet.active.git.value !== null;
     const changesViewportWidth = Math.max(1, sidebarInnerWidth - this.deps.scrollbarThicknessCells());

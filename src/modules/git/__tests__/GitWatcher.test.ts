@@ -4,6 +4,7 @@ import {
   mkdirSync,
   writeFileSync,
   rmSync,
+  symlinkSync,
   watch,
 } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -113,6 +114,53 @@ test('watcher disposal cancels a pending refresh', async () => {
   } finally {
     watcher.dispose();
     rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+watchTest('a runtime-created symlink is never watched and never throws from the event callback', async () => {
+  const cwd = makeRepository();
+  const externalTarget = mkdtempSync(join(tmpdir(), 'invar-git-symlink-target-'));
+  const repository = {
+    async refresh(): Promise<void> {},
+  } as unknown as GitRepository.Model;
+
+  class TestGitWatcher extends GitWatcher.$Class {
+    simulateDirectoryEvent(directory: string, changedName: string): void {
+      this.onDirectoryEvent(directory, changedName);
+    }
+  }
+
+  const watcher = new TestGitWatcher(cwd, repository, { debounceMs: 5 });
+  try {
+    const watchedBefore = watcher.watchedDirectoryCount;
+
+    // A symlink to an EXTERNAL directory appears at runtime (the initial walk is not involved):
+    // the event path must reject it — stat() would follow it and recursively watch the target.
+    symlinkSync(externalTarget, join(cwd, 'external-alias'));
+    watcher.simulateDirectoryEvent(cwd, 'external-alias');
+    expect(watcher.watchedDirectoryCount).toBe(watchedBefore);
+    expect(watcher.watchedDirectories().some((path) => path.includes('external-alias'))).toBe(false);
+
+    // A symlink to .git — following it would recursively watch the git dir itself.
+    symlinkSync(join(cwd, '.git'), join(cwd, 'git-alias'));
+    watcher.simulateDirectoryEvent(cwd, 'git-alias');
+    expect(watcher.watchedDirectoryCount).toBe(watchedBefore);
+
+    // A SELF-referential symlink: stat() throws ELOOP — from an fs.watch callback that would have
+    // been an unhandled exception killing the process. lstat + the callback guard must absorb it.
+    symlinkSync(join(cwd, 'self-loop'), join(cwd, 'self-loop'));
+    expect(() => watcher.simulateDirectoryEvent(cwd, 'self-loop')).not.toThrow();
+    expect(watcher.watchedDirectoryCount).toBe(watchedBefore);
+    expect(watcher.active).toBe(true);
+
+    // Control: a REAL runtime-created directory still gains a watch through the same path.
+    mkdirSync(join(cwd, 'real-new-directory'));
+    watcher.simulateDirectoryEvent(cwd, 'real-new-directory');
+    expect(watcher.watchedDirectories().some((path) => path.endsWith('real-new-directory'))).toBe(true);
+  } finally {
+    watcher.dispose();
+    rmSync(cwd, { recursive: true, force: true });
+    rmSync(externalTarget, { recursive: true, force: true });
   }
 });
 

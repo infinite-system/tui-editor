@@ -13,6 +13,8 @@ import { Files } from '../system/Files';
 import { ImageDecoders } from '../image/ImageDecoders';
 import { GitRepository } from '../git/GitRepository';
 import { GitWatcher } from '../git/GitWatcher';
+import { GitBlameCache } from '../git/GitBlameCache';
+import type { BlameLine } from '../git/GitBlame';
 import { CommitLog } from '../git/CommitLog';
 import { CommitExpansion } from '../git/CommitExpansion';
 import { GitPanel } from './GitPanel';
@@ -350,6 +352,10 @@ class $Workspace {
     return shallowRef<DiffRequest | null>(null);
   }
   private diffRequestToken = 0;
+  // Newest-click-wins token for the ASYNC diff-open entry points (openChangeAtRow /
+  // openCommitFileDiff): allocated before their awaits, verified before openDiffView, so
+  // completion order can never override click order.
+  private diffOpenRequestToken = 0;
   // Full text of a file at a git ref ('HEAD', '<sha>', '<sha>^', '' = index) — empty when absent at that
   // ref (added/untracked/root-commit file = the empty diff side).
   private async gitFileText(ref: string, filePath: string): Promise<string> {
@@ -473,6 +479,22 @@ class $Workspace {
     });
   }
   private gitWatcher: GitWatcher.Model | null = null;
+  // The workspace-owned current-line blame cache (bounded LRU; see GitBlameCache). Created in
+  // open(), dropped on suspend/dispose, recreated on resume — blame memory follows the live
+  // workspace, never the process lifetime.
+  private blameCacheInstance: GitBlameCache.Model | null = null;
+  protected createGitBlameCache(root: string) { return new GitBlameCache.Class(root); }
+
+  /** The blame for the ACTIVE editor's cursor line, or null (no document / not blamed yet / not
+   *  tracked). The ONE query the status bar and the status side-channel both read — a single
+   *  implementation, and the cache's stat memo makes the second same-frame read stat-free. */
+  get activeLineBlame(): BlameLine | null {
+    const blameCache = this.blameCacheInstance;
+    if (!blameCache || this.git.value === null || this.showingDiff.value) return null;
+    const editor = this.editor;
+    if (!editor.hasDocument.value || !editor.document.path) return null;
+    return blameCache.lineBlame(editor.document.path, editor.cursor.line.value);
+  }
 
   get hasLiveGitWatcher(): boolean {
     return this.gitWatcher !== null;
@@ -592,6 +614,10 @@ class $Workspace {
     // Watch the working tree so external changes refresh the panel WITHOUT any in-app action.
     this.gitWatcher?.dispose();
     this.gitWatcher = this.createGitWatcher(root, this.git.value);
+    // Current-line blame: a bounded, THIS-workspace-owned cache (disposed when the workspace goes
+    // cold — blame memory tracks the actively observed set, never every file ever visited).
+    this.blameCacheInstance?.dispose();
+    this.blameCacheInstance = this.createGitBlameCache(root);
   }
 
   // invariant: N open workspaces do not cost N live GitWatchers (workspace.invariants.md)
@@ -599,6 +625,9 @@ class $Workspace {
   suspendOwnedResources(): void {
     this.gitWatcher?.dispose();
     this.gitWatcher = null;
+    // Blame maps are per-file memory — a cold workspace drops them; resume re-blames on demand.
+    this.blameCacheInstance?.dispose();
+    this.blameCacheInstance = null;
     // A suspended (background) workspace holds no language-server subprocess; resuming recreates
     // the client lazily through the buffer seams / the next semantic request.
     // invariant: Client disposal releases the server (src/modules/lsp/lsp.invariants.md)
@@ -615,6 +644,9 @@ class $Workspace {
       this.gitWatcher = this.createGitWatcher(this.root, this.git.value);
       void this.git.value.refresh();
     }
+    if (this.root && !this.blameCacheInstance) {
+      this.blameCacheInstance = this.createGitBlameCache(this.root);
+    }
   }
 
   /** Tear down owned resources with effects/handles (the working-tree watcher, the language
@@ -623,6 +655,8 @@ class $Workspace {
     this.activeHeadTextRequestToken += 1;
     this.gitWatcher?.dispose();
     this.gitWatcher = null;
+    this.blameCacheInstance?.dispose();
+    this.blameCacheInstance = null;
     // invariant: Client disposal releases the server (src/modules/lsp/lsp.invariants.md)
     void this.languageClientInstance?.dispose();
     this.languageClientInstance = null;
@@ -740,19 +774,36 @@ class $Workspace {
    * rides the status reconcile); a viewed non-HEAD branch costs one local `rev-parse`. LOCAL refs
    * only — never a network fetch on a timer.
    */
+  // Stale-supersession token for the tip probe: a new probe OR a branch-viewer switch invalidates
+  // any probe still awaiting its rev-parse, so a late result can never reset the newly viewed
+  // branch's cache or force the viewer back to HEAD (the viewed ref moved on while it slept).
+  private logTipProbeToken = 0;
+
   async reconcileLogTip(): Promise<void> {
     if (this.sidebarView.value !== 'git') return;
     const git = this.git.value;
     const commitLog = this.commitLog.value;
     if (!git || !commitLog) return;
+    const probeToken = ++this.logTipProbeToken;
     const viewedBranch = commitLog.branch.value;
     let actualTipSha = '';
     if (viewedBranch === undefined) {
       actualTipSha = git.head.value; // fresh from the status reconcile that just landed — free
     } else {
       const result = await GitCommands.Class.revParse(commitLog.cwd, `refs/heads/${viewedBranch}`);
+      // Recheck EVERYTHING captured before the await: a newer probe, a viewer switch (token bump),
+      // a replaced log instance (workspace reopen), a changed viewed branch, or a hidden panel all
+      // make this result stale — apply nothing.
+      if (
+        probeToken !== this.logTipProbeToken ||
+        this.commitLog.value !== commitLog ||
+        commitLog.branch.value !== viewedBranch ||
+        this.sidebarView.value !== 'git'
+      ) {
+        return;
+      }
       if (result.code !== 0) {
-        this.selectLogBranch(null); // the viewed branch vanished externally — fall back to HEAD
+        this.selectLogBranch(null); // the STILL-viewed branch vanished externally — fall back to HEAD
         return;
       }
       actualTipSha = result.stdout.trim();
@@ -789,6 +840,7 @@ class $Workspace {
     const normalizedBranch =
       branchName === null || branchName === checkedOutBranch ? undefined : branchName;
     if (commitLog.branch.value === normalizedBranch) return;
+    this.logTipProbeToken++; // a viewer switch supersedes any tip probe still awaiting its rev-parse
     this.commitExpansion.value?.reset(); // expansion is commit-INDEX keyed — stale across refs
     commitLog.setBranch(normalizedBranch);
     this.gitPanel.region.value = 'log';
@@ -842,9 +894,13 @@ class $Workspace {
    *  no parent — fall back to the commit's own patch). Read-only diff document in the editor; the
    *  sidebar stays on the git panel (mirrors openChangeAtRow). */
   async openCommitFileDiff(sha: string, filePath: string): Promise<void> {
+    // Newest CLICK wins, not newest completion: a slow older open must never overwrite a faster
+    // newer one, so the token is taken BEFORE the awaits and re-verified before the view applies.
+    const requestToken = ++this.diffOpenRequestToken;
     // The two SIDES as of the commit: parent (empty on a root commit) vs the commit itself.
     const previousVersionText = await this.gitFileText(`${sha}^`, filePath);
     const currentVersionText = await this.gitFileText(sha, filePath);
+    if (requestToken !== this.diffOpenRequestToken) return; // a newer diff open superseded this one
     this.openDiffView({
       previousVersionText,
       currentVersionText,
@@ -1028,6 +1084,9 @@ class $Workspace {
     const rows = GitRows.Class.buildChangeRows(git.staged.value, git.unstaged.value, git.untracked.value);
     const row = rows[rowIndex];
     if (row?.kind !== 'file') return;
+    // Newest CLICK wins (shared token with openCommitFileDiff — the two entry points race each
+    // other too): taken before the awaits, re-verified before the view applies.
+    const requestToken = ++this.diffOpenRequestToken;
     // The two SIDES per bucket: staged = HEAD vs index; unstaged = index vs worktree; untracked = ∅ vs worktree.
     let previousVersionText = '';
     let currentVersionText = '';
@@ -1040,6 +1099,7 @@ class $Workspace {
     } else {
       currentVersionText = this.workingFileText(row.path); // untracked: no previous side
     }
+    if (requestToken !== this.diffOpenRequestToken) return; // a newer diff open superseded this one
     this.openDiffView({
       previousVersionText,
       currentVersionText,

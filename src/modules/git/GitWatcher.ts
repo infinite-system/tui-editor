@@ -13,7 +13,7 @@
 // invariant: The watcher has one disposable debounce (src/modules/git/git.invariants.md)
 // invariant: The git panel converges without watcher notifications (src/modules/git/git.invariants.md)
 // invariant: The watcher never watches inside an ignored directory (src/modules/git/git.invariants.md)
-import { watch, readdirSync, statSync, type FSWatcher } from 'node:fs';
+import { watch, readdirSync, lstatSync, type FSWatcher } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import type { GitRepository } from './GitRepository';
@@ -200,21 +200,33 @@ class $GitWatcher {
     return ignoredNames;
   }
 
-  private onDirectoryEvent(directory: string, changedName: string | Buffer | null): void {
-    if (this.disposed) return;
-    this.scheduleRefresh();
-    // A newly created subdirectory (a 'rename' that added an entry) needs its own watch — but only
-    // if git does not ignore it. Deletions or file changes resolve to no new directory and are
-    // covered by the refresh above.
-    if (!changedName) return;
-    const childName = typeof changedName === 'string' ? changedName : changedName.toString();
-    if (childName.length === 0 || childName === '.git') return;
-    const childPath = join(directory, childName);
-    if (this.directoryWatchers.has(childPath)) return;
-    const childStats = statSync(childPath, { throwIfNoEntry: false });
-    if (!childStats || !childStats.isDirectory()) return;
-    if (this.filterIgnoredChildren(directory, [childName]).length === 0) return;
-    this.walkAndWatch(childPath);
+  protected onDirectoryEvent(directory: string, changedName: string | Buffer | null): void {
+    // Nothing in this body may THROW: fs.watch invokes it outside any caller's try/catch, so an
+    // escaped exception (e.g. a filesystem race) would take down the whole process.
+    try {
+      if (this.disposed) return;
+      this.scheduleRefresh();
+      // A newly created subdirectory (a 'rename' that added an entry) needs its own watch — but only
+      // if git does not ignore it. Deletions or file changes resolve to no new directory and are
+      // covered by the refresh above.
+      if (!changedName) return;
+      const childName = typeof changedName === 'string' ? changedName : changedName.toString();
+      if (childName.length === 0 || childName === '.git') return;
+      const childPath = join(directory, childName);
+      if (this.directoryWatchers.has(childPath)) return;
+      // lstat, NEVER stat: the initial walk's Dirent.isDirectory() does not follow symlinks, and the
+      // runtime path must hold the same boundary — stat() follows links, so a symlink to .git or to
+      // an external tree would be recursively watched, and a self-referential link makes stat()
+      // throw ELOOP. lstat reports the link itself; a symlink is rejected regardless of its target.
+      // invariant: The watcher never watches inside an ignored directory (src/modules/git/git.invariants.md)
+      const childStats = lstatSync(childPath, { throwIfNoEntry: false });
+      if (!childStats || childStats.isSymbolicLink() || !childStats.isDirectory()) return;
+      if (this.filterIgnoredChildren(directory, [childName]).length === 0) return;
+      this.walkAndWatch(childPath);
+    } catch {
+      // A raced/vanished path or unreadable entry: the refresh above (or the reconcile floor)
+      // still converges git state — never let the watcher callback throw.
+    }
   }
 
   // invariant: The watcher has one disposable debounce (src/modules/git/git.invariants.md)

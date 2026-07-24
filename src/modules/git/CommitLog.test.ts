@@ -51,6 +51,26 @@ describe('CommitLog', () => {
     expect(log.rows(0, 3)).toEqual([undefined, undefined, undefined]);
   });
 
+  test('a FAILED fetch is not end-of-history: knownEnd stays put and a retry fills the rows', async () => {
+    let failNext = true;
+    const fetch: CommitPageFetch = async (skip, limit) => {
+      if (failNext) return null; // command failure — NOT an empty page
+      const records: CommitRecord[] = [];
+      for (let index = skip; index < skip + limit; index++) records.push(makeCommit(index));
+      return records;
+    };
+    const log = new CommitLog.Class('/repo', { fetch });
+    await log.ensureRange(0, 5);
+    // The failure must not have been cached as EOF (the empty-repository lie) — the rows stay
+    // unloaded placeholders and the extent stays unknown.
+    expect(log.knownEnd.value).toBe(Number.POSITIVE_INFINITY);
+    expect(log.rows(0, 5)).toEqual([undefined, undefined, undefined, undefined, undefined]);
+
+    failNext = false; // the transient failure clears (e.g. index lock released)
+    await log.ensureRange(0, 5);
+    expect(log.rows(0, 5).every((row) => row !== undefined)).toBe(true);
+  });
+
   test('a short page marks knownEnd (end of history)', async () => {
     const calls: Array<{ skip: number; limit: number }> = [];
     const log = new CommitLog.Class('/repo', { fetch: fakeFetch(7, calls) }); // only 7 commits

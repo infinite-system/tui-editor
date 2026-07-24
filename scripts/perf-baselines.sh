@@ -14,10 +14,15 @@
 #   4. INPUT LATENCY    keypress -> status-file cursor flush, 20 presses, p50/p95, 20ms poll grain.
 #
 # Verdicts are printed as PASS/FAIL against the brief's targets (idle CPU ~0 (<2%), frame delta 0,
-# idle memory < 100MB). Most target misses are DATA, not script errors (they inform, they don't
-# block). The ONE exception is idle frame quiescence: frame-delta==0 is an INVARIANT ('rendering is
-# demand-driven'), so a violation makes the script EXIT NON-ZERO — a check that doesn't block is not
-# enforcement. Exit code = measurements-that-could-not-be-taken + idle-quiescence violations.
+# idle memory < 100MB). DISTINCT EXIT CODES so a caller can tell WHY the run is not clean:
+#   0  every measurement taken, every target met
+#   1  idle-quiescence INVARIANT violated ('rendering is demand-driven') — always blocks
+#   2  measurement failure (a precondition did not hold: file never opened, cursor never moved,
+#      cycle incomplete, session not ready) — the printed numbers CANNOT support their claims
+#   3  all measurements valid but a target missed (CPU/memory budget) — data, surfaced not hidden
+# Preconditions are HARD: a phase whose setup fails counts a measurement failure and its numbers
+# are not reported as evidence. Idle allows exactly ONE frame in the final window IF a minute
+# boundary crossed it (the status clock legitimately wakes once per minute).
 # Rerunnable; traps kill every tmux session it creates.
 set -uo pipefail
 
@@ -68,6 +73,7 @@ status_frame_of() { sed -n 's/^  "frame": \([0-9]*\),*$/\1/p' "$(session_status_
 status_focus_of() { sed -n 's/^  "focus": "\(.*\)",*$/\1/p' "$(session_status_path "$1")" | head -1; }
 status_active_buffer_of() { sed -n 's/^  "activeBuffer": "\(.*\)",*$/\1/p' "$(session_status_path "$1")" | head -1; }
 status_cursor_column_of() { sed -n 's/.*"col": \([0-9]*\).*/\1/p' "$(session_status_path "$1")" | head -1; }
+status_number_of() { sed -n "s/^  \"$2\": \([0-9-]*\),*\$/\1/p" "$(session_status_path "$1")" | head -1; }
 
 # Percent CPU over a window: (tick_delta / (seconds * CLK_TCK)) * 100.
 window_cpu_percent() { awk -v ticks="$1" -v seconds="$2" -v hz="$CLOCK_TICKS_PER_SECOND" \
@@ -141,6 +147,9 @@ record_spawned_bun_process() { # remember every bun pid this run creates for the
 measurement_failures=0
 # Idle frame quiescence is an INVARIANT, not a soft target: a violation blocks (non-zero exit).
 idle_quiescence_violations=0
+# Budget misses on otherwise-valid measurements (CPU %, memory MB): reported and reflected in the
+# exit code (3), DISTINCT from a broken measurement — a miss is data, a broken probe is not.
+target_misses=0
 echo "== perf-baselines $(date -Is) on $(uname -m) $(uname -s) · CLK_TCK=$CLOCK_TICKS_PER_SECOND · targetFps=30 =="
 bun_process_count_before="$(pgrep -c -f 'bun run src/main\.ts' || true)"
 echo "pre-existing 'bun run src/main.ts' processes: $bun_process_count_before (left untouched; other agents/demos may churn this count)"
@@ -156,8 +165,13 @@ else
   idle_bun_process_id="$(bun_process_id_of_session "$IDLE_SESSION")" || idle_bun_process_id=""
   record_spawned_bun_process "$idle_bun_process_id"
   echo "  bun pid: ${idle_bun_process_id:-NOT FOUND}"
-  # Brief interaction: open a file, focus the editor, type one character.
-  open_any_file_from_tree "$IDLE_SESSION" || echo "  WARN no buffer opened before idling"
+  # Brief interaction: open a file, focus the editor, type one character. This is a PRECONDITION —
+  # "idle with an open file" measured without an open file supports nothing, so failure is a HARD
+  # measurement failure and the phase's samples are not taken.
+  if ! open_any_file_from_tree "$IDLE_SESSION"; then
+    echo "  ERROR no buffer opened before idling — idle phase INVALID (precondition failed)"
+    measurement_failures=$((measurement_failures + 1))
+  else
   tmux send-keys -t "$IDLE_SESSION" Right; sleep 0.3
   tmux send-keys -t "$IDLE_SESSION" -l "x"; sleep 0.3
   harness settle "$IDLE_SESSION" 10 >/dev/null 2>&1
@@ -166,22 +180,31 @@ else
   frame_at_0="$(status_frame_of "$IDLE_SESSION")"; ticks_at_0="$(cpu_ticks_of "$idle_bun_process_id")"
   sleep 5
   frame_at_5="$(status_frame_of "$IDLE_SESSION")"; ticks_at_5="$(cpu_ticks_of "$idle_bun_process_id")"
+  epoch_minute_at_5=$(( $(date +%s) / 60 ))
   sleep 5
   frame_at_10="$(status_frame_of "$IDLE_SESSION")"; ticks_at_10="$(cpu_ticks_of "$idle_bun_process_id")"
+  epoch_minute_at_10=$(( $(date +%s) / 60 ))
 
   frame_delta_first_window=$((frame_at_5 - frame_at_0))
   frame_delta_final_window=$((frame_at_10 - frame_at_5))
   cpu_percent_first_window="$(window_cpu_percent $((ticks_at_5 - ticks_at_0)) 5)"
   cpu_percent_final_window="$(window_cpu_percent $((ticks_at_10 - ticks_at_5)) 5)"
   lifetime_cpu_percent="$(ps -o %cpu= -p "$idle_bun_process_id" | tr -d ' ')"
+  # The status-bar clock intentionally requests ONE frame when the wall-clock minute changes. If a
+  # minute boundary crossed the final window, exactly one frame is the CORRECT behavior, not a
+  # violation — allowing it kills the wall-clock-alignment false-FAIL without loosening the invariant.
+  allowed_final_window_frames=0
+  [ "$epoch_minute_at_10" -ne "$epoch_minute_at_5" ] && allowed_final_window_frames=1
 
   echo "  frame counter t=0/5/10s: $frame_at_0 / $frame_at_5 / $frame_at_10"
   echo "  frame delta 0-5s: $frame_delta_first_window (settle tail allowed)"
-  echo "  frame delta 5-10s (FINAL window): $frame_delta_final_window  target: 0"
+  echo "  frame delta 5-10s (FINAL window): $frame_delta_final_window  target: $allowed_final_window_frames (minute-boundary crossed: $([ "$allowed_final_window_frames" -eq 1 ] && echo yes — one clock wake allowed || echo no))"
   echo "  windowed CPU%: 0-5s=$cpu_percent_first_window  5-10s=$cpu_percent_final_window  target: <2.0"
   echo "  ps lifetime-average CPU%: $lifetime_cpu_percent (cumulative since start — NOT the idle figure)"
   echo "  RSS at rest (fixtures + one open file): $(kilobytes_to_megabytes "$idle_rss_after_boot_kb") MB"
-  if [ "$frame_delta_final_window" -eq 0 ]; then echo "  PASS idle frame quiescence"; else
+  if [ "$frame_delta_final_window" -le "$allowed_final_window_frames" ]; then
+    echo "  PASS idle frame quiescence"
+  else
     frames_per_second="$(awk -v d="$frame_delta_final_window" 'BEGIN{printf "%.1f", d/5}')"
     echo "  FAIL idle frame quiescence: $frames_per_second frames/s in the final 5s window"
     echo "        evidence: rate ~= targetFps(30) -> the RENDER LOOP itself, not a momentum/drag tick"
@@ -189,9 +212,13 @@ else
     # BLOCK (non-zero exit), otherwise a live idle loop ships as a false-green (as it once did).
     idle_quiescence_violations=$((idle_quiescence_violations + 1))
   fi
-  awk -v cpu="$cpu_percent_final_window" 'BEGIN{exit !(cpu < 2.0)}' \
-    && echo "  PASS idle CPU <2% ($cpu_percent_final_window%)" \
-    || echo "  FAIL idle CPU <2% ($cpu_percent_final_window%)"
+  if awk -v cpu="$cpu_percent_final_window" 'BEGIN{exit !(cpu < 2.0)}'; then
+    echo "  PASS idle CPU <2% ($cpu_percent_final_window%)"
+  else
+    echo "  FAIL idle CPU <2% ($cpu_percent_final_window%) — target miss"
+    target_misses=$((target_misses + 1))
+  fi
+  fi
 fi
 tmux kill-session -t "$IDLE_SESSION" 2>/dev/null
 
@@ -228,28 +255,60 @@ else
     rss_after_large_open_kb="$(resident_kilobytes_of "$memory_bun_process_id")"
     echo "  RSS after opening the 5MB/50k-line file: $(kilobytes_to_megabytes "$rss_after_large_open_kb") MB"
 
-    echo "  re-open cycles (open small.txt then big.txt again; open REPLACES the single document):"
+    echo "  re-open cycles (REAL close→dispose→reopen: Ctrl+W closes the tab, tree reopens it —"
+    echo "  asserted through bufferTabCount/bufferLiveCount so each cycle provably disposes):"
     cycle_rss_values=()
+    cycles_completed=0
     for cycle in 1 2 3; do
-      open_file_from_tree "$MEMORY_SESSION" "small.txt" || break
+      tabs_before_close="$(status_number_of "$MEMORY_SESSION" bufferTabCount)"
+      tmux send-keys -t "$MEMORY_SESSION" C-w   # buffer.close — closes the active (big.txt) tab
+      sleep 0.6; harness settle "$MEMORY_SESSION" 10 >/dev/null 2>&1
+      tabs_after_close="$(status_number_of "$MEMORY_SESSION" bufferTabCount)"
+      if [ -z "$tabs_after_close" ] || [ -z "$tabs_before_close" ] \
+         || [ "$tabs_after_close" -ge "$tabs_before_close" ]; then
+        echo "    cycle $cycle: ERROR close did not reduce bufferTabCount ($tabs_before_close -> ${tabs_after_close:-?}) — cycle INVALID"
+        break
+      fi
       open_file_from_tree "$MEMORY_SESSION" "big.txt" || break
       harness settle "$MEMORY_SESSION" 10 >/dev/null 2>&1; sleep 1
+      tabs_after_reopen="$(status_number_of "$MEMORY_SESSION" bufferTabCount)"
+      live_after_reopen="$(status_number_of "$MEMORY_SESSION" bufferLiveCount)"
+      if [ "${tabs_after_reopen:-0}" -ne $((tabs_after_close + 1)) ] || [ "${live_after_reopen:-0}" -lt 1 ]; then
+        echo "    cycle $cycle: ERROR reopen did not recreate the tab (tabs=$tabs_after_reopen live=$live_after_reopen) — cycle INVALID"
+        break
+      fi
       cycle_rss_kb="$(resident_kilobytes_of "$memory_bun_process_id")"
       cycle_rss_values+=("$cycle_rss_kb")
-      echo "    cycle $cycle: $(kilobytes_to_megabytes "$cycle_rss_kb") MB"
+      cycles_completed=$((cycles_completed + 1))
+      echo "    cycle $cycle: closed (tabs $tabs_before_close->$tabs_after_close) reopened (tabs $tabs_after_reopen, live $live_after_reopen), RSS $(kilobytes_to_megabytes "$cycle_rss_kb") MB"
     done
-    if [ "${#cycle_rss_values[@]}" -eq 3 ]; then
+    if [ "$cycles_completed" -eq 3 ]; then
       cycle_growth_kb=$((cycle_rss_values[2] - cycle_rss_values[0]))
-      echo "  growth cycle1 -> cycle3: $(kilobytes_to_megabytes "$cycle_growth_kb") MB (flat = no leak signal; GC slack makes small negatives/positives normal)"
+      # Trend check with a THRESHOLD (was: any delta printed as "flat"): 3 dispose/recreate cycles
+      # of the same 5MB document should be near-flat; sustained growth beyond GC slack is a leak
+      # signal and counts as a target miss.
+      cycle_growth_limit_kb=16384
+      echo "  growth cycle1 -> cycle3: $(kilobytes_to_megabytes "$cycle_growth_kb") MB (leak-signal threshold: $(kilobytes_to_megabytes "$cycle_growth_limit_kb") MB; GC slack makes small deltas normal)"
+      if [ "$cycle_growth_kb" -gt "$cycle_growth_limit_kb" ]; then
+        echo "  FAIL re-open cycle growth exceeds the leak threshold — target miss"
+        target_misses=$((target_misses + 1))
+      else
+        echo "  PASS re-open cycles near-flat (no leak signal)"
+      fi
     else
-      echo "  WARN not all re-open cycles completed"; measurement_failures=$((measurement_failures + 1))
+      echo "  ERROR not all re-open cycles completed validly ($cycles_completed/3)"; measurement_failures=$((measurement_failures + 1))
     fi
 
     echo "  waiting 60s idle (large file open) ..."
     sleep 60
     rss_after_idle_kb="$(resident_kilobytes_of "$memory_bun_process_id")"
     echo "  RSS after 60s idle: $(kilobytes_to_megabytes "$rss_after_idle_kb") MB  target: <100 MB"
-    if [ "$rss_after_idle_kb" -lt 102400 ]; then echo "  PASS idle memory <100MB"; else echo "  FAIL idle memory <100MB"; fi
+    if [ "$rss_after_idle_kb" -lt 102400 ]; then
+      echo "  PASS idle memory <100MB"
+    else
+      echo "  FAIL idle memory <100MB — target miss (see project.performance-baselines.md for the current documented reality)"
+      target_misses=$((target_misses + 1))
+    fi
     app_delta_kb=$((rss_after_boot_kb - bun_floor_rss_kb))
     echo "  itemization: bun floor $(kilobytes_to_megabytes "$bun_floor_rss_kb") MB + OpenTUI/app delta $(kilobytes_to_megabytes "$app_delta_kb") MB = boot $(kilobytes_to_megabytes "$rss_after_boot_kb") MB"
   else
@@ -263,6 +322,7 @@ rm -rf "$SCRATCH_WORKSPACE"; SCRATCH_WORKSPACE=""
 echo ""
 echo "== 3. LIFECYCLE (5x launch -> ready -> Ctrl+Q; clean exit; no orphans) =="
 lifecycle_boot_times=()
+lifecycle_in_app_boot_times=()
 lifecycle_clean_exits=0
 for cycle in 1 2 3 4 5; do
   LIFECYCLE_SESSION="${RUN_TAG}lc$cycle"
@@ -271,6 +331,10 @@ for cycle in 1 2 3 4 5; do
   if wait_for_ready "$LIFECYCLE_SESSION" 25; then
     boot_milliseconds=$(( $(now_milliseconds) - launch_started_at ))
     lifecycle_boot_times+=("$boot_milliseconds")
+    # The app timestamps its own boot (performance.now() at markStarted, published as
+    # bootDurationMilliseconds) — the BARE process figure, free of tmux/login-shell overhead.
+    in_app_boot_milliseconds="$(status_number_of "$LIFECYCLE_SESSION" bootDurationMilliseconds)"
+    lifecycle_in_app_boot_times+=("${in_app_boot_milliseconds:-?}")
     lifecycle_bun_process_id="$(bun_process_id_of_session "$LIFECYCLE_SESSION")"
     record_spawned_bun_process "$lifecycle_bun_process_id"
     tmux send-keys -t "$LIFECYCLE_SESSION" C-q
@@ -292,7 +356,9 @@ done
 if [ "${#lifecycle_boot_times[@]}" -gt 0 ]; then
   echo "  boot-to-ready (harness-inclusive: tmux + login shell + bun + first quiescent frame):" \
     "$(printf '%s ' "${lifecycle_boot_times[@]}")ms"
-  echo "  note: 20ms ready-poll grain; the brief's <150ms cold-start target is for the BARE process, not this harness path"
+  echo "  boot IN-APP (performance.now() at markStarted — the bare-process figure the brief's" \
+    "cold-start target is about): $(printf '%s ' "${lifecycle_in_app_boot_times[@]}")ms"
+  echo "  note: 20ms ready-poll grain on the harness-inclusive figure"
 fi
 [ "$lifecycle_clean_exits" -eq 5 ] && echo "  PASS 5/5 clean exits" || echo "  FAIL clean exits: $lifecycle_clean_exits/5"
 
@@ -304,31 +370,57 @@ launch_session "$LATENCY_SESSION" "$ROOT/fixtures"
 if ! wait_for_ready "$LATENCY_SESSION" 25; then
   echo "  ERROR latency session never became ready"; measurement_failures=$((measurement_failures + 1))
 else
-  open_any_file_from_tree "$LATENCY_SESSION" || echo "  WARN no buffer opened"
+  # PRECONDITION: a buffer must be open and the cursor must actually MOVE per press — a sample
+  # from a press whose cursor never changed is a timeout artifact, not a latency measurement.
+  if ! open_any_file_from_tree "$LATENCY_SESSION"; then
+    echo "  ERROR no buffer opened — latency phase INVALID (precondition failed)"
+    measurement_failures=$((measurement_failures + 1))
+  else
   tmux send-keys -t "$LATENCY_SESSION" Right; sleep 0.3   # focus the editor
   tmux send-keys -t "$LATENCY_SESSION" Right Right; sleep 0.4  # get off column 0 so Left/Right both move
   latency_samples=()
+  latency_timeout_presses=0
   for press in $(seq 1 20); do
     if [ $((press % 2)) -eq 1 ]; then key_to_send="Right"; else key_to_send="Left"; fi
     column_before="$(status_cursor_column_of "$LATENCY_SESSION")"
     press_sent_at="$(now_milliseconds)"
     tmux send-keys -t "$LATENCY_SESSION" "$key_to_send"
     poll_deadline=$((press_sent_at + 3000))
+    cursor_moved=0
     while [ "$(now_milliseconds)" -lt "$poll_deadline" ]; do
-      [ "$(status_cursor_column_of "$LATENCY_SESSION")" != "$column_before" ] && break
+      if [ "$(status_cursor_column_of "$LATENCY_SESSION")" != "$column_before" ]; then cursor_moved=1; break; fi
       sleep 0.02
     done
-    flush_observed_at="$(now_milliseconds)"
-    latency_samples+=("$((flush_observed_at - press_sent_at))")
+    if [ "$cursor_moved" -eq 1 ]; then
+      flush_observed_at="$(now_milliseconds)"
+      latency_samples+=("$((flush_observed_at - press_sent_at))")
+    else
+      # The cursor never changed: DISCARD (a 3000ms timeout appended as a sample would poison the
+      # percentiles while looking like data).
+      latency_timeout_presses=$((latency_timeout_presses + 1))
+    fi
     sleep 0.1
   done
-  sorted_samples="$(printf '%s\n' "${latency_samples[@]}" | sort -n)"
-  p50_milliseconds="$(echo "$sorted_samples" | sed -n '10p')"
-  p95_milliseconds="$(echo "$sorted_samples" | sed -n '19p')"
-  echo "  samples (ms): $(printf '%s ' "${latency_samples[@]}")"
-  echo "  p50=${p50_milliseconds}ms p95=${p95_milliseconds}ms over 20 presses"
-  echo "  note: 20ms poll grain + ~1-3ms timestamp/read cost; the status flush itself is quantized to the ~33ms frame cadence,"
-  echo "        so this is an UPPER BOUND proxy for input-to-screen latency, not the render latency itself"
+  valid_sample_count="${#latency_samples[@]}"
+  if [ "$latency_timeout_presses" -gt 0 ]; then
+    echo "  $latency_timeout_presses press(es) timed out without a cursor change — discarded, counted as measurement failure"
+    measurement_failures=$((measurement_failures + 1))
+  fi
+  if [ "$valid_sample_count" -ge 15 ]; then
+    sorted_samples="$(printf '%s\n' "${latency_samples[@]}" | sort -n)"
+    p50_index=$(( (valid_sample_count + 1) / 2 ))
+    p95_index=$(( (valid_sample_count * 95 + 99) / 100 ))
+    p50_milliseconds="$(echo "$sorted_samples" | sed -n "${p50_index}p")"
+    p95_milliseconds="$(echo "$sorted_samples" | sed -n "${p95_index}p")"
+    echo "  samples (ms): $(printf '%s ' "${latency_samples[@]}")"
+    echo "  p50=${p50_milliseconds}ms p95=${p95_milliseconds}ms over $valid_sample_count valid presses"
+    echo "  note: 20ms poll grain + ~1-3ms timestamp/read cost; the status flush itself is quantized to the ~33ms frame cadence,"
+    echo "        so this is an UPPER BOUND proxy for input-to-screen latency, not the render latency itself"
+  else
+    echo "  ERROR only $valid_sample_count/20 valid samples — too few for percentiles, latency phase INVALID"
+    measurement_failures=$((measurement_failures + 1))
+  fi
+  fi
 fi
 tmux kill-session -t "$LATENCY_SESSION" 2>/dev/null
 
@@ -349,5 +441,16 @@ else
   measurement_failures=$((measurement_failures + 1))
 fi
 bun_process_count_final="$(pgrep -c -f 'bun run src/main\.ts' || true)"
-echo "== wrap-up: global bun-editor count before=$bun_process_count_before final=$bun_process_count_final (informational) · measurement failures=$measurement_failures · idle-quiescence violations=$idle_quiescence_violations =="
-exit "$(( measurement_failures + idle_quiescence_violations ))"
+echo "== wrap-up: global bun-editor count before=$bun_process_count_before final=$bun_process_count_final (informational) · measurement failures=$measurement_failures · idle-quiescence violations=$idle_quiescence_violations · target misses=$target_misses =="
+# DISTINCT exit codes (documented in the header): invariant beats measurement beats target-miss.
+if [ "$idle_quiescence_violations" -gt 0 ]; then
+  echo "EXIT 1 — idle-quiescence INVARIANT violated"
+  exit 1
+elif [ "$measurement_failures" -gt 0 ]; then
+  echo "EXIT 2 — measurement failure(s): the affected numbers cannot support their claims"
+  exit 2
+elif [ "$target_misses" -gt 0 ]; then
+  echo "EXIT 3 — all measurements valid; $target_misses budget target(s) missed"
+  exit 3
+fi
+exit 0

@@ -40,7 +40,6 @@ import { TerminalSession } from './TerminalSession';
 import { PanelHost } from '../ui/PanelHost';
 import { TerminalFactory } from '../terminal/TerminalFactory';
 import { AgentFactory } from '../agent/AgentFactory';
-import { GitBlame } from '../git/GitBlame';
 import { BracketMatch } from '../editor/BracketMatch';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { AgentPaneContent, type AgentEnginePort } from '../agent/AgentPaneContent';
@@ -361,10 +360,13 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     () => settings.wordWrap.value,
     () => workspaceSet.active.editor.revealCursor(),
   );
-  // GitWatcher already reconciles into GitRepository.lastRefreshAt. Reuse that reactive completion
-  // signal to refresh the active HEAD blob; no second filesystem watcher or diff-fetch path exists.
+  // Refresh the active HEAD blob when HEAD actually MOVES — key on the head SHA, never on
+  // lastRefreshAt: the reconcile floor bumps the timestamp every 5s even when nothing changed,
+  // which made this watcher spawn a redundant `git show HEAD:<file>` per tick (~12/min at idle).
+  // HEAD:<path> can only change when the head sha changes; tab switches and saves refresh through
+  // their own refreshActiveHeadText call sites.
   app.$watch(
-    () => workspaceSet.active.git.value?.lastRefreshAt.value ?? null,
+    () => workspaceSet.active.git.value?.head.value ?? null,
     () => void workspaceSet.active.refreshActiveHeadText(),
   );
   // Language-server document sync: every edit bumps document.revision; this targeted watch pushes
@@ -533,18 +535,8 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       activeFileIsImage: workspaceSet.active.activeFileIsImage,
       // Current-line git blame author (GitLens parity) — the driving smoke reads this to prove a tracked
       // line shows its author and a non-git file shows none. '' when no document / not blamed.
-      currentLineBlameAuthor: (() => {
-        const editor = workspaceSet.active.editor;
-        if (!editor.hasDocument.value || !editor.document.path) return '';
-        return (
-          GitBlame.Class.lineBlame({
-            repoRoot: workspaceSet.active.root,
-            isRepo: workspaceSet.active.git.value !== null,
-            documentPath: editor.document.path,
-            lineNumber: editor.cursor.line.value,
-          })?.author ?? ''
-        );
-      })(),
+      // Same single query surface the status bar uses (workspace-owned bounded cache).
+      currentLineBlameAuthor: workspaceSet.active.activeLineBlame?.author ?? '',
       // Bracket match: the matched partner cell for the cursor's bracket (line,col 0-based), or -1/-1
       // when the cursor is not on a bracket — the driving smoke reads this alongside the frame bg.
       matchingBracketLine: (() => {

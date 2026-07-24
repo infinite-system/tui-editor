@@ -27,10 +27,13 @@ export interface WrapSegment {
   startDisplayColumn: number;
 }
 
-/** The minimal document surface the window walk needs (TextDocument satisfies it). */
+/** The minimal document surface the window walk needs (TextDocument satisfies it). `revision` is
+ *  optional (plain test doubles omit it): when present it fast-paths the cumulative index sync —
+ *  an unchanged revision skips even the reference sweep. */
 export interface WrappableDocument {
   lineCount: number;
   line(index: number): string;
+  revision?: { value: number };
 }
 
 export interface VisualRow {
@@ -264,58 +267,156 @@ function $scrollTopToRevealCursor(
   return top;
 }
 
+// --- the cumulative visual-row index -----------------------------------------------------------
+// The extent/locate queries below (scroll extent, line→visual-row, visual-row→line) used to walk
+// EVERY line per call — and they are called per RootView update, so a 50k-line wrapped file paid
+// O(document) per FRAME (the 512-entry segment memo thrashes on a sequential pass, so the "memoized"
+// walk recomputed wraps too). This index makes them O(1)/O(log n) per call with an O(delta) sync
+// per EDIT: per-line row counts survive between revisions, and an edit re-wraps only the changed
+// middle (head/tail trimmed by line-reference equality — TextDocument mutates only edited entries
+// of its line array, so untouched lines keep their string identity).
+// invariant: Cost tracks the actively observed set (project.invariants.md)
+
+interface DocumentWrapIndex {
+  width: number;
+  /** The document revision this index was synced at (-1 = unknown, resync on every query). */
+  revision: number;
+  /** The exact line-string references seen at last sync (identity = unchanged, never re-wrapped). */
+  lineTexts: string[];
+  /** Visual rows per line, aligned with lineTexts. */
+  rowCounts: number[];
+  /** prefix[i] = visual rows of all lines BEFORE line i; length lineCount+1 (last = total). */
+  prefix: number[];
+}
+
+// Per-document index, GC-bound to the document itself. One width per document: a width change
+// (resize / gutter change) rebuilds — widths do not thrash frame-to-frame.
+const wrapIndexByDocument = new WeakMap<WrappableDocument, DocumentWrapIndex>();
+
+function buildPrefix(rowCounts: number[]): number[] {
+  const prefix: number[] = new Array(rowCounts.length + 1);
+  prefix[0] = 0;
+  for (let index = 0; index < rowCounts.length; index++) {
+    prefix[index + 1] = (prefix[index] ?? 0) + (rowCounts[index] ?? 1);
+  }
+  return prefix;
+}
+
+/** Bring the document's index current for `wrapWidth`: full build on first sight or width change;
+ *  otherwise a head/tail identity trim re-wraps only the edited middle (O(delta) wraps + O(n)
+ *  reference compares + O(n) prefix additions — no grapheme work for untouched lines). */
+function syncWrapIndex(document: WrappableDocument, wrapWidth: number): DocumentWrapIndex {
+  const width = Math.max(1, Math.floor(wrapWidth));
+  const revision = document.revision ? document.revision.value : -1;
+  const lineCount = document.lineCount;
+  let index = wrapIndexByDocument.get(document);
+
+  if (!index || index.width !== width) {
+    const lineTexts: string[] = new Array(lineCount);
+    const rowCounts: number[] = new Array(lineCount);
+    for (let lineIndex = 0; lineIndex < lineCount; lineIndex++) {
+      const lineText = document.line(lineIndex);
+      lineTexts[lineIndex] = lineText;
+      rowCounts[lineIndex] = $wrapLine(lineText, width).length;
+    }
+    index = { width, revision, lineTexts, rowCounts, prefix: buildPrefix(rowCounts) };
+    wrapIndexByDocument.set(document, index);
+    return index;
+  }
+
+  // Same revision (and a revision is known): nothing moved — the O(1) fast path per query.
+  if (index.revision === revision && revision !== -1 && index.lineTexts.length === lineCount) {
+    return index;
+  }
+
+  // Head/tail identity trim: find the unchanged prefix and suffix by string REFERENCE, re-wrap only
+  // the middle. Handles in-place edits AND line insertions/deletions (the tail realigns by offset).
+  const previousTexts = index.lineTexts;
+  const previousCounts = index.rowCounts;
+  const previousCount = previousTexts.length;
+  let head = 0;
+  const maxHead = Math.min(previousCount, lineCount);
+  while (head < maxHead && previousTexts[head] === document.line(head)) head++;
+  let tail = 0;
+  const maxTail = Math.min(previousCount, lineCount) - head;
+  while (tail < maxTail && previousTexts[previousCount - 1 - tail] === document.line(lineCount - 1 - tail)) tail++;
+
+  const lineTexts: string[] = new Array(lineCount);
+  const rowCounts: number[] = new Array(lineCount);
+  for (let lineIndex = 0; lineIndex < head; lineIndex++) {
+    lineTexts[lineIndex] = previousTexts[lineIndex] as string;
+    rowCounts[lineIndex] = previousCounts[lineIndex] as number;
+  }
+  for (let lineIndex = head; lineIndex < lineCount - tail; lineIndex++) {
+    const lineText = document.line(lineIndex);
+    lineTexts[lineIndex] = lineText;
+    rowCounts[lineIndex] = $wrapLine(lineText, width).length; // the DELTA — only edited lines wrap
+  }
+  for (let offsetFromEnd = 1; offsetFromEnd <= tail; offsetFromEnd++) {
+    lineTexts[lineCount - offsetFromEnd] = previousTexts[previousCount - offsetFromEnd] as string;
+    rowCounts[lineCount - offsetFromEnd] = previousCounts[previousCount - offsetFromEnd] as number;
+  }
+
+  index.revision = revision;
+  index.lineTexts = lineTexts;
+  index.rowCounts = rowCounts;
+  index.prefix = buildPrefix(rowCounts);
+  return index;
+}
+
 /**
  * Total visual rows the whole document occupies at `wrapWidth` — the wrapped scroll EXTENT. This is the
  * scrollbar's scrollSize and the max-scroll basis in wrap mode (a logical line count under-reports it,
- * which is the "scrollbar wrong / can't reach the bottom" bug). O(lines) but every wrapLine is memoized
- * (content-keyed), so after the first pass it is O(lines) memo lookups.
+ * which is the "scrollbar wrong / can't reach the bottom" bug). O(1) off the cumulative index
+ * (O(delta) sync after an edit) — this is called per frame, so it must never walk the document.
  */
 function $totalVisualRows(document: WrappableDocument, wrapWidth: number): number {
-  let total = 0;
-  for (let lineIndex = 0; lineIndex < document.lineCount; lineIndex++) {
-    total += $visualRowCount(document.line(lineIndex), wrapWidth);
-  }
-  return Math.max(1, total);
+  const index = syncWrapIndex(document, wrapWidth);
+  return Math.max(1, index.prefix[index.prefix.length - 1] ?? 1);
 }
 
 /**
  * The visual-row index of a logical line's FIRST visual row (sum of the visual-row counts of all lines
  * before it). The logical↔visual scroll bridge: maps the cursor's line to its visual offset (scroll-into-
- * view) and a logical scrollTop to its visual position (scrollbar thumb). O(lineIndex) memoized.
+ * view) and a logical scrollTop to its visual position (scrollbar thumb). O(1) off the cumulative index.
  */
 function $firstVisualRowOfLine(document: WrappableDocument, lineIndex: number, wrapWidth: number): number {
+  const index = syncWrapIndex(document, wrapWidth);
   const clamped = Math.max(0, Math.min(lineIndex, document.lineCount));
-  let visualRow = 0;
-  for (let index = 0; index < clamped; index++) {
-    visualRow += $visualRowCount(document.line(index), wrapWidth);
-  }
-  return visualRow;
+  return index.prefix[clamped] ?? index.prefix[index.prefix.length - 1] ?? 0;
 }
 
 /**
- * The (line, segment) at an absolute VISUAL-row offset — the inverse of $firstVisualRowOfLine. Walks
- * lines accumulating their visual-row counts until the offset falls inside a line, then the segment is
- * the remainder. Clamps to the last visual row. O(offset-line) memoized. This is what lets the window
- * start MID-LINE (a tall final line's lower segments become reachable — the true-last-visual-row fix).
+ * The (line, segment) at an absolute VISUAL-row offset — the inverse of $firstVisualRowOfLine. Binary
+ * search over the cumulative index (was a from-line-zero walk per call). Clamps to the last visual
+ * row. This is what lets the window start MID-LINE (a tall final line's lower segments become
+ * reachable — the true-last-visual-row fix). O(log lines).
  */
 function $lineSegmentAtVisualRow(
   document: WrappableDocument,
   visualOffset: number,
   wrapWidth: number,
 ): { lineIndex: number; segmentIndex: number } {
-  const target = Math.max(0, visualOffset);
-  let consumed = 0;
-  for (let lineIndex = 0; lineIndex < document.lineCount; lineIndex++) {
-    const count = $visualRowCount(document.line(lineIndex), wrapWidth);
-    if (consumed + count > target) {
-      return { lineIndex, segmentIndex: target - consumed };
-    }
-    consumed += count;
+  const index = syncWrapIndex(document, wrapWidth);
+  const prefix = index.prefix;
+  const total = prefix[prefix.length - 1] ?? 0;
+  const lineCount = document.lineCount;
+  if (lineCount === 0) return { lineIndex: 0, segmentIndex: 0 };
+  if (visualOffset >= total) {
+    // Past the end: clamp to the last visual row of the last line.
+    const lastLine = lineCount - 1;
+    return { lineIndex: lastLine, segmentIndex: Math.max(0, (index.rowCounts[lastLine] ?? 1) - 1) };
   }
-  // Past the end: clamp to the last visual row of the last line.
-  const lastLine = Math.max(0, document.lineCount - 1);
-  const lastCount = $visualRowCount(document.line(lastLine), wrapWidth);
-  return { lineIndex: lastLine, segmentIndex: Math.max(0, lastCount - 1) };
+  const target = Math.max(0, visualOffset);
+  // Greatest lineIndex with prefix[lineIndex] <= target.
+  let low = 0;
+  let high = lineCount - 1;
+  while (low < high) {
+    const middle = (low + high + 1) >> 1;
+    if ((prefix[middle] ?? 0) <= target) low = middle;
+    else high = middle - 1;
+  }
+  return { lineIndex: low, segmentIndex: target - (prefix[low] ?? 0) };
 }
 
 /**

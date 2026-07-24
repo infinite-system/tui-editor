@@ -123,10 +123,13 @@ status side channel; editing independence from Git availability.
 
 **Evidence:** `src/modules/git/GitCommands.ts` (`run`); `src/modules/git/GitRepository.ts`
 (`refresh`, `loadHistory`, `runOperation`); failure tests in
-`src/modules/git/__tests__/GitRepository.test.ts`.
+`src/modules/git/__tests__/GitRepository.test.ts`; `a FAILED fetch is not end-of-history` in
+`src/modules/git/CommitLog.test.ts`.
 
 **Impossible if true:** A missing Git executable or nonzero `git status` rejection escaping
-`GitRepository.refresh` as an unhandled exception.
+`GitRepository.refresh` as an unhandled exception; a transient nonzero `git log` being cached as
+end-of-history (an empty-repository lie — `CommitLog.fetchPage` returns null on failure and
+`ensureRange` never advances `knownEnd` from a failed page).
 
 **Verification:** `bun test src/modules/git -t "a failed status refresh degrades to error state"`
 
@@ -213,7 +216,11 @@ directories that appear after start. The dedicated HEAD watch is the single name
 `fs.watch` per directory, pruning any child git reports through `git check-ignore` (and always
 `.git`) before its watch is created; a new subdirectory event re-runs the same ignore test before
 gaining a watch. A recursive root watch is not used — it would open a handle per directory inside
-ignored subtrees like `node_modules`. When git cannot answer (no repository or git unavailable) a
+ignored subtrees like `node_modules`. Runtime-created entries are classified with a guarded
+`lstatSync` — never `stat` — so a symlink (to `.git`, to an external tree, or to itself) is
+rejected before ignore-checking or recursion, exactly like the initial walk's `Dirent` check; and
+the whole `fs.watch` event callback is exception-guarded, so a filesystem race (ELOOP, vanished
+path) can never throw out of the callback and kill the process. When git cannot answer (no repository or git unavailable) a
 fixed fallback skip set stands in. Separately, `watchHead` opens ONE `fs.watch` on the worktree's git
 dir (`rev-parse --absolute-git-dir`) and refreshes only when the changed entry is `HEAD` — a
 directory watch, not a file watch, because git replaces HEAD by rename (HEAD.lock → HEAD), which
@@ -228,11 +235,14 @@ reactivity on checkout/switch.
 `queryIgnoredNames`, `onDirectoryEvent`, `watchHead`); `no watch handle is ever opened inside an
 ignored directory`, `a nested tracked change refreshes but a change inside an ignored directory does
 not`, and `a newly created nested directory is watched but a new ignored directory is not` in
-`src/modules/git/__tests__/GitWatcher.test.ts` (all asserting `watchedDirectories()`, which excludes
+`src/modules/git/__tests__/GitWatcher.test.ts`; `a runtime-created symlink is never watched and
+never throws from the event callback` in the same file (all asserting `watchedDirectories()`, which excludes
 the HEAD handle).
 
 **Impossible if true:** A watch handle open on any path under `node_modules`, or the WALK opening a
-handle inside `.git`, or a write inside an ignored working-tree directory scheduling a refresh. (A
+handle inside `.git`, or a write inside an ignored working-tree directory scheduling a refresh; a
+runtime-created symlink gaining a watch (or recursively watching its target); an `fs.watch`
+callback exception escaping and terminating the process. (A
 write to HEAD scheduling a refresh is the intended branch-reactivity path, not a violation.)
 
 **Verification:** `bun test src/modules/git/__tests__/GitWatcher.test.ts`
@@ -392,34 +402,50 @@ repo only).
 
 ### Current-line blame is a cached lookup, not a per-move git spawn
 
-**Invariant:** Blaming a file is a git subprocess, but moving the cursor is a pure map lookup. `GitBlame`
-blames a tracked file ONCE and caches the per-line authorship map keyed on the file's on-disk mtime; a
-cursor move on an already-blamed file spawns nothing. A save (mtime change) invalidates the entry and
-re-blames; a repeated non-tracked result is cached (empty map) so it never re-spawns every frame.
+**Invariant:** Blaming a file is a git subprocess, but moving the cursor is a pure map lookup. The
+WORKSPACE-OWNED `GitBlameCache` blames a tracked file ONCE and caches the per-line authorship map
+keyed on the file's on-disk mtime; a cursor move on an already-blamed file spawns nothing. A save
+(mtime change) invalidates the entry and re-blames; a repeated non-tracked result is cached (empty
+map) so it never re-spawns every frame. The cache is BOUNDED (LRU over at most `MAX_BLAMED_FILES`
+files — blame memory tracks the actively observed set, never every file ever visited) and is
+DISPOSED with its workspace (suspend/close), making any in-flight load inert. The on-disk stat is
+memoized within one paint tick, so the status bar and the status side-channel querying in the same
+frame cost one stat.
 
-**Scope:** `GitBlame` (`lineBlame`, the module cache + in-flight guard + reactive revision), `GitCommands.blamePorcelain`, `Files.mtimeMs`.
+**Scope:** `GitBlameCache` (the instance `Workspace` creates in `open()` and disposes in
+`suspendOwnedResources`/`dispose`), `Workspace.activeLineBlame` (the single query surface),
+`GitBlame.parsePorcelain` (pure parsing), `GitCommands.blamePorcelain`, `Files.mtimeMs`.
 
-**Mechanism:** `lineBlame` reads `Files.mtimeMs(path)`; a cache hit (same mtime) returns
-`lines.get(cursorLine + 1)` with no spawn. A miss kicks a one-shot async `loadBlame` (guarded by an
-in-flight set), which runs `git blame --porcelain` through the `Processes` seam, parses it, stores the
-map under that mtime, and bumps a reactive `revision` the status bar reads — so blame appears without a
-keystroke, and an idle session (no cursor move, no save) spawns nothing and stays quiescent.
+**Mechanism:** `lineBlame` reads the memoized mtime; a cache hit (same mtime) returns
+`lines.get(cursorLine + 1)` with no spawn and refreshes the entry's LRU recency. A miss kicks a
+one-shot async load (guarded by an in-flight set), which runs `git blame --porcelain` through the
+`Processes` seam, parses via the stateless `GitBlame` capability, stores the map under that mtime
+(evicting the coldest file beyond the bound), and bumps a reactive `revision` the status bar reads
+— so blame appears without a keystroke, and an idle session (no cursor move, no save) spawns
+nothing and stays quiescent. Disposal clears the maps and discards any load that lands after it.
 
-**Generates:** GitLens-style current-line authorship with zero per-move cost; one git spawn per file
-version, amortized across every line.
+**Generates:** GitLens-style current-line authorship with zero per-move cost; one git spawn per
+file version, amortized across every line; bounded long-session memory; no blame state outliving
+its workspace.
 
-**Evidence:** `src/modules/git/GitBlame.test.ts` (the porcelain parser: metadata reused across a
-commit's hunks, 1-based line map); `scripts/smoke-git-blame.sh` (cursor on a committed line shows its
+**Evidence:** `src/modules/git/GitBlameCache.ts` (`lineBlame`, `storeBounded`, `dispose`,
+`statMemoizedMtime`); `src/modules/git/GitBlameCache.test.ts` (cache hit spawns nothing, mtime
+invalidation, negative caching, LRU bound, stat memo, disposal inertness);
+`src/modules/git/GitBlame.test.ts` (the porcelain parser: metadata reused across a commit's hunks,
+1-based line map); `src/modules/workspace/Workspace.ts` (`createGitBlameCache`, `activeLineBlame`,
+the suspend/dispose wiring); `scripts/smoke-git-blame.sh` (cursor on a committed line shows its
 author in the status bar; the git spawn happens once and later moves are instant).
 
-**Impossible if true:** a git subprocess per cursor move; a stale blame surviving a save; a non-git file
-re-spawning `git blame` every frame.
+**Impossible if true:** a git subprocess per cursor move; a stale blame surviving a save; a
+non-git file re-spawning `git blame` every frame; blame maps for every file ever visited retained
+for the process lifetime; a suspended workspace holding live blame memory; module-level mutable
+blame state hiding behind a Static facade.
 
-**Verification:** `bun test src/modules/git/GitBlame.test.ts && bash scripts/smoke-git-blame.sh`
+**Verification:** `bun test src/modules/git/GitBlameCache.test.ts src/modules/git/GitBlame.test.ts && bash scripts/smoke-git-blame.sh`
 
 **Status:** provisional
 
-**Last refined:** 2026-07-23
+**Last refined:** 2026-07-24
 
 ### An unblamable file degrades to no blame, never an error
 
@@ -427,10 +453,10 @@ re-spawning `git blame` every frame.
 buffer with no path on disk — shows NO blame part and never raises an error. `git blame` exiting nonzero
 is data (an empty cached map), not an exception.
 
-**Scope:** `GitBlame.lineBlame`/`loadBlame`, and the `StatusBar` blame part that omits itself on a null
+**Scope:** `GitBlameCache.lineBlame`/`loadBlame`, and the `StatusBar` blame part that omits itself on a null
 result.
 
-**Mechanism:** `lineBlame` returns null when `isRepo` is false, the path is empty, or the file is not on
+**Mechanism:** `lineBlame` returns null when the cache is disposed, the path is empty, or the file is not on
 disk (`mtimeMs === 0`). `loadBlame` caches an empty map on a nonzero git exit or any thrown error, so
 the negative result is remembered. `StatusBar.currentLineBlamePart` returns `''` for a null blame and
 pushes no part.
@@ -439,6 +465,7 @@ pushes no part.
 additive where git applies and invisible where it does not.
 
 **Evidence:** `src/modules/git/GitBlame.test.ts` (empty/non-blame output → empty map, no throw);
+`src/modules/git/GitBlameCache.test.ts` (a failed blame is negatively cached — no per-frame respawn);
 `scripts/smoke-git-blame.sh` (a file outside any repo shows no blame part).
 
 **Impossible if true:** a blame part on a non-git document; an unsaved buffer triggering a blame error;

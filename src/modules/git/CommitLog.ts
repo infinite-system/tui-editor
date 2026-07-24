@@ -11,11 +11,13 @@ import { GitCommands } from './GitCommands';
 import { GitParsers, type CommitRecord } from './GitParsers';
 import { GitWindow } from './GitWindow';
 
+/** Page fetch seam. Resolve records on success (short/empty page = genuine end of history), or
+ *  NULL on command failure — failure must never be conflated with an empty page. */
 export type CommitPageFetch = (
   skip: number,
   limit: number,
   branch?: string,
-) => Promise<CommitRecord[]>;
+) => Promise<CommitRecord[] | null>;
 
 export interface CommitLogOptions {
   branch?: string;
@@ -80,12 +82,14 @@ class $CommitLog {
   }
 
   /** Fetch one page `[skip, skip+limit)` from the VIEWED branch (undefined = HEAD). Overridable via
-   *  constructor `fetch` (tests inject a fake; it receives the branch as its third argument). */
-  protected async fetchPage(skip: number, limit: number): Promise<CommitRecord[]> {
+   *  constructor `fetch` (tests inject a fake; it receives the branch as its third argument).
+   *  Returns NULL on command failure — a failed `git log` is not an empty page, and the two must
+   *  stay distinguishable or a transient failure gets cached as end-of-history. */
+  protected async fetchPage(skip: number, limit: number): Promise<CommitRecord[] | null> {
     const branch = this.branch.value;
     if (this.options.fetch) return this.options.fetch(skip, limit, branch);
     const result = await GitCommands.Class.log({ cwd: this.cwd, branch, skip, limit });
-    if (result.code !== 0) return [];
+    if (result.code !== 0) return null;
     return GitParsers.Class.parseLog(result.stdout);
   }
 
@@ -101,6 +105,9 @@ class $CommitLog {
     for (const { offset, length } of gaps) {
       const page = await this.fetchPage(offset, length);
       if (loadToken !== this.loadId) return; // superseded by a newer ensureRange — discard
+      if (page === null) return; // command FAILED — no records, and NO end-of-history inference:
+      // the rows stay unloaded placeholders and the next ensure retries them. Advancing knownEnd
+      // here would cache a transient failure as an empty repository.
       const next = new Map(this.cache.value);
       page.forEach((record, pageOffset) => next.set(offset + pageOffset, record));
       if (page.length < length) this.knownEnd.value = offset + page.length; // reached the end

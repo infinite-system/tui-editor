@@ -19,7 +19,6 @@ import type { Tooltip } from './Tooltip';
 import type { Theme } from '../theme/Theme';
 import type { SettingsPanel } from '../settings/SettingsPanel';
 import type { PanelHost } from './PanelHost';
-import { GitBlame } from '../git/GitBlame';
 import { RelativeTime } from '../git/RelativeTime';
 
 export interface StatusBarDeps {
@@ -246,13 +245,9 @@ class $StatusBar {
    *  document is not git-tracked / not yet blamed. Summary is truncated so the bar stays compact. */
   private currentLineBlamePart(): string {
     const { workspaceSet } = this.deps;
-    const editor = workspaceSet.active.editor;
-    const blame = GitBlame.Class.lineBlame({
-      repoRoot: workspaceSet.active.root,
-      isRepo: workspaceSet.active.git.value !== null,
-      documentPath: editor.document.path,
-      lineNumber: editor.cursor.line.value,
-    });
+    // ONE query surface: the workspace-owned bounded blame cache (same read the status
+    // side-channel makes — its stat memo dedupes the two same-frame queries to one stat).
+    const blame = workspaceSet.active.activeLineBlame;
     if (!blame) return '';
     const when = blame.uncommitted ? 'uncommitted' : RelativeTime.Class.format(blame.authorTimeMs, Date.now());
     const summary = blame.summary.length > 40 ? `${blame.summary.slice(0, 39)}…` : blame.summary;

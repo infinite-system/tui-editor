@@ -71,7 +71,14 @@ class $App {
 
   markStarted(): void {
     this.started = true;
-    StatusChannel.Class.update({ ready: true, lifecycleTier: 'active' });
+    // Boot duration measured INSIDE the process (performance.now() = ms since process start):
+    // the bare app cost, excluding the harness's tmux/login-shell/bun-resolve overhead — the
+    // number the perf baseline's cold-start target is actually about.
+    StatusChannel.Class.update({
+      ready: true,
+      lifecycleTier: 'active',
+      bootDurationMilliseconds: Math.round(performance.now()),
+    });
     StatusChannel.Class.flush();
     Logging.Class.info('App started');
   }
