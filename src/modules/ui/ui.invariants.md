@@ -98,7 +98,7 @@ from settings and the tier glyph from `theme.glyphLevel`), and `settings.showInd
 
 **Mechanism:** the guide columns are scanned over the leading run of spaces only, and each is added as
 a one-grapheme boundary so the segment loop emits it as its own cell. That cell renders the guide glyph
-(box-drawing bar, degrading to a plain pipe in the ascii glyph tier) in the dim border colour instead
+(box-drawing bar, degrading to a plain pipe in the ascii glyph tier) in the dedicated faint `indentGuide` palette role instead
 of the space — same column, same width. A find highlight or a diagnostic underline over the cell is
 checked FIRST and wins, so a guide never overrides meaning. Guides draw only on a line's first visual
 row (window start grapheme zero), so word-wrap continuation rows are untouched and the physical-line

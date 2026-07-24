@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Driven indent-guides contract: a faint vertical bar at each indent level in the leading whitespace,
-# drawn IN PLACE of the space (columns unchanged), in the dim/border colour — and gone when the
+# drawn IN PLACE of the space (columns unchanged), in the faint indentGuide palette role — and gone when the
 # showIndentGuides setting is off. Asserts rendered cells + fg colour from FrameProbe, and that the
 # caret column is unaffected. Usage: scripts/smoke-indent-guides.sh
 set -uo pipefail
@@ -48,7 +48,7 @@ for(const row of f.rows){
 process.stdout.write("NOROW");
 '; }
 
-echo "== guides ON (default): a vertical bar at each indent level, in the border colour =="
+echo "== guides ON (default): a vertical bar at each indent level, in the faint guide colour =="
 S1="indent-on-$$"
 "$H" launch "$S1" 120x40 env HOME="$TEST_HOME" TUI_FRAME_DUMP=1 COLORTERM=truecolor bun run src/main.ts "$FIX" >/dev/null
 if ! "$H" ready "$S1" 20 >/dev/null || ! open_nested "$S1"; then echo "  FAIL  editor did not open nested.ts"; exit 1; fi

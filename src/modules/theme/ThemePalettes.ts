@@ -18,6 +18,10 @@ export interface Palette {
    *  and keeps the row text legible, distinct from the subtle grey hover/cursor-line. */
   selectionMuted: string;
   cursorLine: string;
+  /** Indent-guide bar foreground — FAINT but visible on `bg` (VS Code's editorIndentGuide role).
+   *  Deliberately its own role: `border` sits BELOW the editor bg in Tokyo Night (near-invisible as a
+   *  glyph colour) and `dim`/`comment` are secondary-TEXT weights, too loud for a structural guide. */
+  indentGuide: string;
   added: string;
   modified: string;
   deleted: string;
@@ -64,6 +68,7 @@ export const DARK: Palette = {
   border: '#101014', borderActive: '#7aa2f7',
   fg: '#a9b1d6', dim: '#787c99', accent: '#7aa2f7',
   selection: '#2b2f41', selectionMuted: '#283457', cursorLine: '#1e202e',
+  indentGuide: '#292e42',
   added: '#41a6b5', modified: '#6183bb', deleted: '#db4b4b',
   diffAddedBg: '#164846', diffModifiedBg: '#394b70', diffDeletedBg: '#823c41',
   keyword: '#bb9af7', string: '#9ece6a', number: '#ff9e64',
@@ -80,6 +85,7 @@ export const LIGHT: Palette = {
   border: '#b6bad0', borderActive: '#2e7de9',
   fg: '#343b58', dim: '#848cb5', accent: '#2e7de9',
   selection: '#b7c1e3', selectionMuted: '#a3b6e8', cursorLine: '#d6d8e6',
+  indentGuide: '#c8cbe0',
   added: '#587539', modified: '#8c6c3e', deleted: '#f52a65',
   diffAddedBg: '#d5e6d0', diffModifiedBg: '#ece6d0', diffDeletedBg: '#f2d5dc',
   keyword: '#9854f1', string: '#587539', number: '#b15c00',

@@ -169,8 +169,9 @@ function $renderEditor(context: EditorPaneRenderContext): EditorPaneRender | nul
         diagnosticSeverity === null &&
         !findHighlighted
       ) {
-        // Faint vertical guide in place of this leading-whitespace space — same one cell, dim colour.
-        codeChunks.push(fg(palette.border)(context.indentGuideGlyph));
+        // Faint vertical guide in place of this leading-whitespace space — same one cell, in the
+        // dedicated indentGuide role (today's `border` sits BELOW the editor bg — invisible as a glyph).
+        codeChunks.push(fg(palette.indentGuide)(context.indentGuideGlyph));
         continue;
       }
       if (diagnosticSeverity !== null) {
