@@ -591,3 +591,33 @@ same night from transcript SHAs; taxonomy re-applied (90 finished/, 13 orphaned/
 now also lives in AGENTS.md (#6) + project.conventions.md (cold agents see it, not just the
 conductor), and the standing rule: ON ANY RESUME, RE-READ THE SKILL — doctrine you merely remember
 is doctrine you will eventually violate.
+
+---
+
+## Part 11 — The review phase + the experiment that paid rent (2026-07-24, 03:00–06:20)
+
+Post-goal verify→review→refine cycle, run autonomously. Lessons:
+
+- **Independent cross-substrate review works.** Three codex reviewers (correctness/architecture/
+  perf+docs) with no builder context found 40+ findings, SEVEN reproduced with evidence before we
+  believed them, two converged across reviewers (wrap geometry, GitBlame cache). All FATALs fixed
+  same-night through three gated fix-tracks; six larger refactors recorded as a deferred ledger in
+  reviews/2026-07-24-…/README.md rather than rushed at 4am. Triage rule held: REPRODUCE before
+  believing, verify the verifier (my own liveness probe lied once — silently-failing find), and
+  archive reviewer output with checker-significant citations NEUTRALIZED (the raw archive turned
+  main red at --refs; "doc-only" commits are not gate-exempt when the gate greps docs).
+- **Honest measurement beats green lies.** The perf harness was repaired to distinguish
+  measurement-failure from target-miss (exit taxonomy 1/2/3); its first honest run produced the
+  repo's real numbers (165MB vs 100MB budget — surfaced to the maintainer, not hidden; dispose
+  cycles flat, so growth ≠ leak; first true cold-start figures) and flagged a stale latency claim
+  for investigation. A WARN that names its cause is a feature.
+- **Builders are pre-emptible; artifacts are the handoff.** A builder's transcript vanished
+  mid-pipeline; a cold-clone finisher completed verify→rebase→gate from the branch + repro tests +
+  archived report alone, and even found three new issues (astral input drop, silent codex failure,
+  relative cwd) — the last two fixed the same night.
+- **Experiments pay rent.** The post-goal experiment (transcript search as ONE MORE PROJECTION of
+  the transcript, reusing FindBar as the honest shared generator) went gate-green in three rounds —
+  and en route reproduced a DETERMINISTIC latent gate bug: `git commit` exports GIT_AUTHOR_* into
+  the pre-commit hook, overriding every fixture's explicit identity. Class fix (hermetic boundary
+  unsets the family + self-hermetic scratch commits) landed on main via a surgical split — proven by
+  its own hook-invoked gate run. Parked at experiment/transcript-search-v1 for adoption.
