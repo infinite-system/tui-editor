@@ -15,6 +15,13 @@ import { TerminalPaneRenderer } from './TerminalPaneRenderer';
 import { TerminalKeys } from './TerminalKeys';
 import type { TerminalInstance } from './TerminalInstance';
 
+// The terminal pane's gutter: a 2-column left/right margin and a 1-row top/bottom margin around the
+// emulator, so the shell doesn't hug the panel border. The emulator (and thus the child PTY) sizes to
+// the VISIBLE region inside the gutter; the caret and rendered cells shift by the same margin. Kept in
+// ONE place so render(), onResize(), and caret() agree — a mismatch would put the cursor off the text.
+const TERMINAL_PAD_COLUMNS = 2;
+const TERMINAL_PAD_ROWS = 1;
+
 class $TerminalPaneContent implements PaneContent {
   readonly id = 'terminal';
   readonly icon = '❯'; // ❯
@@ -35,6 +42,8 @@ class $TerminalPaneContent implements PaneContent {
       palette: context.palette,
       width: context.width,
       height: context.height,
+      padColumns: TERMINAL_PAD_COLUMNS,
+      padRows: TERMINAL_PAD_ROWS,
     });
   }
 
@@ -55,11 +64,20 @@ class $TerminalPaneContent implements PaneContent {
 
   caret(): { column: number; row: number } | null {
     if (this.instance.exited.value) return null;
-    return { column: this.instance.cursorColumn, row: this.instance.cursorRow };
+    // Shift by the gutter so the block cursor lands on the padded cell, not the pane origin.
+    return {
+      column: this.instance.cursorColumn + TERMINAL_PAD_COLUMNS,
+      row: this.instance.cursorRow + TERMINAL_PAD_ROWS,
+    };
   }
 
   onResize(columns: number, rows: number): void {
-    this.instance.resize(columns, rows);
+    // Size the emulator (and the child PTY) to the VISIBLE region inside the gutter, so `stty size`
+    // reports the padded dimensions and no cell is drawn under the margin.
+    this.instance.resize(
+      Math.max(1, columns - 2 * TERMINAL_PAD_COLUMNS),
+      Math.max(1, rows - 2 * TERMINAL_PAD_ROWS),
+    );
   }
 
   onFocus(): void {

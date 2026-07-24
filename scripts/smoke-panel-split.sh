@@ -88,11 +88,13 @@ panel_row=$(( $(f height) - 8 ))
 chk "click moved focus to the right cell" "$(f panelFocusedIndex)" "1"
 "$H" send "$S" -l "stty size" >/dev/null; "$H" send "$S" Enter >/dev/null
 sleep 0.6; "$H" settle "$S" >/dev/null 2>&1
-# The terminal child sized to its RIGHT sub-region reports "<rows> <col1>" — proof of per-cell onResize.
-if "$H" capture "$S" | grep -qE "(^|[^0-9])[0-9]+ ${col1}([^0-9]|\$)"; then
-  echo "  PASS  terminal reported its sub-width ${col1} (child sized to its cell, not the full panel)"
+# The terminal child sized to its RIGHT sub-region MINUS its 2-col L/R gutter reports "<rows> <col1-4>"
+# — proof of per-cell onResize AND the terminal pane's padding (keep in sync with TERMINAL_PAD_COLUMNS).
+exp_col1=$(( col1 - 4 ))
+if "$H" capture "$S" | grep -qE "(^|[^0-9])[0-9]+ ${exp_col1}([^0-9]|\$)"; then
+  echo "  PASS  terminal reported its padded sub-width ${exp_col1} (sub-cell ${col1} minus gutter)"
 else
-  echo "  FAIL  terminal did not report sub-width ${col1}"; "$H" capture "$S" | grep -E '[0-9]+ [0-9]+' | tail -3; fail=1
+  echo "  FAIL  terminal did not report padded sub-width ${exp_col1} (sub-cell ${col1})"; "$H" capture "$S" | grep -E '[0-9]+ [0-9]+' | tail -3; fail=1
 fi
 # The agent composer (now blurred) kept AGENTKEY — the terminal keystrokes did not leak into it.
 if "$H" capture "$S" | grep -qF "AGENTKEY"; then

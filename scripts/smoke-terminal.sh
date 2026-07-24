@@ -56,18 +56,23 @@ chk "active panel content is the terminal" "$(f panelActiveContent)" "terminal"
 cols0="$(f terminalColumns)"; rows0="$(f terminalRows)"
 gt "terminal has real columns" "$cols0" "0"
 gt "terminal has real rows" "$rows0" "0"
+# The terminal pane carries a gutter (2-col left/right, 1-row top/bottom), so the emulator + child PTY
+# size to the VISIBLE region INSIDE the gutter. stty reports region-minus-gutter — direct proof the
+# padding took effect. Keep these in sync with TERMINAL_PAD_COLUMNS/ROWS in TerminalPaneContent.ts.
+pad_cols=2; pad_rows=1
+exp_cols0=$(( cols0 - 2 * pad_cols )); exp_rows0=$(( rows0 - 2 * pad_rows ))
 sleep 0.6; "$H" settle "$S" >/dev/null 2>&1   # let the shell print its first prompt
 
-echo "== the shell sees a tty + stty size matches the converged pane geometry =="
+echo "== the shell sees a tty + stty size matches the padded (visible) pane geometry =="
 "$H" send "$S" -l "stty size" >/dev/null
 "$H" send "$S" Enter >/dev/null
 sleep 0.6; "$H" settle "$S" >/dev/null 2>&1
 # The panel body is inside a bordered box, so the stty line can sit flush against the border
 # ("│10 118"); a box-drawing char is a non-digit, so bound on non-digits, not spaces.
-if "$H" capture "$S" | grep -qE "(^|[^0-9])${rows0} ${cols0}([^0-9]|\$)"; then
-  echo "  PASS  stty size == ${rows0} ${cols0} (child tty reflects the laid-out pane)"
+if "$H" capture "$S" | grep -qE "(^|[^0-9])${exp_rows0} ${exp_cols0}([^0-9]|\$)"; then
+  echo "  PASS  stty size == ${exp_rows0} ${exp_cols0} (child sees region minus the gutter)"
 else
-  echo "  FAIL  stty size did not match ${rows0} ${cols0}"; "$H" capture "$S" | grep -E '[0-9]+ [0-9]+' | tail -3; fail=1
+  echo "  FAIL  stty size did not match padded ${exp_rows0} ${exp_cols0} (region ${rows0} ${cols0})"; "$H" capture "$S" | grep -E '[0-9]+ [0-9]+' | tail -3; fail=1
 fi
 "$H" send "$S" -l "tty" >/dev/null; "$H" send "$S" Enter >/dev/null; sleep 0.4
 if "$H" capture "$S" | grep -qE '/dev/pts/|/dev/tty'; then echo "  PASS  child reports a real tty (/dev/pts)"; else echo "  FAIL  no tty reported"; fail=1; fi
@@ -94,13 +99,14 @@ target_y=$(( divider_y - 6 ))
 rows1="$(f terminalRows)"
 gt "split drag grew terminal rows" "$rows1" "$rows0"
 cols1="$(f terminalColumns)"
+exp_rows1=$(( rows1 - 2 * pad_rows )); exp_cols1=$(( cols1 - 2 * pad_cols ))
 "$H" send "$S" -l "stty size" >/dev/null
 "$H" send "$S" Enter >/dev/null
 sleep 0.6; "$H" settle "$S" >/dev/null 2>&1
-if "$H" capture "$S" | grep -qE "(^|[^0-9])${rows1} ${cols1}([^0-9]|\$)"; then
-  echo "  PASS  shell reflowed after split resize (stty size == ${rows1} ${cols1})"
+if "$H" capture "$S" | grep -qE "(^|[^0-9])${exp_rows1} ${exp_cols1}([^0-9]|\$)"; then
+  echo "  PASS  shell reflowed after split resize (stty size == ${exp_rows1} ${exp_cols1}, region ${rows1} ${cols1})"
 else
-  echo "  FAIL  shell did not reflow to ${rows1} ${cols1}"; "$H" capture "$S" | grep -E '[0-9]+ [0-9]+' | tail -3; fail=1
+  echo "  FAIL  shell did not reflow to padded ${exp_rows1} ${exp_cols1} (region ${rows1} ${cols1})"; "$H" capture "$S" | grep -E '[0-9]+ [0-9]+' | tail -3; fail=1
 fi
 
 echo "== status-bar minute-clock renders HH:MM (bottom-right) =="

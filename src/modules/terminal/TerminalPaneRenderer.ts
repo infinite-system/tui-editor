@@ -15,10 +15,14 @@ import type { TerminalCell } from './TerminalEmulator';
 export interface TerminalPaneRenderContext {
   instance: TerminalInstance.Instance;
   palette: Palette;
-  /** Available cell rows for the terminal body. */
+  /** Available cell rows for the terminal body (the whole pane region, gutter included). */
   height: number;
-  /** Available cell columns for the terminal body. */
+  /** Available cell columns for the terminal body (the whole pane region, gutter included). */
   width: number;
+  /** Left/right gutter columns kept blank around the emulator (default 0). */
+  padColumns?: number;
+  /** Top/bottom gutter rows kept blank around the emulator (default 0). */
+  padRows?: number;
 }
 
 // The 16 standard ANSI palette colors (0–15) as hex. 256-color indices 16–255 are computed from the
@@ -84,15 +88,22 @@ function chunkFor(text: string, cell: TerminalCell, palette: Palette): TextChunk
 
 function $render(context: TerminalPaneRenderContext): StyledText {
   const { instance, palette } = context;
-  const rows = Math.min(context.height, instance.rows);
-  const columns = Math.min(context.width, instance.columns);
-  const chunks: TextChunk[] = [];
+  const padColumns = Math.max(0, context.padColumns ?? 0);
+  const padRows = Math.max(0, context.padRows ?? 0);
+  // The emulator draws into the region INSIDE the gutter; the outer margin stays panel background.
+  const rows = Math.min(Math.max(0, context.height - 2 * padRows), instance.rows);
+  const columns = Math.min(Math.max(0, context.width - 2 * padColumns), instance.columns);
+  const leadingGutter = padColumns > 0 ? ' '.repeat(padColumns) : '';
+  // Build each emulator row's coalesced chunks, then frame with blank gutter rows + a left margin.
+  const rowChunkLists: TextChunk[][] = [];
   for (let rowIndex = 0; rowIndex < rows; rowIndex++) {
+    const rowChunks: TextChunk[] = [];
+    if (leadingGutter) rowChunks.push(fg(palette.fg)(leadingGutter));
     let runText = '';
     let runCell: TerminalCell | null = null;
     let runKey = '';
     const flushRun = () => {
-      if (runCell && runText) chunks.push(chunkFor(runText, runCell, palette));
+      if (runCell && runText) rowChunks.push(chunkFor(runText, runCell, palette));
       runText = '';
       runCell = null;
       runKey = '';
@@ -114,7 +125,17 @@ function $render(context: TerminalPaneRenderContext): StyledText {
       columnIndex += Math.max(1, cell.width);
     }
     flushRun();
-    if (rowIndex < rows - 1) chunks.push(fg(palette.fg)('\n'));
+    rowChunkLists.push(rowChunks);
+  }
+  // Frame: padRows blank rows, then the gutter-indented content rows, then padRows blank rows.
+  const framedRows: TextChunk[][] = [];
+  for (let blank = 0; blank < padRows; blank += 1) framedRows.push([]);
+  for (const rowChunks of rowChunkLists) framedRows.push(rowChunks);
+  for (let blank = 0; blank < padRows; blank += 1) framedRows.push([]);
+  const chunks: TextChunk[] = [];
+  for (let rowIndex = 0; rowIndex < framedRows.length; rowIndex += 1) {
+    chunks.push(...(framedRows[rowIndex] as TextChunk[]));
+    if (rowIndex < framedRows.length - 1) chunks.push(fg(palette.fg)('\n'));
   }
   return new StyledText(chunks);
 }
