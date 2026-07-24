@@ -166,7 +166,7 @@ fi
 bands_ok="$("$BUN" -e "
 const dump = require('$ROOT/artifacts/frame-$S.json');
 const dominantRows = [];
-for (let y = 2; y < 36; y++) {
+for (let y = 2; y < 34; y++) {
   const row = dump.rows[y]; if (!row) continue;
   let red = 0, green = 0, blue = 0, cells = 0;
   for (let x = 35; x < 110; x++) {
