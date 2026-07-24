@@ -150,10 +150,12 @@ if drive floor; then
   else
     echo "  FAIL  too few ▀ glyphs on the hermetic floor ($glyphs)"; fail=1
   fi
-  if grep -aq $'\x1b_G' "$RAW" || grep -aq $'\x1bP0;1;0q' "$RAW"; then
-    echo "  FAIL  a graphics escape reached a terminal that never announced support"; fail=1
+  # Transmit-specific patterns: OpenTUI's own capability probe may emit a kitty graphics QUERY
+  # (a=q) at startup — that is detection, not a placement, and must not trip the floor assertion.
+  if grep -aq $'\x1b_Ga=T' "$RAW" || grep -aq $'\x1b_Ga=d' "$RAW" || grep -aq $'\x1bP0;1;0q' "$RAW"; then
+    echo "  FAIL  a graphics placement escape reached a terminal that never announced support"; fail=1
   else
-    echo "  PASS  no graphics escape on the floor (tmux guard + capability silence)"
+    echo "  PASS  no graphics placement on the floor (tmux guard + capability silence)"
   fi
   open_via_quickopen "$S" d a t a
   chk "data.bin is not treated as an image" "$(field "$S" activeFileIsImage)" "false"
