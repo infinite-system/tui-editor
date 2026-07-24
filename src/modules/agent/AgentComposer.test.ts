@@ -93,3 +93,104 @@ describe('AgentComposer — selection + copy (no phantom newlines across wrap)',
     expect(await model.copySelection()).toBe(3);
   });
 });
+
+describe('AgentComposer — movable cursor + mid-text editing', () => {
+  const typed = (text: string) => {
+    const model = composer();
+    model.insert(text);
+    return model;
+  };
+
+  test('typing inserts AT the cursor (move into "world", type X → "hello woXrld")', () => {
+    const model = typed('hello world');
+    expect(model.cursor).toBe(11); // at the end after typing
+    for (let index = 0; index < 3; index += 1) model.moveLeft(); // land between "wo" and "rld" (index 8)
+    expect(model.cursor).toBe(8);
+    model.insert('X');
+    expect(model.value).toBe('hello woXrld');
+    expect(model.cursor).toBe(9);
+  });
+
+  test('the caret RENDERS at the cursor (visual column,row), not pinned to the end', () => {
+    const model = typed('hello world');
+    for (let index = 0; index < 5; index += 1) model.moveLeft(); // cursor at index 6
+    const layout = model.layout(40); // one visual line
+    expect(layout.caretRow).toBe(0);
+    expect(layout.caretColumn).toBe(COMPOSER_GUTTER_COLUMNS + 6);
+  });
+
+  test('Left/Right clamp at the ends', () => {
+    const model = typed('ab');
+    model.moveRight();
+    expect(model.cursor).toBe(2); // clamped at end
+    model.moveLeft(); model.moveLeft(); model.moveLeft();
+    expect(model.cursor).toBe(0); // clamped at start
+  });
+
+  test('word-left / word-right jump by word', () => {
+    const model = typed('alpha beta gamma');
+    model.moveHome();
+    model.moveWordRight();
+    expect(model.cursor).toBe(6); // start of "beta" (crossed "alpha" + the space)
+    model.moveWordRight();
+    expect(model.cursor).toBe(11); // start of "gamma"
+    model.moveWordLeft();
+    expect(model.cursor).toBe(6); // back to "beta"
+  });
+
+  test('Home / End jump to the start / end', () => {
+    const model = typed('some text here');
+    model.moveHome();
+    expect(model.cursor).toBe(0);
+    model.moveEnd();
+    expect(model.cursor).toBe(14);
+  });
+
+  test('Backspace deletes BEFORE the cursor; Delete deletes AT the cursor', () => {
+    const model = typed('abcd');
+    model.moveLeft(); model.moveLeft(); // cursor between b and c (index 2)
+    model.backspace(); // removes "b"
+    expect(model.value).toBe('acd');
+    expect(model.cursor).toBe(1);
+    model.deleteForward(); // removes "c" (at cursor)
+    expect(model.value).toBe('ad');
+    expect(model.cursor).toBe(1);
+  });
+
+  test('Alt+Backspace deletes the WORD BEFORE THE CURSOR (cursor-aware, not the whole value)', () => {
+    const model = typed('foo bar baz');
+    model.moveWordLeft(); // cursor at start of "baz" (index 8)
+    model.deletePreviousWord(); // deletes "bar " before the cursor
+    expect(model.value).toBe('foo baz');
+    expect(model.cursor).toBe(4); // cursor now before "baz"
+  });
+
+  test('Ctrl/Cmd+Backspace clears the whole line', () => {
+    const model = typed('clear me entirely');
+    model.moveWordLeft(); // cursor mid-text
+    model.deleteLine();
+    expect(model.value).toBe('');
+    expect(model.cursor).toBe(0);
+  });
+
+  test('Up/Down move between visual lines; edges report false (fall through to scroll)', () => {
+    const model = composer();
+    model.insert('x'.repeat(12));
+    model.layout(7); // inner width 5 → 3 visual lines: xxxxx / xxxxx / xx
+    // cursor at end (index 12) → last visual line
+    expect(model.moveDown()).toBe(false); // already on last line
+    expect(model.moveUp()).toBe(true); // up to the middle line, same column (clamped)
+    model.layout(7);
+    expect(model.moveUp()).toBe(true); // up to the first line
+    model.layout(7);
+    expect(model.moveUp()).toBe(false); // first line → fall through
+  });
+
+  test('a just-emptied composer (deleteLine) reports Up/Down as edge → false', () => {
+    const model = typed('abc');
+    model.deleteLine();
+    model.layout(40);
+    expect(model.moveUp()).toBe(false);
+    expect(model.moveDown()).toBe(false);
+  });
+});

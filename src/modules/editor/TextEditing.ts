@@ -14,6 +14,7 @@ export interface PreviousWordDeletion {
 class $TextEditing {
   // invariant: Word deletion uses the navigation boundary (src/modules/editor/editor.invariants.md)
   static wordLeft = $wordLeft;
+  static wordRight = $wordRight;
   static deletePreviousWord = $deletePreviousWord;
 }
 
@@ -55,6 +56,23 @@ function $wordLeft(text: string, cursor: number): number {
   while (position > 0 && $clusterKind(clusters[position - 1] ?? '') === runKind) {
     position -= 1;
   }
+  return position;
+}
+
+/**
+ * Return the grapheme position at the next word boundary to the RIGHT (the mirror of $wordLeft, matching
+ * the editor's Ctrl/Alt+Right): cross the current word run, then skip the following separators — landing
+ * at the START of the next word (or the end of the text).
+ */
+function $wordRight(text: string, cursor: number): number {
+  const clusters = EditorCoordinates.Class.graphemes(text);
+  let position = Math.max(0, Math.min(cursor, clusters.length));
+  const isWord = (cluster: string): boolean => $clusterKind(cluster) === 'word' || $clusterKind(cluster) === 'punctuation';
+  if (position < clusters.length && isWord(clusters[position] ?? '')) {
+    const runKind = $clusterKind(clusters[position] ?? '');
+    while (position < clusters.length && $clusterKind(clusters[position] ?? '') === runKind) position += 1;
+  }
+  while (position < clusters.length && $clusterKind(clusters[position] ?? '') === 'whitespace') position += 1;
   return position;
 }
 

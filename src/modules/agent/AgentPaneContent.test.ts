@@ -91,12 +91,21 @@ describe('AgentPaneContent — scroll delegates to the injected engine', () => {
     expect(port.calls).toContain('bottom');
   });
 
-  test('arrow keys type-scroll only when the composer is empty', () => {
+  test('Up on a SINGLE-line composer falls through to transcript scroll (cursor on the only line)', () => {
     const { pane, port } = makePane();
     pane.render(context());
-    pane.handleKey({ name: 'a', sequence: 'a' } as never); // composer now non-empty
+    pane.handleKey({ name: 'a', sequence: 'a' } as never); // one visual line of text
     pane.handleKey({ name: 'up' } as never);
-    expect(port.calls).not.toContain('rows:-1'); // arrows no longer scroll while composing
+    expect(port.calls).toContain('rows:-1'); // first visual line → scroll the transcript
+  });
+
+  test('Up MOVES the composer cursor (no scroll) when it is multi-line and not on the first line', () => {
+    const { pane, port } = makePane();
+    for (const character of 'x'.repeat(200)) pane.handleKey({ name: character, sequence: character } as never);
+    pane.render(context()); // cursor at the end → last of several wrapped visual lines
+    const scrollCallsBefore = port.calls.length;
+    pane.handleKey({ name: 'up' } as never); // moves the cursor up a visual line
+    expect(port.calls.length).toBe(scrollCallsBefore); // no transcript scroll
   });
 });
 

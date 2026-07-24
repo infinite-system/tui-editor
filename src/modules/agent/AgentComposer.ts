@@ -1,16 +1,17 @@
-// The agent COMPOSER: the editable input line, distilled as the second instance of the shared text
-// surface (the transcript is the first). It WRAPS its buffer to the pane width (never overflowing
-// horizontally under a neighbour pane — the bug this fixes), GROWS up to a small cap, then SCROLLS
-// internally to keep the caret line visible (caret is always at the end — append/backspace editing, no
-// mid-text cursor). It is SELECTABLE/COPYABLE through the same TextSelectionModel + shared WrapText the
-// transcript uses — one selection/wrap seam, two surfaces, no bespoke re-implementation.
+// The agent COMPOSER: the editable input line, the second instance of the shared text surface (the
+// transcript is the first). It WRAPS its buffer to the pane width (never overflowing horizontally under a
+// neighbour pane), GROWS up to a small cap, then SCROLLS internally to keep the CURSOR line visible. It
+// owns a real CURSOR (a grapheme index into the text) with full mid-text editing — insert/delete at the
+// cursor, char/word/line motion — reusing the shared TextEditing word boundaries and TextSelectionModel +
+// WrapText seams, so nothing is re-implemented. Enter (handled by the pane) sends the whole buffer.
 import { ref, type Ref } from 'vue';
 import { WrapText } from '../ui/WrapText';
 import { TextSelectionModel, type SelectionPoint, type SelectionSpanRange } from '../ui/TextSelectionModel';
 import { TextEditing } from '../editor/TextEditing';
+import { EditorCoordinates } from '../editor/EditorCoordinates';
 import { Clipboard } from '../system/Clipboard';
 
-/** Max visual rows the composer grows to before it scrolls internally (keeps the caret line visible). */
+/** Max visual rows the composer grows to before it scrolls internally (keeps the cursor line visible). */
 export const COMPOSER_MAX_ROWS = 5;
 /** The prompt gutter width ("❯ " on line 1, "  " on continuations) reserved on every composer row. */
 export const COMPOSER_GUTTER_COLUMNS = 2;
@@ -36,67 +37,190 @@ export interface ComposerLayout {
 class $AgentComposer {
   private readonly buffer = ref('');
   private readonly selection = new TextSelectionModel.Class();
-  /** Last frame's full wrapped lines + scroll offset — the coord space for pointer/selection mapping. */
-  private lastVisualLines: string[] = [''];
-  private lastScrollOffset = 0;
+  /** The cursor as a GRAPHEME index into the buffer (0..length) — the single source of edit position. */
+  private cursorIndex = 0;
+  /** Last frame's wrap width + scroll offset — the coord space for caret / pointer / selection mapping. */
   private lastWrapWidth = 1;
+  private scrollOffset = 0;
 
   /** The reactive buffer text (the pane fuses its length into the render revision). */
   get text(): Ref<string> {
     return this.buffer;
   }
-  /** The current buffer string. */
   get value(): string {
     return this.buffer.value;
   }
   get isEmpty(): boolean {
     return this.buffer.value.length === 0;
   }
+  /** The cursor's grapheme index (for tests / assertions). */
+  get cursor(): number {
+    return this.cursorIndex;
+  }
 
-  /** Append typed text at the caret (end). Newlines flatten to spaces — the composer sends on Enter, so
-   *  a stored newline would break the single-logical-line model. Clears any selection (an edit). */
+  private graphemes(): string[] {
+    return EditorCoordinates.Class.graphemes(this.buffer.value);
+  }
+  private graphemeCount(): number {
+    return EditorCoordinates.Class.graphemeCount(this.buffer.value);
+  }
+  private clampCursor(): number {
+    return Math.max(0, Math.min(this.cursorIndex, this.graphemeCount()));
+  }
+
+  // --- editing (all at the CURSOR; every edit clears the selection) ----------------------------------
+
+  /** Insert typed text AT the cursor. Newlines flatten to spaces (the composer is one logical line that
+   *  sends on Enter). The cursor advances past the inserted text. */
   insert(text: string): void {
     const flattened = text.replace(/\r\n?|\n/g, ' ');
     if (!flattened) return;
-    this.buffer.value += flattened;
+    const graphemes = this.graphemes();
+    const inserted = EditorCoordinates.Class.graphemes(flattened);
+    const cursor = this.clampCursor();
+    this.buffer.value = [...graphemes.slice(0, cursor), ...inserted, ...graphemes.slice(cursor)].join('');
+    this.cursorIndex = cursor + inserted.length;
     this.selection.clear();
   }
-  /** Delete the last character (append/backspace-at-end editing). */
+  /** Delete the grapheme BEFORE the cursor (Backspace). */
   backspace(): void {
-    if (this.buffer.value.length === 0) return;
-    this.buffer.value = Array.from(this.buffer.value).slice(0, -1).join('');
+    const cursor = this.clampCursor();
+    if (cursor === 0) return;
+    const graphemes = this.graphemes();
+    this.buffer.value = [...graphemes.slice(0, cursor - 1), ...graphemes.slice(cursor)].join('');
+    this.cursorIndex = cursor - 1;
     this.selection.clear();
   }
-  /** Delete the last WORD (Alt/Option+Backspace) via the shared word-boundary seam every text input uses.
-   *  Caret is at the end, so deleting from the whole value removes the trailing word. */
+  /** Delete the grapheme AT the cursor (Delete/forward-delete). */
+  deleteForward(): void {
+    const cursor = this.clampCursor();
+    const graphemes = this.graphemes();
+    if (cursor >= graphemes.length) return;
+    this.buffer.value = [...graphemes.slice(0, cursor), ...graphemes.slice(cursor + 1)].join('');
+    this.selection.clear();
+  }
+  /** Delete the WORD before the cursor (Alt/Option+Backspace) — cursor-aware via the shared seam. */
   deletePreviousWord(): void {
+    const cursor = this.clampCursor();
+    if (cursor === 0) return;
+    const result = TextEditing.Class.deletePreviousWord(this.buffer.value, cursor);
+    this.buffer.value = result.text;
+    this.cursorIndex = result.start;
+    this.selection.clear();
+  }
+  /** Clear the whole current logical line (Ctrl/Cmd+Backspace) — the composer is one logical line. */
+  deleteLine(): void {
     if (this.buffer.value.length === 0) return;
-    this.buffer.value = TextEditing.Class.deletePreviousWord(this.buffer.value).text;
+    this.buffer.value = '';
+    this.cursorIndex = 0;
     this.selection.clear();
   }
   /** Empty the buffer (after a send). */
   clear(): void {
     this.buffer.value = '';
+    this.cursorIndex = 0;
     this.selection.clear();
   }
 
-  /** Lay the composer out for `paneWidth` columns: wrap to the inner width, cap the row count, scroll to
-   *  keep the caret (end) visible, and mark the selection span on each row. */
+  // --- cursor motion (all clear the selection) -------------------------------------------------------
+
+  moveLeft(): void {
+    this.cursorIndex = Math.max(0, this.clampCursor() - 1);
+    this.selection.clear();
+  }
+  moveRight(): void {
+    this.cursorIndex = Math.min(this.graphemeCount(), this.clampCursor() + 1);
+    this.selection.clear();
+  }
+  moveWordLeft(): void {
+    this.cursorIndex = TextEditing.Class.wordLeft(this.buffer.value, this.clampCursor());
+    this.selection.clear();
+  }
+  moveWordRight(): void {
+    this.cursorIndex = TextEditing.Class.wordRight(this.buffer.value, this.clampCursor());
+    this.selection.clear();
+  }
+  moveHome(): void {
+    this.cursorIndex = 0;
+    this.selection.clear();
+  }
+  moveEnd(): void {
+    this.cursorIndex = this.graphemeCount();
+    this.selection.clear();
+  }
+  /** Move the cursor UP one visual line at the same column. Returns false when already on the first
+   *  visual line (the host then falls through to transcript scroll). */
+  moveUp(): boolean {
+    const caret = this.caretVisual();
+    if (caret.line <= 0) return false;
+    this.cursorIndex = this.positionAt(caret.line - 1, caret.column);
+    this.selection.clear();
+    return true;
+  }
+  /** Move the cursor DOWN one visual line. Returns false when already on the last visual line. */
+  moveDown(): boolean {
+    const caret = this.caretVisual();
+    if (caret.line >= this.numVisualLines() - 1) return false;
+    this.cursorIndex = this.positionAt(caret.line + 1, caret.column);
+    this.selection.clear();
+    return true;
+  }
+
+  // --- visual geometry (cursor ↔ wrapped visual line/column, using the last wrap width) --------------
+
+  private numVisualLines(): number {
+    const total = this.graphemeCount();
+    const wrapWidth = this.lastWrapWidth;
+    if (total === 0 || wrapWidth <= 0) return 1;
+    return Math.ceil(total / wrapWidth);
+  }
+  private visualLineLength(lineIndex: number): number {
+    const wrapWidth = this.lastWrapWidth;
+    const total = this.graphemeCount();
+    const numLines = this.numVisualLines();
+    if (lineIndex < numLines - 1) return wrapWidth;
+    return Math.max(0, total - (numLines - 1) * wrapWidth); // last line remainder (== wrapWidth when full)
+  }
+  /** The cursor's visual (line, column) in the wrapped composer. */
+  private caretVisual(): { line: number; column: number } {
+    const wrapWidth = this.lastWrapWidth;
+    const cursor = this.clampCursor();
+    const total = this.graphemeCount();
+    if (wrapWidth <= 0 || cursor === 0) return { line: 0, column: 0 };
+    if (cursor % wrapWidth === 0) {
+      // On a wrap boundary: mid-text → start of that line; at the very end → end of the full last line.
+      if (cursor < total) return { line: cursor / wrapWidth, column: 0 };
+      return { line: Math.max(0, cursor / wrapWidth - 1), column: wrapWidth };
+    }
+    return { line: Math.floor(cursor / wrapWidth), column: cursor % wrapWidth };
+  }
+  /** The grapheme index at a visual (line, column), clamped to that line's length and the buffer end. */
+  private positionAt(lineIndex: number, column: number): number {
+    const wrapWidth = this.lastWrapWidth;
+    const clampedColumn = Math.max(0, Math.min(column, this.visualLineLength(lineIndex)));
+    return Math.min(this.graphemeCount(), lineIndex * wrapWidth + clampedColumn);
+  }
+
+  /** Lay the composer out for `paneWidth` columns: wrap, cap the row count, scroll to keep the CURSOR
+   *  line visible, mark selection spans, and place the caret at the cursor's visual cell. */
   layout(paneWidth: number): ComposerLayout {
     const wrapWidth = Math.max(1, paneWidth - COMPOSER_GUTTER_COLUMNS);
     const visualLines = WrapText.Class.wrap(this.buffer.value, wrapWidth);
-    this.lastVisualLines = visualLines;
     this.lastWrapWidth = wrapWidth;
 
     const totalLines = visualLines.length;
     const rowCount = Math.max(1, Math.min(totalLines, COMPOSER_MAX_ROWS));
-    // Caret is at the end, so anchor the window to the BOTTOM (show the last `rowCount` lines).
-    const scrollOffset = Math.max(0, totalLines - rowCount);
-    this.lastScrollOffset = scrollOffset;
+    const caret = this.caretVisual();
+
+    // Scroll minimally to keep the caret line visible (persisted between frames — natural scrolling).
+    const maximumOffset = Math.max(0, totalLines - rowCount);
+    if (caret.line < this.scrollOffset) this.scrollOffset = caret.line;
+    else if (caret.line > this.scrollOffset + rowCount - 1) this.scrollOffset = caret.line - rowCount + 1;
+    this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, maximumOffset));
 
     const rows: ComposerRow[] = [];
     for (let visibleIndex = 0; visibleIndex < rowCount; visibleIndex += 1) {
-      const absoluteLine = scrollOffset + visibleIndex;
+      const absoluteLine = this.scrollOffset + visibleIndex;
       const text = visualLines[absoluteLine] ?? '';
       rows.push({
         absoluteLine,
@@ -106,12 +230,11 @@ class $AgentComposer {
       });
     }
 
-    const lastLineLength = Array.from(visualLines[totalLines - 1] ?? '').length;
     return {
       rows,
       rowCount,
-      caretRow: rowCount - 1,
-      caretColumn: COMPOSER_GUTTER_COLUMNS + lastLineLength,
+      caretRow: Math.max(0, Math.min(caret.line - this.scrollOffset, rowCount - 1)),
+      caretColumn: COMPOSER_GUTTER_COLUMNS + caret.column,
     };
   }
 
@@ -120,7 +243,7 @@ class $AgentComposer {
   /** Map a composer-local cell (column already pane-relative, row within the visible composer rows) to a
    *  selection point in the composer's full visual-line space. */
   pointAt(localColumn: number, visibleRow: number): SelectionPoint {
-    const line = this.lastScrollOffset + Math.max(0, visibleRow);
+    const line = this.scrollOffset + Math.max(0, visibleRow);
     const column = Math.max(0, localColumn - COMPOSER_GUTTER_COLUMNS);
     return { line, column };
   }
@@ -140,11 +263,11 @@ class $AgentComposer {
     return this.selection.hasSelection();
   }
   lineGraphemeCount(lineIndex: number): number {
-    return Array.from(this.lastVisualLines[lineIndex] ?? '').length;
+    return this.visualLineLength(lineIndex);
   }
   /** Rows the composer currently occupies (for the host's screen-region check). */
   get rowCount(): number {
-    return Math.max(1, Math.min(this.lastVisualLines.length, COMPOSER_MAX_ROWS));
+    return Math.max(1, Math.min(this.numVisualLines(), COMPOSER_MAX_ROWS));
   }
 
   /** The selected buffer text — reconstructed from CODE-POINT offsets (wrap adds no separators, so the
@@ -152,13 +275,10 @@ class $AgentComposer {
   selectedText(): string {
     const span = this.selection.normalized();
     if (!span) return '';
-    const codePoints = Array.from(this.buffer.value);
-    const offsetOf = (point: SelectionPoint): number => {
-      let offset = 0;
-      for (let line = 0; line < point.line; line += 1) offset += Array.from(this.lastVisualLines[line] ?? '').length;
-      return Math.min(codePoints.length, offset + point.column);
-    };
-    return codePoints.slice(offsetOf(span[0]), offsetOf(span[1])).join('');
+    const graphemes = this.graphemes();
+    const offsetOf = (point: SelectionPoint): number =>
+      Math.min(graphemes.length, point.line * this.lastWrapWidth + point.column);
+    return graphemes.slice(offsetOf(span[0]), offsetOf(span[1])).join('');
   }
 
   /** Copy the composer selection to the OS clipboard; resolves to the character count copied. */

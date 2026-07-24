@@ -47,3 +47,26 @@ describe('delete previous word', () => {
     expect(TextEditing.Class.deletePreviousWord('e\u0301lan', 1).text).toBe('lan');
   });
 });
+
+describe('wordRight (mirror of wordLeft)', () => {
+  const wordRight = (text: string, cursor: number) => TextEditing.Class.wordRight(text, cursor);
+
+  test('from a word, jumps to the START of the next word (crossing trailing whitespace)', () => {
+    expect(wordRight('alpha beta gamma', 0)).toBe(6); // start of "beta"
+    expect(wordRight('alpha beta gamma', 6)).toBe(11); // start of "gamma"
+  });
+
+  test('from mid-word, finishes the current word then skips to the next', () => {
+    expect(wordRight('alpha beta', 2)).toBe(6); // "lpha" then space → start of "beta"
+  });
+
+  test('clamps at the end of the text', () => {
+    expect(wordRight('alpha', 5)).toBe(5);
+    expect(wordRight('alpha', 99)).toBe(5);
+  });
+
+  test('crosses a punctuation run as its own word', () => {
+    expect(wordRight('a, b', 0)).toBe(1); // "a" → before the comma
+    expect(wordRight('a, b', 1)).toBe(3); // "," (+ space) → before "b"
+  });
+});

@@ -331,6 +331,7 @@ class $AgentPaneContent implements PaneContent {
       this.scrollPort?.scrollToBottom(); // sending re-anchors to the newest output
       return true;
     }
+    // Transcript paging always works (the composer keeps the arrow keys for cursor motion).
     if (key.name === 'pageup') {
       this.scrollPort?.scrollRowsBy(-(this.lastBodyHeight - 1));
       return true;
@@ -339,27 +340,64 @@ class $AgentPaneContent implements PaneContent {
       this.scrollPort?.scrollRowsBy(this.lastBodyHeight - 1);
       return true;
     }
-    // Arrow scroll only when the composer is empty, so typing keeps the arrows free for future editing.
-    if (key.name === 'up' && this.composer.isEmpty) {
+    // Alt/Option/Ctrl → move by WORD (mac overlay uses Option); super/Cmd → jump to line start/end.
+    const byWord = key.ctrl || key.option || key.meta;
+    if (key.name === 'left') {
+      if (key.super) this.composer.moveHome();
+      else if (byWord) this.composer.moveWordLeft();
+      else this.composer.moveLeft();
+      return this.composerHandled();
+    }
+    if (key.name === 'right') {
+      if (key.super) this.composer.moveEnd();
+      else if (byWord) this.composer.moveWordRight();
+      else this.composer.moveRight();
+      return this.composerHandled();
+    }
+    if (key.name === 'home') {
+      this.composer.moveHome();
+      return this.composerHandled();
+    }
+    if (key.name === 'end') {
+      this.composer.moveEnd();
+      return this.composerHandled();
+    }
+    // Up/Down move the composer cursor between its visual lines; at the first/last line they fall
+    // through to transcript scroll (an empty single-line composer therefore scrolls, as before).
+    if (key.name === 'up') {
+      if (this.composer.moveUp()) return this.composerHandled();
       this.scrollPort?.scrollRowsBy(-1);
       return true;
     }
-    if (key.name === 'down' && this.composer.isEmpty) {
+    if (key.name === 'down') {
+      if (this.composer.moveDown()) return this.composerHandled();
       this.scrollPort?.scrollRowsBy(1);
       return true;
     }
     if (key.name === 'backspace') {
-      // Alt/Option+Backspace deletes the previous WORD (the app maps option/meta → Alt), matching every
-      // other text input; plain Backspace deletes one character.
-      if (key.option || key.meta) this.composer.deletePreviousWord();
+      // Ctrl/Cmd+Backspace clears the whole line; Alt/Option+Backspace deletes the word BEFORE the
+      // cursor; plain Backspace deletes the grapheme before the cursor.
+      if (key.ctrl || key.super) this.composer.deleteLine();
+      else if (key.option || key.meta) this.composer.deletePreviousWord();
       else this.composer.backspace();
-      return true;
+      return this.composerHandled();
+    }
+    if (key.name === 'delete') {
+      this.composer.deleteForward();
+      return this.composerHandled();
     }
     if (isTypedCharacter(key)) {
       this.composer.insert(key.sequence);
-      return true;
+      return this.composerHandled();
     }
     return false;
+  }
+
+  /** A composer edit/motion happened: bump the paint signal (a cursor-only move changes no observed ref,
+   *  so the caret would not repaint otherwise) and report the key handled. */
+  private composerHandled(): boolean {
+    this.viewRevision.value += 1;
+    return true;
   }
 
   /** A pointer-down inside the pane at content-local (column, row): toggle a tool row's expand state.
