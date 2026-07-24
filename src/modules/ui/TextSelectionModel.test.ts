@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { TextSelectionModel } from './TextSelectionModel';
+import { WrapText } from './WrapText';
 
 const model = () => new TextSelectionModel.Class();
 
@@ -44,17 +45,42 @@ describe('TextSelectionModel', () => {
     expect(selection.rangeForLine(2, 20)).toEqual({ start: 2, end: 6 });
   });
 
-  test('selectedText joins the covered lines (single and multi-line)', () => {
+  test('selectedText walks covered lines through the INJECTED resolver (surface owns slice + join)', () => {
     const lines = ['first line', 'second line', 'third line'];
+    const resolver = (line: number, startCell: number, endCell: number | null) => {
+      const text = lines[line];
+      if (text === undefined) return null;
+      return WrapText.Class.sliceByDisplayCells(text, startCell, endCell ?? Number.MAX_SAFE_INTEGER);
+    };
     const single = model();
     single.begin({ line: 0, column: 0 });
     single.extend({ line: 0, column: 5 });
-    expect(single.selectedText(lines)).toBe('first');
+    expect(single.selectedText(resolver, '\n')).toBe('first');
 
     const multi = model();
     multi.begin({ line: 0, column: 6 });
     multi.extend({ line: 2, column: 5 });
-    expect(multi.selectedText(lines)).toBe('line\nsecond line\nthird');
+    expect(multi.selectedText(resolver, '\n')).toBe('line\nsecond line\nthird');
+    // A composer-style join (no separators) is the same span with a different joiner.
+    expect(multi.selectedText(resolver, '')).toBe('linesecond linethird');
+  });
+
+  test('selectedText is grapheme-safe over wide/combined text through the shared slicer (é / emoji)', () => {
+    const lines = ['éx', '😀x'];
+    const resolver = (line: number, startCell: number, endCell: number | null) => {
+      const text = lines[line];
+      if (text === undefined) return null;
+      return WrapText.Class.sliceByDisplayCells(text, startCell, endCell ?? Number.MAX_SAFE_INTEGER);
+    };
+    const accent = model();
+    accent.begin({ line: 0, column: 0 });
+    accent.extend({ line: 0, column: 1 });
+    expect(accent.selectedText(resolver, '\n')).toBe('é'); // the WHOLE cluster, never a bare 'e'
+
+    const emoji = model();
+    emoji.begin({ line: 1, column: 2 });
+    emoji.extend({ line: 1, column: 3 });
+    expect(emoji.selectedText(resolver, '\n')).toBe('x'); // never a lone surrogate
   });
 
   test('clear reports whether it removed a selection', () => {

@@ -33,13 +33,13 @@ export interface ProjectedLine {
 /** The empty-transcript hint (shown before any turn). */
 const EMPTY_HINT = 'Ask Claude anything. Type a prompt and press Enter.';
 
-/** Truncate to `width` display cells (code-point exact), appending an ellipsis when it overflows. */
+/** Truncate to `width` DISPLAY CELLS (grapheme-safe through the shared geometry seam), appending an
+ *  ellipsis when it overflows — a code-point count here let CJK summaries overflow the pane. */
 function truncate(text: string, width: number, glyphLevel: GlyphLevel): string {
-  if (width <= 0) return '';
-  const codePoints = Array.from(text);
-  if (codePoints.length <= width) return text;
-  const ellipsis = ThemeIcons.Class.agentTranscriptIconsFor(glyphLevel).ellipsisCell;
-  return codePoints.slice(0, Math.max(0, width - 1)).join('') + ellipsis;
+  // BOTH review landings meet here: the ellipsis GLYPH stays theme-token data (the imgfix landing's
+  // AgentTranscriptIconSet ladder — ascii-safe through glyphLevel), while the clipping itself runs
+  // through the display-cell + grapheme-safe WrapText seam (this branch's geometry fix).
+  return WrapText.Class.clipToWidth(text, width, ThemeIcons.Class.agentTranscriptIconsFor(glyphLevel).ellipsisCell);
 }
 
 /** Hard-wrap a string to `width` columns via the shared, width-exact seam. */
@@ -52,19 +52,43 @@ function toolInputPretty(input: unknown): string {
   return typeof input === 'string' ? input : JSON.stringify(input, null, 2) ?? '';
 }
 
-/** Project the whole transcript into flat visual lines at `width`, expanding only the given entries. */
-function $project(
-  transcript: readonly TranscriptEntry[],
+/** The per-entry projection cache record: an entry's lines are reusable while every input that shaped
+ *  them is unchanged. Entries are stable objects in the append-only transcript, so a WeakMap keyed on
+ *  the ENTRY holds each record; the mutable inputs (an assistant's growing text, a permission's status,
+ *  the expand toggle, width/glyph/palette) are compared by identity per frame. */
+interface EntryProjectionCache {
+  width: number;
+  glyphLevel: GlyphLevel;
+  palette: Palette;
+  expanded: boolean;
+  isFirst: boolean;
+  /** The entry's mutable content stamp (assistant text / permission status; '' for immutable roles). */
+  stamp: string;
+  lines: ProjectedLine[];
+}
+const entryProjectionCache = new WeakMap<TranscriptEntry, EntryProjectionCache>();
+
+/** The mutable-content stamp for an entry (what can change AFTER the entry was appended). */
+function stampOf(entry: TranscriptEntry): string {
+  if (entry.role === 'assistant') return entry.text;
+  if (entry.role === 'permission-request') return entry.status;
+  return '';
+}
+
+/** Project ONE entry (including its deterministic leading/trailing blank spacing) into visual lines. */
+function projectEntry(
+  entry: TranscriptEntry,
+  entryIndex: number,
   palette: Palette,
   glyphLevel: GlyphLevel,
   width: number,
-  expandedIndices: ReadonlySet<number>,
+  expanded: boolean,
 ): ProjectedLine[] {
   const lines: ProjectedLine[] = [];
   const transcriptIcons = ThemeIcons.Class.agentTranscriptIconsFor(glyphLevel);
   const caret = { collapsed: transcriptIcons.caretCollapsed, expanded: transcriptIcons.caretExpanded };
   const blank = (): void => { lines.push({ text: '', color: palette.dim, bold: false, entryIndex: -1, toggleable: false }); };
-  transcript.forEach((entry, entryIndex) => {
+  {
     // Airy turn spacing (Claude-style): a blank line BEFORE each user/error turn (separating it from the
     // previous turn) AND a blank line AFTER every user turn (so a just-posted "You" turn is followed by
     // space before the reply/thinking, not only agent→agent gaps). Tool-use/tool-result stay tight under
@@ -94,7 +118,6 @@ function $project(
           lines.push({ text: wrapped, color: palette.error, bold: false, entryIndex, toggleable: false });
         break;
       case 'tool-use': {
-        const expanded = expandedIndices.has(entryIndex);
         const marker = expanded ? caret.expanded : caret.collapsed;
         const head = `${marker} ${transcriptIcons.tool} ${entry.name}`;
         if (!expanded) {
@@ -144,7 +167,6 @@ function $project(
         break;
       }
       case 'tool-result': {
-        const expanded = expandedIndices.has(entryIndex);
         const marker = expanded ? caret.expanded : caret.collapsed;
         const outcome = entry.isError ? transcriptIcons.resultError : transcriptIcons.resultOk;
         const color = entry.isError ? palette.error : palette.dim;
@@ -161,6 +183,43 @@ function $project(
         break;
       }
     }
+  }
+  return lines;
+}
+
+/** Project the whole transcript into flat visual lines at `width`, expanding only the given entries.
+ *  MEMOIZED per entry: an unchanged entry reuses its cached lines, so a streaming delta, spinner tick,
+ *  or keystroke costs O(changed entries + concatenation), never a full transcript REWRAP (the reviewed
+ *  O(total-transcript)-per-frame hot path). */
+function $project(
+  transcript: readonly TranscriptEntry[],
+  palette: Palette,
+  glyphLevel: GlyphLevel,
+  width: number,
+  expandedIndices: ReadonlySet<number>,
+): ProjectedLine[] {
+  const lines: ProjectedLine[] = [];
+  transcript.forEach((entry, entryIndex) => {
+    const expanded = expandedIndices.has(entryIndex);
+    const isFirst = entryIndex === 0;
+    const stamp = stampOf(entry);
+    const cached = entryProjectionCache.get(entry);
+    let entryLines: ProjectedLine[];
+    if (
+      cached &&
+      cached.width === width &&
+      cached.glyphLevel === glyphLevel &&
+      cached.palette === palette &&
+      cached.expanded === expanded &&
+      cached.isFirst === isFirst &&
+      cached.stamp === stamp
+    ) {
+      entryLines = cached.lines;
+    } else {
+      entryLines = projectEntry(entry, entryIndex, palette, glyphLevel, width, expanded);
+      entryProjectionCache.set(entry, { width, glyphLevel, palette, expanded, isFirst, stamp, lines: entryLines });
+    }
+    for (const line of entryLines) lines.push(line);
   });
   if (lines.length === 0) lines.push({ text: EMPTY_HINT, color: palette.dim, bold: false, entryIndex: -1, toggleable: false });
   return lines;

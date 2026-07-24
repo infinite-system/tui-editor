@@ -44,6 +44,7 @@ import { GitBlame } from '../git/GitBlame';
 import { BracketMatch } from '../editor/BracketMatch';
 import { LanguageRegistry } from '../syntax/LanguageRegistry';
 import { AgentPaneContent, type AgentEnginePort } from '../agent/AgentPaneContent';
+import { AgentProviderRegistry } from '../agent/AgentProviderRegistry';
 import { TtsFactory } from '../narration/TtsFactory';
 import type { TtsBackend } from '../narration/TtsBackend';
 import { NarrationProjection } from '../narration/NarrationProjection';
@@ -254,38 +255,25 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   };
 
   // --- Live engine switcher (claude ⇄ codex) --------------------------------------------------------
-  // The two supported engines available on this box (INVAR_AGENT_ENGINES forces the list for the driving
-  // smoke, so it can prove the switch mechanics with the hermetic echo backend).
-  const availableEngines = (): string[] => {
-    const forced = process.env.INVAR_AGENT_ENGINES;
-    if (forced) return forced.split(',').map((entry) => entry.trim()).filter(Boolean);
-    const list: string[] = [];
-    if (Bun.which('claude')) list.push('claude');
-    if (Bun.which('codex')) list.push('codex');
-    return list;
-  };
-  // The CONCRETE current engine (an 'auto' setting resolves to the first available, claude-preferred).
-  const currentEngine = (): string => {
-    const setting = settings.agentProvider.value;
-    if (setting === 'claude' || setting === 'codex') return setting;
-    return availableEngines()[0] ?? 'claude';
-  };
+  // ONE provider authority: label, availability, cycling, and construction all read the SAME
+  // AgentProviderRegistry resolution, so the mode line can never claim an engine the factory didn't
+  // build (the reviewed dual-authority bug: configured codex with codex missing labeled "codex" while
+  // claude silently ran; with neither installed it labeled "claude" while the echo ran).
+  const currentEngine = (): string => AgentProviderRegistry.Class.resolve(settings.agentProvider.value).engine;
   // Swap the backend behind the SAME AgentSession (transcript preserved), then write the setting back.
   const cycleEngine = (): boolean => {
     if (!agentPaneContent) return false;
-    const available = availableEngines();
-    if (available.length < 2) return false;
-    const current = currentEngine();
-    const next = available[(Math.max(0, available.indexOf(current)) + 1) % available.length];
-    if (!next || next === current) return false;
+    const current = AgentProviderRegistry.Class.resolve(settings.agentProvider.value).engine;
+    const next = AgentProviderRegistry.Class.nextEngine(current);
+    if (!next) return false;
     const nextBackend = AgentFactory.Class.createBackend({
       cwd: workspaceSet.active.root,
-      provider: next as typeof settings.agentProvider.value,
+      provider: next === 'echo' ? 'auto' : next,
       skipPermissions: () => settings.agentSkipPermissions.value,
       model: settings.agentModel.value,
     });
     if (agentPaneContent.agentSession.swapBackend(nextBackend, next)) {
-      settings.agentProvider.value = next as typeof settings.agentProvider.value;
+      if (next !== 'echo') settings.agentProvider.value = next;
       settings.save(); // persist the write-back (a bare ref write live-applies but does not persist)
       return true;
     }
@@ -294,7 +282,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   };
   const enginePort: AgentEnginePort = {
     get provider() { return currentEngine(); },
-    get canCycle() { return availableEngines().length >= 2; },
+    get canCycle() { return AgentProviderRegistry.Class.availableEngines().length >= 2; },
     cycle: cycleEngine,
   };
 

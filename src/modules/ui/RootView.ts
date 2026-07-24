@@ -1118,9 +1118,11 @@ function $buildRootView(
         if (view.dividerBox) view.dividerBox.backgroundColor = panelFocused ? palette.borderActive : palette.border;
       });
       if (!agentVisible) { agentScrollViewport.hideBars(); agentCellGeometry = null; }
+      agentContent()?.setPaneVisible(agentVisible); // spinner gate: busy AND on-screen
     } else {
       agentScrollViewport.hideBars();
       agentCellGeometry = null;
+      agentContent()?.setPaneVisible(false); // panel hidden — no hidden 10 Hz animation
     }
     statusBar.update(palette, editorContentMount.markdownSplitView?.previewFocused ?? false);
     overlayLayer.update(palette);

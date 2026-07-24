@@ -19,6 +19,7 @@ import type { PaneContent, PaneRenderContext } from '../ui/PaneContent';
 import type { GlyphLevel } from '../theme/TerminalCapabilities';
 import { ThemeIcons } from '../theme/ThemeIcons';
 import { TextSelectionModel, type SelectionPoint } from '../ui/TextSelectionModel';
+import { WrapText } from '../ui/WrapText';
 import { Clipboard } from '../system/Clipboard';
 import { AgentPaneRenderer, type SelectionRange } from './AgentPaneRenderer';
 import { AgentTranscriptProjection, type ProjectedLine } from './AgentTranscriptProjection';
@@ -90,6 +91,8 @@ class $AgentPaneContent implements PaneContent {
   private readonly spinner = new AgentSpinner.Class();
   /** Stops the status→spinner watcher on dispose. */
   private readonly stopStatusWatch: () => void;
+  /** True while the pane is actually painted (host-reported) — gates the spinner timer. */
+  private readonly paneVisible = ref(false);
 
   /** Transcript indices the user has expanded (tool rows). Default (absent) = collapsed. View state. */
   private readonly expandedIndices = new Set<number>();
@@ -127,22 +130,42 @@ class $AgentPaneContent implements PaneContent {
   private lastGlyphLevel: GlyphLevel = 'unicode';
 
   constructor(private readonly session: AgentSession.Instance) {
-    this.revision = computed(
-      () =>
-        this.session.renderRevision.value +
-        this.composer.text.value.length +
-        this.spinner.frame.value +
-        this.viewRevision.value +
-        (this.permissionMode?.value ? 1 : 0),
-    );
+    // MONOTONIC fuse: read every repaint source, then return a strictly increasing counter. An
+    // arithmetic SUM here could cancel (spinner-stop −1 + session-bump +1 = net 0 → a finished turn
+    // stuck rendering "working…", the reviewed repaint bug); a recompute now ALWAYS yields a new value.
+    // Reading composer TEXT (string identity), not its length, also kills same-length-edit cancels.
+    let fuseCounter = 0;
+    this.revision = computed(() => {
+      void this.session.renderRevision.value;
+      void this.composer.text.value;
+      void this.spinner.frame.value;
+      void this.spinner.running.value;
+      void this.viewRevision.value;
+      void this.permissionMode?.value;
+      fuseCounter += 1;
+      return fuseCounter;
+    });
+    // The spinner timer lives only while BUSY *AND VISIBLE*: a hidden pane awaiting a permission
+    // (busy indefinitely) must not keep a 10 Hz timer alive — a resource lives only while observed
+    // (the reviewed hidden-animation breach). Re-showing a busy pane re-arms it.
     this.stopStatusWatch = watch(
-      () => this.session.busy,
-      (busy) => {
-        if (busy) this.spinner.start();
+      () => this.session.busy && this.paneVisible.value,
+      (shouldSpin) => {
+        if (shouldSpin) this.spinner.start();
         else this.spinner.stop();
       },
-      { immediate: true },
+      { immediate: true, flush: 'sync' }, // a timer gate must arm/disarm exactly on the flip
     );
+  }
+
+  /** The host reports whether this pane is actually on screen (panel visible AND the agent is a visible
+   *  cell). Drives the spinner's busy∧visible gate. */
+  setPaneVisible(visible: boolean): void {
+    if (this.paneVisible.value !== visible) this.paneVisible.value = visible;
+  }
+  /** True while the spinner timer is armed (tests + the visibility-gate smoke read this). */
+  get spinnerActive(): boolean {
+    return this.spinner.running.value;
   }
 
   get agentSession(): AgentSession.Instance {
@@ -277,7 +300,7 @@ class $AgentPaneContent implements PaneContent {
     const selectionRanges: (SelectionRange | null)[] = bodyRows.map((row, rowIndex) => {
       if (rowIndex < padCount) return null;
       const absoluteLine = firstLine + (rowIndex - padCount);
-      return this.transcriptSelection.rangeForLine(absoluteLine, row.text.length);
+      return this.transcriptSelection.rangeForLine(absoluteLine, WrapText.Class.displayWidth(row.text));
     });
 
     // The rule is inset by the L/R gutter too (side margins → airier canvas).
@@ -424,10 +447,13 @@ class $AgentPaneContent implements PaneContent {
       return true; // swallow everything else while the prompt is up
     }
     if (key.name === 'return') {
-      this.session.send(this.composer.value);
-      this.composer.clear();
-      this.transcriptSelection.clear();
-      this.scrollPort?.scrollToBottom(); // sending re-anchors to the newest output
+      // Clear the draft ONLY when the session accepted it — Enter while busy must keep the follow-up
+      // draft intact (unconditional clearing destroyed it, the reviewed data loss).
+      if (this.session.send(this.composer.value)) {
+        this.composer.clear();
+        this.transcriptSelection.clear();
+        this.scrollPort?.scrollToBottom(); // sending re-anchors to the newest output
+      }
       return true;
     }
     // Transcript paging always works (the composer keeps the arrow keys for cursor motion).
@@ -556,7 +582,8 @@ class $AgentPaneContent implements PaneContent {
     this.viewRevision.value += 1;
   }
   transcriptLineGraphemeCount(lineIndex: number): number {
-    return this.lastProjectedLines[lineIndex]?.text.length ?? 0;
+    // DISPLAY cells (the drag's inclusive-head clamp works in the pointer's own unit).
+    return WrapText.Class.displayWidth(this.lastProjectedLines[lineIndex]?.text ?? '');
   }
 
   // Composer selection (a small manual drag through the host — no momentum/edge-autoscroll). The composer
@@ -587,7 +614,13 @@ class $AgentPaneContent implements PaneContent {
   async copySelection(): Promise<number> {
     if (this.composer.hasSelection()) return this.composer.copySelection();
     if (!this.transcriptSelection.hasSelection()) return 0;
-    const text = this.transcriptSelection.selectedText(this.lastProjectedLines.map((line) => line.text));
+    // Surface-owned reconstruction: transcript rows are separate visual lines joined with newlines;
+    // each line slice is grapheme-safe over DISPLAY cells through the shared WrapText slicer.
+    const text = this.transcriptSelection.selectedText((line, startCell, endCell) => {
+      const rowText = this.lastProjectedLines[line]?.text;
+      if (rowText === undefined) return null;
+      return WrapText.Class.sliceByDisplayCells(rowText, startCell, endCell ?? Number.MAX_SAFE_INTEGER);
+    }, '\n');
     if (!text) return 0;
     await Clipboard.Class.copy(text);
     return text.length;

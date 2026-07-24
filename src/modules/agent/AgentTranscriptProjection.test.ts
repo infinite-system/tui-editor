@@ -169,3 +169,33 @@ describe('system (engine-switch) note projection', () => {
     expect(banner!.entryIndex).toBe(-1);
   });
 });
+
+describe('per-entry memoization (review B7 — O(changed), not O(transcript))', () => {
+  test('unchanged entries reuse the SAME line objects across calls; a changed entry recomputes', () => {
+    const transcript: TranscriptEntry[] = [
+      { role: 'user', text: 'first' },
+      { role: 'assistant', text: 'growing' },
+    ];
+    const first = project(transcript, 40);
+    const second = project(transcript, 40);
+    // Nothing changed → identical line OBJECTS (cache hits), not merely equal content.
+    expect(second[0]).toBe(first[0]);
+    expect(second.length).toBe(first.length);
+    for (let index = 0; index < first.length; index += 1) expect(second[index]).toBe(first[index]);
+
+    // Mutate the assistant text (streaming) → ONLY its lines recompute; the user's stay identical.
+    (transcript[1] as { text: string }).text = 'growing more';
+    const third = project(transcript, 40);
+    expect(third[0]).toBe(first[0]); // user block reused
+    expect(third.some((line) => line.text.includes('growing more'))).toBe(true);
+  });
+
+  test('a width/expand change recomputes (the cache keys on every shaping input)', () => {
+    const transcript: TranscriptEntry[] = [{ role: 'tool-use', id: 't1', name: 'Bash', input: { command: 'x' } }];
+    const collapsed = project(transcript, 40);
+    const expanded = project(transcript, 40, new Set([0]));
+    expect(expanded.length).toBeGreaterThan(collapsed.length);
+    const narrow = project(transcript, 10);
+    expect(narrow[0]).not.toBe(collapsed[0]);
+  });
+});

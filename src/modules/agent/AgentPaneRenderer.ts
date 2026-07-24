@@ -12,6 +12,7 @@ import type { Palette } from '../theme/ThemePalettes';
 import type { ProjectedLine } from './AgentTranscriptProjection';
 import type { ComposerRow } from './AgentComposer';
 import type { ThinkingSegment } from './AgentThinkingIndicator';
+import { WrapText } from '../ui/WrapText';
 
 /** The [start, end) column span of a body row that is selection-highlighted. */
 export interface SelectionRange {
@@ -42,7 +43,9 @@ export interface AgentPaneRenderContext {
   focused: boolean;
 }
 
-/** Split text into [before][selected(bg)][after], the selected span given a single-ROW background. */
+/** Split text into [before][selected(bg)][after], the selected span given a single-ROW background.
+ *  Ranges are DISPLAY CELLS; the split is grapheme-safe through the shared WrapText slicer (a UTF-16
+ *  slice here corrupted é/emoji highlights — the reviewed encoding bug). */
 function pushHighlighted(
   chunks: TextChunk[],
   text: string,
@@ -54,9 +57,9 @@ function pushHighlighted(
     chunks.push(paint(text));
     return;
   }
-  const before = text.slice(0, selection.start);
-  const selected = text.slice(selection.start, selection.end);
-  const after = text.slice(selection.end);
+  const before = WrapText.Class.sliceByDisplayCells(text, 0, selection.start);
+  const selected = WrapText.Class.sliceByDisplayCells(text, selection.start, selection.end);
+  const after = WrapText.Class.sliceByDisplayCells(text, selection.end, Number.MAX_SAFE_INTEGER);
   if (before) chunks.push(paint(before));
   chunks.push(bg(palette.selection)(fg(palette.fg)(selected)));
   if (after) chunks.push(paint(after));

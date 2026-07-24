@@ -26,6 +26,10 @@ class $AgentSession {
   /** A bounded context preamble to prepend to the NEXT prompt after an engine swap, so the new engine
    *  inherits the conversation. Consumed (cleared) on the first send after the swap. */
   private pendingContextPreamble: string | null = null;
+  /** Everything before this transcript index is known settled (non-permission, or resolved) — the
+   *  pendingPermission getter never re-walks it. Monotonic; valid because the transcript is append-only
+   *  and a pointer entry only flips pending→resolved. */
+  private pendingPermissionScanFrom = 0;
 
   constructor(private backend: AgentBackend) {
     this.backend.onEvent((event) => this.fold(event));
@@ -53,12 +57,17 @@ class $AgentSession {
   }
 
   /** The OLDEST still-pending permission request (the one the y/n/a keys answer), or null. Derived from
-   *  the transcript — no parallel pending list. */
+   *  the transcript (no parallel pending list) — but scanned from a monotonic POINTER, not entry zero:
+   *  this getter runs on every status publish, and the transcript is append-only with permissions
+   *  resolving in order, so everything before the pointer is settled forever (the reviewed
+   *  full-history-walk-per-paint cost). */
   get pendingPermission(): { id: string; toolName: string; input: unknown } | null {
-    for (const entry of this.entries) {
+    while (this.pendingPermissionScanFrom < this.entries.length) {
+      const entry = this.entries[this.pendingPermissionScanFrom]!;
       if (entry.role === 'permission-request' && entry.status === 'pending') {
         return { id: entry.id, toolName: entry.toolName, input: entry.input };
       }
+      this.pendingPermissionScanFrom += 1; // settled or non-permission — never worth revisiting
     }
     return null;
   }
@@ -102,12 +111,13 @@ class $AgentSession {
     return true;
   }
 
-  /** Submit a user turn. Ignored while a turn is already in flight (one turn at a time). After an engine
-   *  swap, the first send prepends the context preamble to what the BACKEND receives (the user's own
-   *  entry stays clean — the preamble is machinery, not something the user typed). */
-  send(prompt: string): void {
+  /** Submit a user turn. Returns whether the prompt was ACCEPTED — false while a turn is in flight or
+   *  for an empty prompt, so the caller keeps the draft instead of destroying it (the reviewed
+   *  Enter-while-busy data loss). After an engine swap, the first send prepends the context preamble to
+   *  what the BACKEND receives (the user's own entry stays clean — the preamble is machinery). */
+  send(prompt: string): boolean {
     const trimmed = prompt.trim();
-    if (!trimmed || this.busy) return;
+    if (!trimmed || this.busy) return false;
     this.assistantTurnOpen = false;
     this.entries.push({ role: 'user', text: trimmed });
     this.status.value = 'streaming';
@@ -115,6 +125,7 @@ class $AgentSession {
     const toBackend = this.pendingContextPreamble ? `${this.pendingContextPreamble}\n\n${trimmed}` : trimmed;
     this.pendingContextPreamble = null;
     this.backend.send(toBackend);
+    return true;
   }
 
   /** Request the in-flight turn stop. */

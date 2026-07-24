@@ -253,3 +253,20 @@ describe('AgentSession — engine swap (live provider switch)', () => {
     expect(session.permissionPromptsSupported).toBe(true);
   });
 });
+
+describe('AgentSession — pendingPermission scan pointer (review B9)', () => {
+  test('the getter stays correct across resolve cycles (pointer never re-walks settled history)', () => {
+    const { session, backend } = makeSession();
+    session.send('go');
+    backend.emit({ kind: 'permission-request', id: 'p1', toolName: 'Bash', input: {}, respond: () => {} });
+    expect(session.pendingPermission?.id).toBe('p1');
+    session.respondToPermission('p1', 'allow');
+    expect(session.pendingPermission).toBeNull();
+    // A LATER pending request is still found after dozens of settled entries.
+    for (let index = 0; index < 30; index += 1) backend.emit({ kind: 'text-delta', text: 'x' });
+    backend.emit({ kind: 'permission-request', id: 'p2', toolName: 'Read', input: {}, respond: () => {} });
+    expect(session.pendingPermission?.id).toBe('p2');
+    session.respondToPermission('p2', 'deny');
+    expect(session.pendingPermission).toBeNull();
+  });
+});

@@ -22,7 +22,7 @@
 import type { AgentBackend } from './AgentBackend';
 import { AgentPermissions } from './AgentPermissions';
 import type { AgentEvent, PermissionDecision } from './AgentEvents';
-import { CodexAppServerMapping, type MappingTurnState } from './CodexAppServerMapping';
+import { CodexAppServerMapping, type ApprovalDescriptor, type MappingTurnState } from './CodexAppServerMapping';
 
 export interface CodexAppServerOptions {
   /** Absolute path to the `codex` binary (resolved by the factory via Bun.which). */
@@ -101,7 +101,16 @@ class $CodexAppServerBackend implements AgentBackend {
       void this.drainStderr(child);
       void child.exited.then((exitCode) => {
         if (this.disposed) return;
+        // IDENTITY-CHECK: a stale exit from a replaced child must not tear down its successor's state.
+        if (this.child !== child) return;
         this.child = null;
+        // The THREAD died with its server — a fresh server knows nothing of the old thread id; keeping
+        // it made the next send submit a dead id (the reviewed recovery gap).
+        this.threadId = null;
+        // Reject + clear every in-flight RPC so no awaiting promise leaks forever.
+        const reason = new Error(`codex app-server exited (${exitCode})`);
+        for (const [, pending] of this.pendingRequests) pending.reject(reason);
+        this.pendingRequests.clear();
         // A dead server with a turn in flight must not hang the session.
         if (this.turnInFlight) {
           if (!this.interrupting) {
@@ -182,12 +191,14 @@ class $CodexAppServerBackend implements AgentBackend {
       }
       return;
     }
-    // A SERVER→CLIENT REQUEST — the approval pause.
+    // A SERVER→CLIENT REQUEST — an approval pause, or something we don't speak. EVERY request gets an
+    // answer: an unanswered request leaves the server hanging to its timeout (the reviewed
+    // permissions-request hang); unknown methods get a proper JSON-RPC method-not-found error, which the
+    // server handles like any refused capability.
     if (id !== undefined && typeof message.method === 'string') {
       const approval = CodexAppServerMapping.Class.approvalOf(message.method, message.params);
       if (approval) this.emitPermissionRequest(id as number | string, approval);
-      // Unknown server requests are left unanswered deliberately: answering with a wrong shape is worse
-      // (the protocol fail-safes unanswered/invalid approvals to decline).
+      else this.write({ jsonrpc: '2.0', id, error: { code: -32601, message: `Method not supported by this client: ${message.method}` } });
       return;
     }
     // A notification — map through the pure seam.
@@ -203,8 +214,9 @@ class $CodexAppServerBackend implements AgentBackend {
   }
 
   /** Surface a paused approval as the provider-neutral 'permission-request'; route the user's decision
-   *  back as the v2 enum. Exactly-once (the session also guards). */
-  private emitPermissionRequest(rpcId: number | string, approval: { toolName: string; input: unknown }): void {
+   *  back through the approval's METHOD-SPECIFIC response builder (a decision enum for command/patch
+   *  approvals, a granted profile for permission requests). Exactly-once (the session also guards). */
+  private emitPermissionRequest(rpcId: number | string, approval: ApprovalDescriptor): void {
     this.permissionRequestCounter += 1;
     let settled = false;
     this.emit({
@@ -215,7 +227,7 @@ class $CodexAppServerBackend implements AgentBackend {
       respond: (decision: PermissionDecision) => {
         if (settled || this.disposed) return;
         settled = true;
-        this.write({ jsonrpc: '2.0', id: rpcId, result: { decision: CodexAppServerMapping.Class.decisionToCodex(decision) } });
+        this.write({ jsonrpc: '2.0', id: rpcId, result: approval.respondWith(decision) });
       },
     });
   }

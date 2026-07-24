@@ -83,3 +83,30 @@ describe('CodexAppServerMapping.decisionToCodex', () => {
     expect(mapping.decisionToCodex('deny')).toBe('decline');
   });
 });
+
+describe('permissions-profile approval (review B4)', () => {
+  test('item/permissions/requestApproval maps to a prompt descriptor (was unrecognized → hang)', () => {
+    const approval = mapping.approvalOf('item/permissions/requestApproval', {
+      reason: 'Allow network access for npm install?',
+      permissions: { network: { enabled: true } },
+    });
+    expect(approval).not.toBeNull();
+    expect(approval!.toolName).toBe('Permissions');
+    expect(approval!.input).toMatchObject({ reason: 'Allow network access for npm install?' });
+  });
+
+  test('its response builder GRANTS the requested profile on allow (turn) / always-allow (session)', () => {
+    const requested = { network: { enabled: true } };
+    const approval = mapping.approvalOf('item/permissions/requestApproval', { permissions: requested })!;
+    expect(approval.respondWith('allow')).toEqual({ permissions: requested, scope: 'turn' });
+    expect(approval.respondWith('always-allow')).toEqual({ permissions: requested, scope: 'session' });
+    expect(approval.respondWith('deny')).toEqual({ permissions: {} }); // a VALID empty grant, never silence
+  });
+
+  test('command/patch approvals still answer the decision enum through their builder', () => {
+    const command = mapping.approvalOf('item/commandExecution/requestApproval', { command: 'x' })!;
+    expect(command.respondWith('allow')).toEqual({ decision: 'accept' });
+    expect(command.respondWith('always-allow')).toEqual({ decision: 'acceptForSession' });
+    expect(command.respondWith('deny')).toEqual({ decision: 'decline' });
+  });
+});

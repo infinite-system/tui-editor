@@ -105,6 +105,7 @@ class $SdkStreamBackend implements AgentBackend {
   };
 
   private async pump(turn: Query): Promise<void> {
+    let streamFailed = false;
     try {
       for await (const message of turn) {
         const sessionId = ClaudeStreamMapping.Class.sessionIdOf(message);
@@ -115,12 +116,18 @@ class $SdkStreamBackend implements AgentBackend {
         }
       }
     } catch (error) {
+      streamFailed = true;
       if (!this.interrupting && !this.disposed) this.emit({ kind: 'error', message: String(error) });
     }
     this.activeQuery = null;
-    // Synthesize an end if the stream did not carry its own result, so the session never hangs.
+    // Synthesize an end if the stream did not carry its own result, so the session never hangs. A
+    // THROWN stream (transport/auth/CLI failure) must end with reason 'error' — reporting it as
+    // 'completed' put the session back to idle and hid the failure (the reviewed lifecycle bug).
     if (!this.sawResult && !this.disposed) {
-      this.emit({ kind: 'session-end', reason: this.interrupting ? 'interrupted' : 'completed' });
+      this.emit({
+        kind: 'session-end',
+        reason: this.interrupting ? 'interrupted' : streamFailed ? 'error' : 'completed',
+      });
     }
   }
 

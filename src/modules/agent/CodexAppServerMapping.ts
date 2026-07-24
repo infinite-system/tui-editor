@@ -16,12 +16,16 @@ export interface AppServerNotification {
   params?: unknown;
 }
 
-/** What a server→client approval REQUEST asks, translated to the pane's vocabulary. */
+/** What a server→client approval REQUEST asks, translated to the pane's vocabulary — plus the
+ *  per-METHOD response builder (the wire shapes differ: command/patch approvals answer a decision
+ *  enum; a permission-profile request answers a granted profile). */
 export interface ApprovalDescriptor {
   /** The tool name the pane prompt renders (through AgentToolSummary). */
   toolName: string;
-  /** The salient input (the shell command / patch summary). */
+  /** The salient input (the shell command / patch summary / permission reason). */
   input: unknown;
+  /** Build THIS method's JSON-RPC result for the user's decision. */
+  respondWith(decision: 'allow' | 'always-allow' | 'deny'): unknown;
 }
 
 /** Mutable per-turn mapping state: which agentMessage items already streamed deltas (so their
@@ -104,19 +108,44 @@ function $mapNotification(notification: AppServerNotification, turnState: Mappin
   }
 }
 
-/** Translate a server→client approval REQUEST's method+params into the pane's prompt vocabulary, or
- *  null when the method is not an approval. The DECISION mapping lives with the backend (it owns the
- *  JSON-RPC response): allow → accept, always-allow → acceptForSession (codex's native session-scoped
- *  auto-allow), deny → decline (the agent continues the turn — our deny semantics exactly). */
+/** Translate a server→client approval REQUEST's method+params into the pane's prompt vocabulary (with
+ *  its method-specific response builder), or null when the method is not an approval at all. Three
+ *  approval families exist in the current dialect (the reviewed gap: the permissions request was
+ *  unrecognized, so it hung to the fail-safe instead of reaching the y/n/a prompt):
+ *  - command execution / file change → decision enum (accept / acceptForSession / decline);
+ *  - permission-profile requests → a GRANT: the requested profile back (allow: this turn;
+ *    always-allow: session scope) or an EMPTY profile (deny grants nothing; the turn continues). */
 function $approvalOf(method: string, params: unknown): ApprovalDescriptor | null {
   const parameters = record(params);
+  const decisionResponse = (decision: 'allow' | 'always-allow' | 'deny'): unknown => ({
+    decision: $decisionToCodex(decision),
+  });
   if (method === 'item/commandExecution/requestApproval' || method === 'execCommandApproval') {
     const command = parameters.command;
     const commandText = Array.isArray(command) ? command.join(' ') : String(command ?? '');
-    return { toolName: 'Bash', input: { command: commandText, reason: parameters.reason ?? undefined } };
+    return {
+      toolName: 'Bash',
+      input: { command: commandText, reason: parameters.reason ?? undefined },
+      respondWith: decisionResponse,
+    };
   }
   if (method === 'item/fileChange/requestApproval' || method === 'applyPatchApproval') {
-    return { toolName: 'ApplyPatch', input: { reason: parameters.reason ?? 'apply file changes' } };
+    return {
+      toolName: 'ApplyPatch',
+      input: { reason: parameters.reason ?? 'apply file changes' },
+      respondWith: decisionResponse,
+    };
+  }
+  if (method === 'item/permissions/requestApproval') {
+    const requestedProfile = parameters.permissions ?? {};
+    return {
+      toolName: 'Permissions',
+      input: { reason: parameters.reason ?? 'grant additional permissions', request: requestedProfile },
+      respondWith: (decision) =>
+        decision === 'deny'
+          ? { permissions: {} } // grant NOTHING — a valid answer; the turn continues denied
+          : { permissions: requestedProfile, scope: decision === 'always-allow' ? 'session' : 'turn' },
+    };
   }
   return null;
 }

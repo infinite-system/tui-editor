@@ -42,6 +42,10 @@ class $AgentComposer {
   /** Last frame's wrap width + scroll offset — the coord space for caret / pointer / selection mapping. */
   private lastWrapWidth = 1;
   private scrollOffset = 0;
+  /** Cached wrap segments for (buffer, width) — every geometry read derives from ONE segmentation. */
+  private cachedSegments: readonly import('../ui/WrapText').WrapSegment[] | null = null;
+  private cachedSegmentsText = '';
+  private cachedSegmentsWidth = 0;
 
   /** The reactive buffer text (the pane fuses its length into the render revision). */
   get text(): Ref<string> {
@@ -166,49 +170,44 @@ class $AgentComposer {
     return true;
   }
 
-  // --- visual geometry (cursor ↔ wrapped visual line/column, using the last wrap width) --------------
+  // --- visual geometry (cursor ↔ wrapped row/DISPLAY-cell column, through the WrapText seam) ---------
+  // The buffer is one logical line (newlines flatten on insert), so buffer grapheme indices align 1:1
+  // with the seam's whole-text offsets. All geometry derives from ONE segments() call per state — the
+  // uniform-width index/width math this replaces disagreed with rendered rows on wide/combining text
+  // (the reviewed éx caret divergence).
 
-  private numVisualLines(): number {
-    const total = this.graphemeCount();
-    const wrapWidth = this.lastWrapWidth;
-    if (total === 0 || wrapWidth <= 0) return 1;
-    return Math.ceil(total / wrapWidth);
-  }
-  private visualLineLength(lineIndex: number): number {
-    const wrapWidth = this.lastWrapWidth;
-    const total = this.graphemeCount();
-    const numLines = this.numVisualLines();
-    if (lineIndex < numLines - 1) return wrapWidth;
-    return Math.max(0, total - (numLines - 1) * wrapWidth); // last line remainder (== wrapWidth when full)
-  }
-  /** The cursor's visual (line, column) in the wrapped composer. */
-  private caretVisual(): { line: number; column: number } {
-    const wrapWidth = this.lastWrapWidth;
-    const cursor = this.clampCursor();
-    const total = this.graphemeCount();
-    if (wrapWidth <= 0 || cursor === 0) return { line: 0, column: 0 };
-    if (cursor % wrapWidth === 0) {
-      // On a wrap boundary: mid-text → start of that line; at the very end → end of the full last line.
-      if (cursor < total) return { line: cursor / wrapWidth, column: 0 };
-      return { line: Math.max(0, cursor / wrapWidth - 1), column: wrapWidth };
+  /** The wrapped segments for the CURRENT buffer at the last layout width (cached per state). */
+  private segments(): readonly import('../ui/WrapText').WrapSegment[] {
+    if (this.cachedSegments === null || this.cachedSegmentsText !== this.buffer.value || this.cachedSegmentsWidth !== this.lastWrapWidth) {
+      this.cachedSegments = WrapText.Class.segments(this.buffer.value, Math.max(1, this.lastWrapWidth));
+      this.cachedSegmentsText = this.buffer.value;
+      this.cachedSegmentsWidth = this.lastWrapWidth;
     }
-    return { line: Math.floor(cursor / wrapWidth), column: cursor % wrapWidth };
+    return this.cachedSegments;
   }
-  /** The grapheme index at a visual (line, column), clamped to that line's length and the buffer end. */
+  private numVisualLines(): number {
+    return Math.max(1, this.segments().length);
+  }
+  /** DISPLAY-cell width of a visual row. */
+  private visualLineLength(lineIndex: number): number {
+    return this.segments()[lineIndex]?.displayWidth ?? 0;
+  }
+  /** The cursor's visual (row, DISPLAY-cell column) in the wrapped composer. */
+  private caretVisual(): { line: number; column: number } {
+    return WrapText.Class.visualPositionOf(this.segments(), this.clampCursor());
+  }
+  /** The grapheme index at a visual (row, DISPLAY-cell column), snapped to a cluster start. */
   private positionAt(lineIndex: number, column: number): number {
-    const wrapWidth = this.lastWrapWidth;
-    const clampedColumn = Math.max(0, Math.min(column, this.visualLineLength(lineIndex)));
-    return Math.min(this.graphemeCount(), lineIndex * wrapWidth + clampedColumn);
+    return Math.min(this.graphemeCount(), WrapText.Class.graphemeAtVisualPosition(this.segments(), lineIndex, column));
   }
 
   /** Lay the composer out for `paneWidth` columns: wrap, cap the row count, scroll to keep the CURSOR
    *  line visible, mark selection spans, and place the caret at the cursor's visual cell. */
   layout(paneWidth: number): ComposerLayout {
-    const wrapWidth = Math.max(1, paneWidth - COMPOSER_GUTTER_COLUMNS);
-    const visualLines = WrapText.Class.wrap(this.buffer.value, wrapWidth);
-    this.lastWrapWidth = wrapWidth;
+    this.lastWrapWidth = Math.max(1, paneWidth - COMPOSER_GUTTER_COLUMNS);
+    const segments = this.segments();
 
-    const totalLines = visualLines.length;
+    const totalLines = Math.max(1, segments.length);
     const rowCount = Math.max(1, Math.min(totalLines, COMPOSER_MAX_ROWS));
     const caret = this.caretVisual();
 
@@ -221,12 +220,12 @@ class $AgentComposer {
     const rows: ComposerRow[] = [];
     for (let visibleIndex = 0; visibleIndex < rowCount; visibleIndex += 1) {
       const absoluteLine = this.scrollOffset + visibleIndex;
-      const text = visualLines[absoluteLine] ?? '';
+      const segment = segments[absoluteLine];
       rows.push({
         absoluteLine,
         isFirstLine: absoluteLine === 0,
-        text,
-        selection: this.selection.rangeForLine(absoluteLine, Array.from(text).length),
+        text: segment?.text ?? '',
+        selection: this.selection.rangeForLine(absoluteLine, segment?.displayWidth ?? 0),
       });
     }
 
@@ -270,15 +269,16 @@ class $AgentComposer {
     return Math.max(1, Math.min(this.numVisualLines(), COMPOSER_MAX_ROWS));
   }
 
-  /** The selected buffer text — reconstructed from CODE-POINT offsets (wrap adds no separators, so the
-   *  visual lines concatenate back to the buffer with NO phantom newlines, unlike the transcript). */
+  /** The selected buffer text — through the SEAM's resolver-based reconstruction (the composer no
+   *  longer suppresses the shared selectedText): each covered row slices grapheme-safely by DISPLAY
+   *  cells, and rows join with '' because composer wraps concatenate (no phantom newlines). */
   selectedText(): string {
-    const span = this.selection.normalized();
-    if (!span) return '';
-    const graphemes = this.graphemes();
-    const offsetOf = (point: SelectionPoint): number =>
-      Math.min(graphemes.length, point.line * this.lastWrapWidth + point.column);
-    return graphemes.slice(offsetOf(span[0]), offsetOf(span[1])).join('');
+    const segments = this.segments();
+    return this.selection.selectedText((line, startCell, endCell) => {
+      const segment = segments[line];
+      if (!segment) return null;
+      return WrapText.Class.sliceByDisplayCells(segment.text, startCell, endCell ?? Number.MAX_SAFE_INTEGER);
+    }, '');
   }
 
   /** Copy the composer selection to the OS clipboard; resolves to the character count copied. */

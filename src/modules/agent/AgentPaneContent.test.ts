@@ -281,3 +281,51 @@ describe('AgentPaneContent — system (engine switch) note renders', () => {
     expect(painted).toContain('— switched to codex — context ported —');
   });
 });
+
+describe('AgentPaneContent — monotonic repaint fuse (review B1)', () => {
+  test('a +1/−1 pair across sources can NEVER cancel: the fused revision strictly increases', () => {
+    const { pane, backend } = makePane();
+    backend.emit({ kind: 'session-start' }); // busy → spinner armed
+    const seen: number[] = [pane.renderRevision.value];
+    // Simulate the cancelling pair: a session bump (+1) coinciding with a spinner reset (frame N→0).
+    backend.emit({ kind: 'text-delta', text: 'x' });
+    seen.push(pane.renderRevision.value);
+    backend.emit({ kind: 'session-end', reason: 'completed' }); // stops the spinner AND bumps the session
+    seen.push(pane.renderRevision.value);
+    for (let index = 1; index < seen.length; index += 1) {
+      expect(seen[index]!).toBeGreaterThan(seen[index - 1]!); // strictly monotonic — no net-zero frames
+    }
+  });
+});
+
+describe('AgentPaneContent — Enter while busy keeps the draft (review B3)', () => {
+  test('a follow-up typed during a streaming turn survives a premature Enter', () => {
+    const { pane, backend } = makePane();
+    pane.handleKey({ name: 'a', sequence: 'a' } as never);
+    pane.handleKey({ name: 'return' } as never); // sends "a" → busy
+    expect(backend.sent).toEqual(['a']);
+    for (const character of 'b') pane.handleKey({ name: character, sequence: character } as never);
+    pane.handleKey({ name: 'return' } as never); // busy → REFUSED, draft must survive
+    expect(backend.sent).toEqual(['a']); // nothing new sent
+    expect(paintedText(pane.render(context()))).toContain('❯ b'); // the draft is still in the composer
+    backend.emit({ kind: 'session-end', reason: 'completed' }); // turn settles
+    pane.handleKey({ name: 'return' } as never); // now it sends
+    expect(backend.sent).toEqual(['a', 'b']);
+    expect(paintedText(pane.render(context()))).not.toContain('❯ b'); // cleared on ACCEPT
+  });
+});
+
+describe('AgentPaneContent — spinner gated on visibility (review B8)', () => {
+  test('a busy but HIDDEN pane runs no spinner timer; showing it arms the timer; hiding tears it down', () => {
+    const { pane, backend } = makePane();
+    backend.emit({ kind: 'session-start' }); // busy
+    expect(pane.spinnerActive).toBe(false); // hidden (never shown) → no timer despite busy
+    pane.setPaneVisible(true);
+    expect(pane.spinnerActive).toBe(true); // busy ∧ visible → armed
+    pane.setPaneVisible(false);
+    expect(pane.spinnerActive).toBe(false); // hidden again → torn down (no hidden 10 Hz animation)
+    pane.setPaneVisible(true);
+    backend.emit({ kind: 'session-end', reason: 'completed' });
+    expect(pane.spinnerActive).toBe(false); // idle → torn down even while visible
+  });
+});
