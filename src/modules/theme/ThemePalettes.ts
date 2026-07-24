@@ -42,32 +42,36 @@ export interface Palette {
   info: string;
 }
 
+// Tokyo Night (Storm) — a blue-matte night, softer than pure black/white: fg is a soft blue-white,
+// bg is a matte blue (never #000), comments/dim are gently muted for lower overall contrast.
 export const DARK: Palette = {
   name: 'invar-dark',
-  bg: '#1e1e2e', panel: '#181825', statusBg: '#11111b',
-  border: '#313244', borderActive: '#89b4fa',
-  fg: '#cdd6f4', dim: '#6c7086', accent: '#89b4fa',
-  selection: '#45475a', selectionMuted: '#33415e', cursorLine: '#292c3c',
-  added: '#a6e3a1', modified: '#f9e2af', deleted: '#f38ba8',
-  diffAddedBg: '#1c3a52', diffModifiedBg: '#3a341e', diffDeletedBg: '#4a2530',
-  keyword: '#cba6f7', string: '#a6e3a1', number: '#fab387',
-  comment: '#6c7086', func: '#89b4fa', type: '#f9e2af',
-  variable: '#cdd6f4', operator: '#94e2d5',
-  error: '#f38ba8', warning: '#f9e2af', info: '#89b4fa',
+  bg: '#24283b', panel: '#1f2335', statusBg: '#16161e',
+  border: '#3b4261', borderActive: '#7aa2f7',
+  fg: '#c0caf5', dim: '#565f89', accent: '#7aa2f7',
+  selection: '#283457', selectionMuted: '#33467c', cursorLine: '#2c3350',
+  added: '#9ece6a', modified: '#e0af68', deleted: '#f7768e',
+  diffAddedBg: '#1e3328', diffModifiedBg: '#35311f', diffDeletedBg: '#3d2831',
+  keyword: '#bb9af7', string: '#9ece6a', number: '#ff9e64',
+  comment: '#565f89', func: '#7aa2f7', type: '#7dcfff',
+  variable: '#c0caf5', operator: '#89ddff',
+  error: '#f7768e', warning: '#e0af68', info: '#7aa2f7',
 };
 
+// Tokyo Night Day — a soft grey-blue light theme (bg is never #fff so it doesn't burn the eyes),
+// body text a dark blue-grey rather than black, all accents desaturated for easy daytime reading.
 export const LIGHT: Palette = {
   name: 'invar-light',
-  bg: '#eff1f5', panel: '#e6e9ef', statusBg: '#dce0e8',
-  border: '#ccd0da', borderActive: '#1e66f5',
-  fg: '#4c4f69', dim: '#8c8fa1', accent: '#1e66f5',
-  selection: '#bcc0cc', selectionMuted: '#c9d6f2', cursorLine: '#e6e9ef',
-  added: '#40a02b', modified: '#df8e1d', deleted: '#d20f39',
-  diffAddedBg: '#d0e2f2', diffModifiedBg: '#f0ecd4', diffDeletedBg: '#f4d4dc',
-  keyword: '#8839ef', string: '#40a02b', number: '#fe640b',
-  comment: '#8c8fa1', func: '#1e66f5', type: '#df8e1d',
-  variable: '#4c4f69', operator: '#179299',
-  error: '#d20f39', warning: '#df8e1d', info: '#1e66f5',
+  bg: '#e1e2e7', panel: '#d4d6e4', statusBg: '#c4c8da',
+  border: '#b6bad0', borderActive: '#2e7de9',
+  fg: '#343b58', dim: '#848cb5', accent: '#2e7de9',
+  selection: '#b7c1e3', selectionMuted: '#a3b6e8', cursorLine: '#d6d8e6',
+  added: '#587539', modified: '#8c6c3e', deleted: '#f52a65',
+  diffAddedBg: '#d5e6d0', diffModifiedBg: '#ece6d0', diffDeletedBg: '#f2d5dc',
+  keyword: '#9854f1', string: '#587539', number: '#b15c00',
+  comment: '#848cb5', func: '#2e7de9', type: '#007197',
+  variable: '#343b58', operator: '#0f4b6e',
+  error: '#f52a65', warning: '#8c6c3e', info: '#2e7de9',
 };
 
 export const PALETTES: Record<string, Palette> = {

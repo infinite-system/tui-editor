@@ -211,7 +211,17 @@ paintedcols() { python3 -c "
 import json
 from collections import Counter
 rows=json.load(open('$ROOT/artifacts/frame-$1.json'))['rows']
-sidebar_bg='30,30,46,255'  # dark-theme sidebar interior
+# Derive the sidebar interior fill from the frame itself (the dominant bg in the window) rather than
+# hardcoding a palette hex — robust to color-depth quantization (Tokyo Night bg/panel no longer both
+# collapse to pure black the way the old near-black palette did). A scrollbar column reads as the
+# minority (track) color; the fill is the majority.
+fill_counter=Counter()
+for y in range(2,34):
+    bg=rows[y].get('bg',[])
+    for x in range(24,32):
+        c=bg[x] if x<len(bg) else ''
+        if c: fill_counter[c]+=1
+sidebar_bg=fill_counter.most_common(1)[0][0] if fill_counter else ''
 cols=Counter()
 for y in range(2,34):
     bg=rows[y].get('bg',[])

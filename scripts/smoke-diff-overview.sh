@@ -113,9 +113,9 @@ with open(os.environ['FRAME_PATH'], encoding='utf-8') as frame_file:
     rows = json.load(frame_file)['rows']
 
 colors = {
-    'modified': '249,226,175,255',
-    'added': '166,227,161,255',
-    'deleted': '243,139,168,255',
+    'modified': '224,175,104,255',  # Tokyo Night yellow #e0af68
+    'added': '158,206,106,255',     # Tokyo Night green  #9ece6a
+    'deleted': '247,118,142,255',   # Tokyo Night red    #f7768e
 }
 width = max(len(row.get('bg', [])) for row in rows)
 candidate_columns = []
@@ -241,7 +241,7 @@ import json
 import os
 with open(os.environ['FRAME_PATH'], encoding='utf-8') as frame_file:
     rows = json.load(frame_file)['rows']
-selection_color = '69,71,90,255'
+selection_color = '40,52,87,255'   # Tokyo Night selection #283457
 print(sum(1 for row in rows if selection_color in row.get('bg', [])))
 PY
 )"

@@ -111,7 +111,7 @@ fi
 "$HARNESS" send "$EDIT_SESSION" End >/dev/null
 "$HARNESS" send "$EDIT_SESSION" -l X >/dev/null
 "$HARNESS" settle "$EDIT_SESSION" >/dev/null 2>&1
-if frame_has_marker "$EDIT_SESSION" 'alphaX' '▎' '249,226,175,255'; then
+if frame_has_marker "$EDIT_SESSION" 'alphaX' '▎' '224,175,104,255'; then
   echo '  PASS  edited existing line paints the modified-colored ▎ glyph'
 else
   echo '  FAIL  edited existing line lacks the modified-colored ▎ glyph'
@@ -123,7 +123,7 @@ fi
 "$HARNESS" send "$EDIT_SESSION" C-s >/dev/null
 sleep 0.6
 "$HARNESS" settle "$EDIT_SESSION" >/dev/null 2>&1
-if frame_has_marker "$EDIT_SESSION" 'alphaX' '▎' '249,226,175,255'; then
+if frame_has_marker "$EDIT_SESSION" 'alphaX' '▎' '224,175,104,255'; then
   echo '  PASS  modified marker converges after save and git reconciliation'
 else
   echo '  FAIL  modified marker disappeared after save/reconciliation'
@@ -149,7 +149,7 @@ fi
 "$HARNESS" send "$EDIT_SESSION" Enter >/dev/null
 "$HARNESS" send "$EDIT_SESSION" -l 'added line' >/dev/null
 "$HARNESS" settle "$EDIT_SESSION" >/dev/null 2>&1
-if frame_has_marker "$EDIT_SESSION" 'added line' '▎' '166,227,161,255'; then
+if frame_has_marker "$EDIT_SESSION" 'added line' '▎' '158,206,106,255'; then
   echo '  PASS  appended buffer line paints the added-colored ▎ glyph'
 else
   echo '  FAIL  appended buffer line lacks the added-colored ▎ glyph'
@@ -172,7 +172,7 @@ sleep 0.8
 "$HARNESS" send "$DELETE_SESSION" Home >/dev/null
 "$HARNESS" send "$DELETE_SESSION" BSpace >/dev/null
 "$HARNESS" settle "$DELETE_SESSION" >/dev/null 2>&1
-if frame_has_marker "$DELETE_SESSION" 'gamma' '▁' '243,139,168,255'; then
+if frame_has_marker "$DELETE_SESSION" 'gamma' '▁' '247,118,142,255'; then
   echo '  PASS  removed line paints the deleted-colored ▁ hint on the following line'
 else
   echo '  FAIL  removed line lacks the deleted-colored ▁ hint on the following line'
