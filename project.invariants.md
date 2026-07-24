@@ -388,6 +388,46 @@ and observing the substitution take effect.
 
 **Last refined:** 2026-07-21
 
+### Seams are drawn at the shared generator
+
+**Invariant:** If two features share a behavior, that behavior belongs in one seam *only* when its
+generator is the same for both. If they merely resemble each other but their generators differ, they
+must not share — and if a consumer would have to suppress a seam's core behavior to use it, the
+boundary is wrong: the true shared thing is a sub-part.
+
+**Scope:** All cross-consumer reuse — shared engines/models/utilities (`TextEditing`,
+`ScrollableTextViewport`, `TextSelectionModel`, `WrapText`, the `PaneContent` / `AgentBackend` /
+`TtsBackend` seams). Peripheral configuration is exempt; only core/generative behavior is load-bearing.
+
+**Mechanism:** A seam earns its place by reducing branching for *every* consumer. Surface similarity is
+not shared structure; the generator is. A consumer forced to disable a seam's core is proof the shared
+thing was mis-identified — the true shared behavior is a sub-part.
+
+**Generates:** One `TextEditing.deletePreviousWord` across editor / find / quick-open / palette /
+composer; one `ScrollableTextViewport` for virtualized momentum scroll; the transcript/composer split
+(shared wrap + selection + per-row highlight, *separate* scroll); uniformity-by-reuse — a new consumer
+is one wire-up, not a reimplementation.
+
+**Rejected alternatives:** Unify by surface similarity (force the composer through the scroll engine) —
+bolts on momentum + a scrollbar it must then suppress. Duplicate per consumer (a word-delete in each
+input) — drifts.
+
+**Evidence:** `TextEditing.deletePreviousWord` shared by editor, find bar, quick-open, and the command
+palette (one generator, four consumers); the composer refused `ScrollableTextViewport` because it would
+suppress momentum + the scrollbar, and split to a shared wrap + selection seam instead
+(agent-pane-scroll build, 2026-07-23).
+
+**Impossible if true:** A behavior implemented more than once across consumers that share its generator;
+a consumer of a shared seam that must disable that seam's core/generative behavior (peripheral config
+excepted).
+
+**Verification:** grep — no duplicate implementation of a shared-generator behavior; each shared seam's
+consumers all exercise its core, differing only in peripheral flags.
+
+**Status:** established
+
+**Last refined:** 2026-07-23
+
 ### The app is built only after the kernel is sealed
 
 **Invariant:** If the application is constructed, then plugin class-graph composition has already

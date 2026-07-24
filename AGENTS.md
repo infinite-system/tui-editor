@@ -16,14 +16,21 @@ Non-negotiable conventions (summarized from the `ivue` + `invariants` skills and
    `Class = Static($X)` (stateless capability / swap seam), `Reactive($X)` (stateful + reactive
    controller), or `= $X` (raw plain service: stateful, not reactive-tracked). Pick the honest
    form — don't default everything to Reactive.
-2. **Full descriptive identifier names, always.** `increment` not `inc`, `index` not `i`,
+2. **Distill to the shared generator — reuse the seam, don't duplicate or over-unify.** A behavior
+   belongs in ONE seam only where its *generator* is the same across consumers (e.g. `TextEditing`
+   word-edits, the `*Backend` provider seams, `ScrollableTextViewport`); a new consumer is then one
+   wire-up, not a reimplementation. SPLIT where features only *look* alike — the tell that a boundary
+   is wrong is a consumer forced to *suppress a seam's core* to use it (peripheral config is fine).
+   Duplication AND over-unification are both failures. Invariant: *Seams are drawn at the shared
+   generator* (`project.invariants.md`).
+3. **Full descriptive identifier names, always.** `increment` not `inc`, `index` not `i`,
    `editor` not `ed`. Full property paths over short aliases. All code.
-3. **Invariants govern change.** Check against the relevant `*.invariants.md`; require zero
+4. **Invariants govern change.** Check against the relevant `*.invariants.md`; require zero
    problems from `node .claude/skills/invariants/scripts/check_invariants.mjs --all --refs`.
    Never put a literal `// invariant: …` string in example/comment text (the checker scans it).
-4. **Verify by DRIVING the real user path** (tmux harness + FrameProbe), never internal values.
+5. **Verify by DRIVING the real user path** (tmux harness + FrameProbe), never internal values.
    Reproduce before diagnosing; ratchet verified behavior into a gated smoke.
-5. The editor is named **Invar** (formerly "Fable").
+6. The editor is named **Invar** (formerly "Fable").
 
 Also read on entry: `CLAUDE.md`, `project.conventions.md`, `project.ivue-reference.md`,
 `project.invariants.md`, `project.architecture.md`.

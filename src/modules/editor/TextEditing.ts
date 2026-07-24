@@ -7,6 +7,10 @@ export interface PreviousWordDeletion {
   end: number;
 }
 
+// The shared text-editing seam: pure word-boundary edits reused by the editor, find bar, quick-open,
+// the command palette, AND the agent composer — one generator, every text input wires in here instead
+// of re-implementing word deletion. The canonical instance of the shared-generator rule.
+// invariant: Seams are drawn at the shared generator (project.invariants.md)
 class $TextEditing {
   // invariant: Word deletion uses the navigation boundary (src/modules/editor/editor.invariants.md)
   static wordLeft = $wordLeft;

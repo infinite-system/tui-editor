@@ -103,6 +103,12 @@ Change a convention → change it HERE (and note the why in decisions.md).
   Evidence + Impossible-if-true required; unnumbered declarative names; charset letters/digits/
   spaces/hyphens). Code that upholds a record carries `// invariant: <exact name> (<path>)`.
 - Status is `provisional` until verified BY EXECUTION through an authoritative channel.
+- **Seams before duplication or over-unification.** A shared behavior lives in ONE seam only where its
+  *generator* is the same across consumers (`TextEditing` word-edits, the `*Backend` provider seams,
+  `ScrollableTextViewport`); a new consumer WIRES IN, it does not re-implement. Split where features only
+  resemble each other — the tell that a boundary is wrong is a consumer forced to suppress a seam's core
+  (peripheral config is fine). Governs the *Seams are drawn at the shared generator* invariant
+  (`project.invariants.md`).
 
 ## Delegation
 - Every delegate packet is assembled MECHANICALLY by `scripts/delegate-packet.sh` — conventions +
