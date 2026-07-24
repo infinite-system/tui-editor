@@ -11,10 +11,15 @@ class $TerminalCapabilities {
     const colorTerm = Environment.Class.env('COLORTERM') ?? '';
     if (/truecolor|24bit/i.test(colorTerm)) return 'truecolor';
     const term = Environment.Class.env('TERM') ?? '';
-    if (/256color/i.test(term)) return '256';
-    if (/color/i.test(term)) return '16';
-    // Modern terminals default to truecolor; assume it unless TERM says otherwise.
-    return term ? '16' : 'truecolor';
+    // Genuinely legacy / limited terminals that cannot render 24-bit color get the 16-color floor.
+    if (term === '' || /^(dumb|linux|vt\d+|ansi|xterm|xterm-color|xterm-16color)$/i.test(term)) return '16';
+    // Everything modern — xterm-256color, screen/tmux-256color, alacritty, xterm-kitty, … — is assumed
+    // truecolor. Such terminals under-report via TERM (`…-256color` for legacy compat) and FREQUENTLY
+    // have COLORTERM unset (tmux/ssh strip it). The old "TERM has 256color → '256'" rule therefore served
+    // real 24-bit terminals a coarse 256-cube quantization that mangled soft palettes (Tokyo Night) into
+    // harsh, DOS-like approximations. A wrong guess here degrades gracefully in the terminal; the reverse
+    // (assuming 256 on a truecolor terminal) does not.
+    return 'truecolor';
   }
 
   static detectGlyphLevel(): GlyphLevel {
