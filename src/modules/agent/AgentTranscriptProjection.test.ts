@@ -124,3 +124,37 @@ describe('AgentTranscriptProjection.firstVisibleLine', () => {
     expect(first(100, 10, -5, false)).toBe(0); // clamped to 0
   });
 });
+
+describe('permission-request projection', () => {
+  test('PENDING renders a highlighted two-line prompt: the human phrase + the y/n/a keys', () => {
+    const lines = project(
+      [{ role: 'permission-request', id: 'p1', toolName: 'Bash', input: { command: 'rm -rf /tmp/build' }, status: 'pending' }],
+      70,
+    );
+    expect(lines).toHaveLength(2);
+    expect(lines[0]!.text).toContain('? Claude wants to run');
+    expect(lines[0]!.text).toContain('$ rm -rf /tmp/build'); // AgentToolSummary phrase, not raw JSON
+    expect(lines[0]!.text).not.toContain('{');
+    expect(lines[0]!.bold).toBe(true);
+    expect(lines[1]!.text).toContain('[y] allow');
+    expect(lines[1]!.text).toContain('[n] deny');
+    expect(lines[1]!.text).toContain('[a] always');
+  });
+
+  test('RESOLVED renders one compact record line (✓ allowed / ✗ denied)', () => {
+    const allowed = project(
+      [{ role: 'permission-request', id: 'p1', toolName: 'Read', input: { file_path: '/a/Foo.ts' }, status: 'allowed' }],
+      70,
+    );
+    expect(allowed).toHaveLength(1);
+    expect(allowed[0]!.text).toContain('✓ allowed');
+    expect(allowed[0]!.text).toContain('Reading Foo.ts');
+
+    const denied = project(
+      [{ role: 'permission-request', id: 'p2', toolName: 'Bash', input: { command: 'x' }, status: 'denied' }],
+      70,
+    );
+    expect(denied).toHaveLength(1);
+    expect(denied[0]!.text).toContain('✗ denied');
+  });
+});

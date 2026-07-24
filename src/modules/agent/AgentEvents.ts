@@ -8,6 +8,10 @@
 // invariant: An agent session is a structured event stream, not a screen (src/modules/agent/agent.invariants.md)
 // invariant: The transcript is the single source of agent session truth (src/modules/agent/agent.invariants.md)
 
+/** The user's answer to a pending permission request. 'always-allow' additionally adds the tool to the
+ *  backend's session-scoped auto-allow set (future calls for that tool skip the prompt). */
+export type PermissionDecision = 'allow' | 'always-allow' | 'deny';
+
 /** A single structured event emitted by an AgentBackend, in the order the session produced it. */
 export type AgentEvent =
   /** The session began accepting turns. */
@@ -18,6 +22,15 @@ export type AgentEvent =
   | { readonly kind: 'tool-use'; readonly id: string; readonly name: string; readonly input: unknown }
   /** A tool call finished. `id` matches the originating `tool-use`. */
   | { readonly kind: 'tool-result'; readonly id: string; readonly result: string; readonly isError: boolean }
+  /** The backend PAUSED a tool call awaiting the user's approval (ask-mode). `respond` resolves the
+   *  paused call exactly once; the session owns routing the user's y/n/a answer into it. */
+  | {
+      readonly kind: 'permission-request';
+      readonly id: string;
+      readonly toolName: string;
+      readonly input: unknown;
+      readonly respond: (decision: PermissionDecision) => void;
+    }
   /** A session-level error (transport, backend, protocol) — distinct from a tool that returned isError. */
   | { readonly kind: 'error'; readonly message: string }
   /** The session finished; `reason` says how. */
@@ -27,15 +40,22 @@ export type AgentEvent =
 export type AgentEndReason = 'completed' | 'interrupted' | 'error';
 
 /** The role of an append-only transcript entry — the projection surface every UI reads. */
-export type TranscriptRole = 'user' | 'assistant' | 'tool-use' | 'tool-result' | 'error';
+export type TranscriptRole = 'user' | 'assistant' | 'tool-use' | 'tool-result' | 'permission-request' | 'error';
+
+/** Where a permission request stands. Pending renders the interactive prompt; a resolved entry stays in
+ *  the transcript as a compact record of the decision. */
+export type PermissionRequestStatus = 'pending' | 'allowed' | 'denied';
 
 /** One append-only transcript entry. Assistant text-deltas accumulate into a single 'assistant' entry
- *  until a non-text event closes it; everything else appends a discrete entry. */
+ *  until a non-text event closes it; everything else appends a discrete entry. The permission entry is
+ *  PURE DATA (its status mutates on resolution); the live respond callback lives in the session, never
+ *  in the transcript. */
 export type TranscriptEntry =
   | { readonly role: 'user'; readonly text: string }
   | { readonly role: 'assistant'; text: string }
   | { readonly role: 'tool-use'; readonly id: string; readonly name: string; readonly input: unknown }
   | { readonly role: 'tool-result'; readonly id: string; readonly result: string; readonly isError: boolean }
+  | { readonly role: 'permission-request'; readonly id: string; readonly toolName: string; readonly input: unknown; status: PermissionRequestStatus }
   | { readonly role: 'error'; readonly text: string };
 
 /** The lifecycle state of a session, derived from the event stream. Drives composer availability and

@@ -12,6 +12,7 @@ import type { AgentBackend } from './AgentBackend';
 import { EchoAgentBackend } from './EchoAgentBackend';
 import { CliStreamBackend } from './CliStreamBackend';
 import { CodexStreamBackend } from './CodexStreamBackend';
+import { SdkStreamBackend } from './SdkStreamBackend';
 import { AgentSession } from './AgentSession';
 import { AgentPaneContent } from './AgentPaneContent';
 import type { AgentProvider } from '../settings/Settings';
@@ -30,9 +31,11 @@ export interface AgentCreateOptions {
   model?: string;
 }
 
-/** Pick the backend by provider setting + CLI availability. `auto` (or a requested CLI that's missing)
- *  prefers Claude, then Codex, then the local echo. `INVAR_AGENT_BACKEND=echo` forces the echo (keeps
- *  the driving smoke hermetic — no subprocess, no billing). Overridable Static seam. */
+/** Pick the backend by provider setting + CLI availability. Claude now rides the SDK backend
+ *  (SdkStreamBackend — interactive permission prompts in ask-mode, bypass resolved live per turn); the
+ *  legacy CLI pipe stays as an escape hatch via `INVAR_AGENT_BACKEND=cli`. `auto` (or a requested CLI
+ *  that's missing) prefers Claude, then Codex, then the local echo. `INVAR_AGENT_BACKEND=echo` forces
+ *  the echo (keeps the driving smoke hermetic — no subprocess, no billing). Overridable Static seam. */
 function $createBackend(options: AgentCreateOptions): AgentBackend {
   if (process.env.INVAR_AGENT_BACKEND === 'echo') return new EchoAgentBackend.Class();
   const provider: AgentProvider = options.provider ?? 'auto';
@@ -41,7 +44,9 @@ function $createBackend(options: AgentCreateOptions): AgentBackend {
   const claudePath = Bun.which('claude');
   const codexPath = Bun.which('codex');
   const buildClaude = (path: string): AgentBackend =>
-    new CliStreamBackend.Class({ claudePath: path, cwd: options.cwd, skipPermissions, model });
+    process.env.INVAR_AGENT_BACKEND === 'cli'
+      ? new CliStreamBackend.Class({ claudePath: path, cwd: options.cwd, skipPermissions, model })
+      : new SdkStreamBackend.Class({ cwd: options.cwd, skipPermissions, model });
   const buildCodex = (path: string): AgentBackend =>
     new CodexStreamBackend.Class({ codexPath: path, cwd: options.cwd, skipPermissions, model });
   if (provider === 'claude' && claudePath) return buildClaude(claudePath);

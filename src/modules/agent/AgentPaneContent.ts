@@ -221,9 +221,15 @@ class $AgentPaneContent implements PaneContent {
     this.lastTotalLines = lines.length;
     this.lastProjectedLines = lines;
 
+    // While tail-anchored, window at the FRESH maximum (this projection's own line count) — the engine's
+    // scrollTop can lag one frame behind a synchronous whole-turn append (its extent reads the PREVIOUS
+    // render's geometry), which would show the top of the log instead of the newest turn. Unstuck, honor
+    // the engine's position clamped into the fresh range.
     const maximumTop = Math.max(0, lines.length - bodyHeight);
     const firstLine = this.scrollPort
-      ? Math.max(0, Math.min(this.scrollPort.scrollTop, maximumTop))
+      ? this.scrollPort.stuckToBottom
+        ? maximumTop
+        : Math.max(0, Math.min(this.scrollPort.scrollTop, maximumTop))
       : maximumTop;
     this.lastFirstLine = firstLine;
 
@@ -265,14 +271,21 @@ class $AgentPaneContent implements PaneContent {
     });
   }
 
-  /** The permission mode line: "⏵⏵ bypass permissions on" / "bypass permissions off" + a dim hint. */
+  /** The permission mode line: "⏵⏵ bypass permissions on" ↔ "? ask permissions" (Shift+Tab cycles).
+   *  Ask-mode pauses consequential tools behind an interactive y/n/a prompt — but only backends that can
+   *  pause (claude via the SDK, the echo) support it; on others (codex) the label says so honestly. */
   private modeLineSegments(context: PaneRenderContext): ThinkingSegment[] {
-    const on = this.permissionMode?.value ?? false;
+    const bypass = this.permissionMode?.value ?? false;
     const arrow = context.glyphLevel === 'ascii' ? '>>' : '⏵⏵';
-    const text = on ? `${arrow} bypass permissions on` : 'bypass permissions off';
+    const askSupported = this.session.permissionPromptsSupported;
+    const text = bypass
+      ? `${arrow} bypass permissions on`
+      : askSupported
+        ? '? ask permissions'
+        : 'bypass permissions off (prompts: claude only)';
     return [
       { text: ' '.repeat(TRANSCRIPT_PAD_LEFT), color: context.palette.dim, bold: false },
-      { text, color: on ? context.palette.accent : context.palette.dim, bold: on },
+      { text, color: bypass ? context.palette.accent : askSupported ? context.palette.info : context.palette.dim, bold: bypass },
       { text: '  (shift+tab to cycle)', color: context.palette.dim, bold: false },
     ];
   }
@@ -323,6 +336,35 @@ class $AgentPaneContent implements PaneContent {
         this.viewRevision.value += 1;
       }
       return true;
+    }
+    // A PENDING PERMISSION owns the keyboard: y = allow · a = always-allow (session) · n / Escape =
+    // deny. Scroll keys (PageUp/Down) stay live so the user can review context; every other key is
+    // swallowed while the prompt is up (the composer is suspended — no accidental typing answers it).
+    const pendingPermission = this.session.pendingPermission;
+    if (pendingPermission) {
+      if (key.name === 'pageup') {
+        this.scrollPort?.scrollRowsBy(-(this.lastBodyHeight - 1));
+        return true;
+      }
+      if (key.name === 'pagedown') {
+        this.scrollPort?.scrollRowsBy(this.lastBodyHeight - 1);
+        return true;
+      }
+      if (!key.ctrl && !key.meta && !key.option && !key.super) {
+        if (key.name === 'y') {
+          this.session.respondToPermission(pendingPermission.id, 'allow');
+          return true;
+        }
+        if (key.name === 'a') {
+          this.session.respondToPermission(pendingPermission.id, 'always-allow');
+          return true;
+        }
+        if (key.name === 'n' || key.name === 'escape') {
+          this.session.respondToPermission(pendingPermission.id, 'deny');
+          return true;
+        }
+      }
+      return true; // swallow everything else while the prompt is up
     }
     if (key.name === 'return') {
       this.session.send(this.composer.value);

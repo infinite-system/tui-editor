@@ -115,6 +115,39 @@ function $project(
         }
         break;
       }
+      case 'permission-request': {
+        // The interactive approval surface. PENDING = a highlighted two-line prompt (what + the keys);
+        // RESOLVED = one compact record line. Human-readable via the same AgentToolSummary seam the
+        // collapsed tool rows use — never raw JSON.
+        const phrase = AgentToolSummary.Class.summarize(entry.toolName, entry.input) || entry.toolName;
+        if (entry.status === 'pending') {
+          lines.push({
+            text: truncate(`? Claude wants to run  ${phrase}`, width, glyphLevel),
+            color: palette.warning,
+            bold: true,
+            entryIndex,
+            toggleable: false,
+          });
+          lines.push({
+            text: truncate('  [y] allow · [n] deny · [a] always (session)', width, glyphLevel),
+            color: palette.dim,
+            bold: false,
+            entryIndex,
+            toggleable: false,
+          });
+        } else {
+          const allowed = entry.status === 'allowed';
+          const outcome = allowed ? RESULT_GLYPH[glyphLevel].ok : RESULT_GLYPH[glyphLevel].error;
+          lines.push({
+            text: truncate(`${outcome} ${allowed ? 'allowed' : 'denied'}  ${phrase}`, width, glyphLevel),
+            color: allowed ? palette.dim : palette.error,
+            bold: false,
+            entryIndex,
+            toggleable: false,
+          });
+        }
+        break;
+      }
       case 'tool-result': {
         const expanded = expandedIndices.has(entryIndex);
         const marker = expanded ? caret.expanded : caret.collapsed;

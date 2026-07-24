@@ -150,3 +150,60 @@ describe('AgentPaneContent — transcript selection + highlight', () => {
     expect(await pane.copySelection()).toBe(5); // copied "hello"
   });
 });
+
+describe('AgentPaneContent — permission prompt keyboard routing', () => {
+  const pending = () => {
+    const { pane, backend } = makePane();
+    const decisions: string[] = [];
+    backend.emit({ kind: 'session-start' });
+    backend.emit({ kind: 'permission-request', id: 'p1', toolName: 'Bash', input: { command: 'echo x' }, respond: (d) => decisions.push(d) });
+    return { pane, backend, decisions };
+  };
+
+  test('y allows, and the prompt renders while pending', () => {
+    const { pane, decisions } = pending();
+    const painted = paintedText(pane.render(context()));
+    expect(painted).toContain('? Claude wants to run');
+    expect(painted).toContain('[y] allow');
+    pane.handleKey({ name: 'y', sequence: 'y' } as never);
+    expect(decisions).toEqual(['allow']);
+  });
+
+  test('n denies; Escape denies too', () => {
+    const first = pending();
+    first.pane.handleKey({ name: 'n', sequence: 'n' } as never);
+    expect(first.decisions).toEqual(['deny']);
+    const second = pending();
+    second.pane.handleKey({ name: 'escape' } as never);
+    expect(second.decisions).toEqual(['deny']);
+  });
+
+  test('a answers always-allow', () => {
+    const { pane, decisions } = pending();
+    pane.handleKey({ name: 'a', sequence: 'a' } as never);
+    expect(decisions).toEqual(['always-allow']);
+  });
+
+  test('while pending, other typing is SWALLOWED (composer suspended, no accidental answers)', () => {
+    const { pane, decisions } = pending();
+    pane.handleKey({ name: 'z', sequence: 'z' } as never);
+    pane.handleKey({ name: 'return' } as never);
+    expect(decisions).toEqual([]); // nothing resolved
+    const painted = paintedText(pane.render(context()));
+    expect(painted).toContain('? Claude wants to run'); // still pending
+    expect(painted).not.toContain('❯ z'); // the z never reached the composer
+    // After resolving, the composer works again.
+    pane.handleKey({ name: 'y', sequence: 'y' } as never);
+    pane.handleKey({ name: 'z', sequence: 'z' } as never);
+    expect(paintedText(pane.render(context()))).toContain('z');
+  });
+
+  test('PageUp still scrolls the transcript while a prompt is pending', () => {
+    const { pane, backend, port } = makePane();
+    backend.emit({ kind: 'session-start' });
+    backend.emit({ kind: 'permission-request', id: 'p1', toolName: 'Bash', input: {}, respond: () => {} });
+    pane.render(context());
+    pane.handleKey({ name: 'pageup' } as never);
+    expect(port.calls.some((call) => call.startsWith('rows:-'))).toBe(true); // review keys stay live
+  });
+});

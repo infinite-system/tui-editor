@@ -59,7 +59,7 @@ const SETTING_DESCRIPTORS: readonly SettingDescriptor[] = [
   { key: 'typescriptServer', label: 'TypeScript server', section: 'Language', spec: { kind: 'enum', options: TYPESCRIPT_SERVER_OPTIONS } },
   { key: 'lspFileSizeLimitKb', label: 'LSP file size limit (KB, 0 = no limit)', section: 'Language', spec: { kind: 'number', step: 512, minimum: 0, maximum: 51200, decimals: 0 } },
   { key: 'agentProvider', label: 'Agent engine', section: 'Agent', spec: { kind: 'enum', options: AGENT_PROVIDER_OPTIONS } },
-  { key: 'agentSkipPermissions', label: 'Agent runs without permission prompts', section: 'Agent', spec: { kind: 'boolean' } },
+  { key: 'agentSkipPermissions', label: 'Agent bypasses permissions (off = ask interactively)', section: 'Agent', spec: { kind: 'boolean' } },
   { key: 'agentAudioNarration', label: 'Speak agent replies aloud (needs a TTS engine)', section: 'Narration', spec: { kind: 'boolean' } },
   { key: 'agentNarrationVoice', label: 'Narration voice', section: 'Narration', spec: { kind: 'dynamic-enum', resolveOptions: () => VoiceDiscovery.Class.options() } },
   { key: 'agentNarrationRate', label: 'Narration rate (lower = faster)', section: 'Narration', spec: { kind: 'number', step: 0.1, minimum: 0.5, maximum: 2.0, decimals: 1 } },

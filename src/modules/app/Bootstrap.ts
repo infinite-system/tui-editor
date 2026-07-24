@@ -496,6 +496,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       agentStuckToBottom: agentPaneContent?.stuckToBottom ?? true,
       agentExpandedCount: agentPaneContent?.expandedCount ?? 0,
       agentScrollTop: agentPaneContent?.scrollTop ?? 0,
+      // Interactive permission prompt state (drives the permission-flow smoke): the pending tool name
+      // (empty when none) — flips on when ask-mode pauses a tool, off when y/n/a resolves it.
+      agentPendingPermissionTool: agentPaneContent?.agentSession.pendingPermission?.toolName ?? '',
     });
   };
 

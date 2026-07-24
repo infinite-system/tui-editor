@@ -20,5 +20,9 @@ export interface AgentBackend {
   interrupt(): void;
   /** Terminate the backend and release every owned resource (subprocess, streams). Idempotent. */
   dispose(): void;
+  /** True when this backend can PAUSE a tool call for interactive approval (emitting
+   *  'permission-request' events in ask-mode). Absent/false = no prompting mechanism (codex, plain CLI);
+   *  the mode line reads this through the session so it never promises prompts that cannot happen. */
+  readonly supportsPermissionPrompts?: boolean;
 }
 

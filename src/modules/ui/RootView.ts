@@ -1065,6 +1065,11 @@ function $buildRootView(
           const overflow = agent.contentLineCount > agent.viewportRows;
           const renderWidth = overflow ? Math.max(1, span.columns - 1) : span.columns;
           view.body.content = agent.render({ width: renderWidth, height: cellRows, palette, glyphLevel: theme.glyphLevel.value, colorDepth: theme.colorDepth.value, focused: cellFocused });
+          // Re-sync the tail-anchor AFTER the render refreshed the pane's line count: a synchronous
+          // whole-turn append (echo/permission flows) grows the content in ONE paint, and the pre-render
+          // follow saw the stale extent. The pane already windowed at the fresh maximum while stuck; this
+          // converges the ENGINE's scrollTop to the same place (scrollbar geometry + future wheel deltas).
+          agentScrollViewport.followContentTail();
           agentCellGeometry = {
             bodyX: view.body.x as number,
             bodyY: view.body.y as number,

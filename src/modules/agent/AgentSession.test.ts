@@ -129,3 +129,64 @@ describe('AgentSession', () => {
     expect(backend.disposed).toBe(true);
   });
 });
+
+describe('AgentSession — interactive permission requests', () => {
+  test('permission-request folds to a PENDING transcript entry and exposes pendingPermission', () => {
+    const { session, backend } = makeSession();
+    session.send('run it');
+    const decisions: string[] = [];
+    backend.emit({
+      kind: 'permission-request', id: 'p1', toolName: 'Bash', input: { command: 'rm -rf /tmp/x' },
+      respond: (decision) => decisions.push(decision),
+    });
+    expect(session.transcript.at(-1)).toMatchObject({ role: 'permission-request', id: 'p1', toolName: 'Bash', status: 'pending' });
+    expect(session.pendingPermission).toMatchObject({ id: 'p1', toolName: 'Bash' });
+    expect(session.status.value).toBe('awaiting-tool'); // the turn is paused on a gated tool
+    expect(decisions).toEqual([]); // nothing resolved yet — the call is genuinely paused
+  });
+
+  test('respondToPermission routes the decision into the backend callback EXACTLY once and records it', () => {
+    const { session, backend } = makeSession();
+    session.send('run it');
+    const decisions: string[] = [];
+    backend.emit({ kind: 'permission-request', id: 'p1', toolName: 'Bash', input: {}, respond: (d) => decisions.push(d) });
+
+    session.respondToPermission('p1', 'allow');
+    expect(decisions).toEqual(['allow']);
+    expect(session.transcript.at(-1)).toMatchObject({ role: 'permission-request', status: 'allowed' });
+    expect(session.pendingPermission).toBeNull();
+
+    session.respondToPermission('p1', 'deny'); // second answer is a no-op (responder consumed)
+    expect(decisions).toEqual(['allow']);
+  });
+
+  test('deny records a denied entry; always-allow records allowed', () => {
+    const { session, backend } = makeSession();
+    session.send('x');
+    const decisions: string[] = [];
+    backend.emit({ kind: 'permission-request', id: 'p1', toolName: 'Bash', input: {}, respond: (d) => decisions.push(d) });
+    session.respondToPermission('p1', 'deny');
+    expect(session.transcript.at(-1)).toMatchObject({ status: 'denied' });
+
+    backend.emit({ kind: 'permission-request', id: 'p2', toolName: 'Read', input: {}, respond: (d) => decisions.push(d) });
+    session.respondToPermission('p2', 'always-allow');
+    expect(decisions).toEqual(['deny', 'always-allow']);
+    expect(session.transcript.at(-1)).toMatchObject({ status: 'allowed' });
+  });
+
+  test('a session-end DENY-resolves any dangling pending request (no leaked pause)', () => {
+    const { session, backend } = makeSession();
+    session.send('x');
+    const decisions: string[] = [];
+    backend.emit({ kind: 'permission-request', id: 'p1', toolName: 'Bash', input: {}, respond: (d) => decisions.push(d) });
+    backend.emit({ kind: 'session-end', reason: 'interrupted' });
+    expect(decisions).toEqual(['deny']);
+    expect(session.pendingPermission).toBeNull();
+    expect(session.transcript.at(-1)).toMatchObject({ role: 'permission-request', status: 'denied' });
+  });
+
+  test('permissionPromptsSupported reflects the backend capability flag', () => {
+    const { session } = makeSession();
+    expect(session.permissionPromptsSupported).toBe(false); // the mock declares no support
+  });
+});
