@@ -29,10 +29,29 @@ describe('AgentTranscriptProjection.project', () => {
     );
     expect(lines[0]).toMatchObject({ text: 'You', bold: true, entryIndex: 0, toggleable: false });
     expect(lines[1]).toMatchObject({ text: 'hello', bold: false, entryIndex: 0 });
-    // A blank turn-separator line precedes the assistant turn (airy spacing).
+    // A blank turn-separator line follows the user turn (airy spacing), then the assistant.
     expect(lines[2]).toMatchObject({ text: '', entryIndex: -1, toggleable: false });
     expect(lines[3]).toMatchObject({ text: 'Claude', bold: true, entryIndex: 1, toggleable: false });
     expect(lines[4]).toMatchObject({ text: 'hi there', bold: false, entryIndex: 1 });
+  });
+
+  test('a JUST-POSTED user turn is followed by a blank line (before any reply exists)', () => {
+    const lines = project([{ role: 'user', text: 'hi' }], 40);
+    expect(lines.map((line) => line.text)).toEqual(['You', 'hi', '']); // You · hi · blank
+    expect(lines[2]).toMatchObject({ text: '', entryIndex: -1 });
+  });
+
+  test('user→assistant has EXACTLY one blank between them (no double)', () => {
+    const lines = project([{ role: 'user', text: 'hi' }, { role: 'assistant', text: 'yo' }], 40);
+    expect(lines.map((line) => line.text)).toEqual(['You', 'hi', '', 'Claude', 'yo']);
+  });
+
+  test('a Read tool-use collapses to the human phrase "Reading <basename>", not raw JSON', () => {
+    const lines = project([{ role: 'tool-use', id: 't1', name: 'Read', input: { file_path: '/a/b/Foo.ts' } }], 60);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.text).toContain('Reading Foo.ts');
+    expect(lines[0]!.text).not.toContain('file_path'); // no JSON key names
+    expect(lines[0]!.text).not.toContain('{');
   });
 
   test('a tool-use collapses to ONE toggleable summary line with caret + gear + name + input', () => {

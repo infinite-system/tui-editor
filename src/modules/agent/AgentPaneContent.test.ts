@@ -53,8 +53,9 @@ describe('AgentPaneContent — collapsible tool rows', () => {
 
     const collapsed = paintedText(pane.render(context()));
     expect(collapsed).toContain('▸');
-    expect(collapsed).toContain('{"command":"echo hi"}');
-    expect(collapsed).not.toContain('  "command"');
+    expect(collapsed).toContain('$ echo hi'); // human summary, not raw JSON
+    expect(collapsed).not.toContain('{"command"'); // the raw JSON blob is NOT shown collapsed
+    expect(collapsed).not.toContain('  "command"'); // nor the pretty (indented) form
     expect(pane.expandedCount).toBe(0);
 
     // The two tool rows sit at the bottom of the (top-padded) transcript body.
@@ -74,14 +75,15 @@ describe('AgentPaneContent — scroll delegates to the injected engine', () => {
     const { pane, backend, port } = makePane();
     for (let index = 0; index < 40; index += 1) backend.emit({ kind: 'text-delta', text: `line ${index}\n` });
     backend.emit({ kind: 'session-end', reason: 'completed' });
-    pane.render(context()); // bodyHeight = 11 (12 − 1 composer)
+    pane.render(context());
+    const page = pane.viewportRows - 1; // PageUp/Down move one body height minus one row
 
     expect(pane.stuckToBottom).toBe(true); // reads port.stuckToBottom
     pane.handleKey({ name: 'pageup' } as never);
     pane.handleKey({ name: 'pagedown' } as never);
     pane.handleKey({ name: 'up' } as never); // composer empty → scroll
     pane.handleKey({ name: 'down' } as never);
-    expect(port.calls).toEqual(['rows:-10', 'rows:10', 'rows:-1', 'rows:1']);
+    expect(port.calls).toEqual([`rows:${-page}`, `rows:${page}`, 'rows:-1', 'rows:1']);
 
     port.stuckToBottom = false;
     pane.handleKey({ name: 'a', sequence: 'a' } as never); // type into composer

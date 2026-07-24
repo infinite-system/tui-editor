@@ -10,6 +10,7 @@ import { Static } from 'ivue/extras';
 import type { Palette } from '../theme/ThemePalettes';
 import type { GlyphLevel } from '../theme/TerminalCapabilities';
 import { WrapText } from '../ui/WrapText';
+import { AgentToolSummary } from './AgentToolSummary';
 import type { TranscriptEntry } from './AgentEvents';
 
 /** One projected visual line: its text, paint colour, weight, the transcript entry it belongs to, and
@@ -44,11 +45,6 @@ const RESULT_GLYPH: Record<GlyphLevel, { ok: string; error: string }> = {
 /** The empty-transcript hint (shown before any turn). */
 const EMPTY_HINT = 'Ask Claude anything. Type a prompt and press Enter.';
 
-/** Collapse any run of whitespace (incl. newlines) to single spaces — for one-line summaries. */
-function collapseWhitespace(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
-}
-
 /** Truncate to `width` display cells (code-point exact), appending an ellipsis when it overflows. */
 function truncate(text: string, width: number, glyphLevel: GlyphLevel): string {
   if (width <= 0) return '';
@@ -61,11 +57,6 @@ function truncate(text: string, width: number, glyphLevel: GlyphLevel): string {
 /** Hard-wrap a string to `width` columns via the shared, width-exact seam. */
 function wrap(text: string, width: number): string[] {
   return WrapText.Class.wrap(text, width);
-}
-
-/** The one-line body a tool-use entry summarises to (its input, whitespace-collapsed). */
-function toolInputText(input: unknown): string {
-  return typeof input === 'string' ? input : JSON.stringify(input) ?? '';
 }
 
 /** The pretty (multi-line) body a tool-use entry expands to. */
@@ -83,18 +74,19 @@ function $project(
 ): ProjectedLine[] {
   const lines: ProjectedLine[] = [];
   const caret = CARET[glyphLevel];
+  const blank = (): void => { lines.push({ text: '', color: palette.dim, bold: false, entryIndex: -1, toggleable: false }); };
   transcript.forEach((entry, entryIndex) => {
-    // A blank line separates TURNS (before each user/assistant/error entry, not the first) for the airy
-    // Claude spacing. Tool-use/tool-result stay tight under their assistant. The blank is a real
-    // projected line, so it wraps/scrolls/selects with the content (a within-turn copy drags no blanks).
-    if (entryIndex > 0 && (entry.role === 'user' || entry.role === 'assistant' || entry.role === 'error')) {
-      lines.push({ text: '', color: palette.dim, bold: false, entryIndex: -1, toggleable: false });
-    }
+    // Airy turn spacing (Claude-style): a blank line BEFORE each user/error turn (separating it from the
+    // previous turn) AND a blank line AFTER every user turn (so a just-posted "You" turn is followed by
+    // space before the reply/thinking, not only agent→agent gaps). Tool-use/tool-result stay tight under
+    // their assistant. The blank is a real projected line, so it wraps/scrolls/selects with the content.
+    if (entryIndex > 0 && (entry.role === 'user' || entry.role === 'error')) blank();
     switch (entry.role) {
       case 'user':
         lines.push({ text: 'You', color: palette.accent, bold: true, entryIndex, toggleable: false });
         for (const wrapped of wrap(entry.text, width))
           lines.push({ text: wrapped, color: palette.accent, bold: false, entryIndex, toggleable: false });
+        blank(); // trailing space after the user's own turn
         break;
       case 'assistant':
         lines.push({ text: 'Claude', color: palette.func, bold: true, entryIndex, toggleable: false });
@@ -111,10 +103,12 @@ function $project(
         const marker = expanded ? caret.expanded : caret.collapsed;
         const head = `${marker} ${TOOL_GLYPH[glyphLevel]} ${entry.name}`;
         if (!expanded) {
-          const summary = collapseWhitespace(toolInputText(entry.input));
+          // COLLAPSED: a readable human phrase (tool name + salient arg), never the raw JSON.
+          const summary = AgentToolSummary.Class.summarize(entry.name, entry.input);
           const oneLine = summary.length > 0 ? `${head}  ${summary}` : head;
           lines.push({ text: truncate(oneLine, width, glyphLevel), color: palette.type, bold: true, entryIndex, toggleable: true });
         } else {
+          // EXPANDED: full pretty-printed input for those who want the detail.
           lines.push({ text: truncate(head, width, glyphLevel), color: palette.type, bold: true, entryIndex, toggleable: true });
           for (const wrapped of wrap(toolInputPretty(entry.input), width))
             lines.push({ text: wrapped, color: palette.dim, bold: false, entryIndex, toggleable: true });
@@ -126,13 +120,13 @@ function $project(
         const marker = expanded ? caret.expanded : caret.collapsed;
         const outcome = entry.isError ? RESULT_GLYPH[glyphLevel].error : RESULT_GLYPH[glyphLevel].ok;
         const color = entry.isError ? palette.error : palette.dim;
-        const head = `${marker} ${outcome} result`;
         if (!expanded) {
-          const summary = collapseWhitespace(entry.result);
-          const oneLine = summary.length > 0 ? `${head}  ${summary}` : head;
-          lines.push({ text: truncate(oneLine, width, glyphLevel), color, bold: true, entryIndex, toggleable: true });
+          // COLLAPSED: a short outcome summary — "✓ 42 lines" / "✗ error: …", not the raw dump.
+          const summary = AgentToolSummary.Class.summarizeResult(entry.result, entry.isError);
+          lines.push({ text: truncate(`${marker} ${outcome} ${summary}`, width, glyphLevel), color, bold: true, entryIndex, toggleable: true });
         } else {
-          lines.push({ text: truncate(head, width, glyphLevel), color, bold: true, entryIndex, toggleable: true });
+          // EXPANDED: the full wrapped output.
+          lines.push({ text: truncate(`${marker} ${outcome} result`, width, glyphLevel), color, bold: true, entryIndex, toggleable: true });
           for (const wrapped of wrap(entry.result, width))
             lines.push({ text: wrapped, color: palette.dim, bold: false, entryIndex, toggleable: true });
         }

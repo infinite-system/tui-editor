@@ -1,12 +1,13 @@
 // The thinking indicator — Invar's personality in the busy state. It composes the animated "working…"
-// line from the busy-only animation clock (frame index + elapsed seconds): a braille glyph, an
-// IBR-flavoured status WORD that rotates every few seconds (reduction verbs — the app's soul), a
-// per-character gradient SHIMMER that sweeps a highlight band across the word, a gradient PALETTE that
-// switches with each word (visual variety), intermittent SPARKLES that twinkle beside it, and a dim
-// elapsed-seconds counter. Pure: state in, styled segments out (the renderer paints per-cell fg — bg
-// spans mis-position). Capability fallback: truecolor shimmers smoothly, lower tiers degrade to a
-// 2-colour band, ascii drops to a plain word + '*' sparkle. Everything ticks ONLY while busy (the
-// animator that feeds it is torn down at idle), so idle quiescence holds.
+// line from the busy-only animation clock (frame index + elapsed seconds): EXACTLY ONE braille glyph at
+// the FRONT (a fixed single-width cell, so the text after it never reflows), an IBR-flavoured status WORD
+// that rotates every few seconds (reduction verbs — the app's soul), a per-character gradient SHIMMER
+// that sweeps a highlight band across the word, a gradient PALETTE that switches with each word, and a
+// dim elapsed-seconds counter. The "sparkle" is a brightness TWINKLE ON that single glyph (a colour
+// pulse), never an extra glyph — a second front glyph would shift the whole line. No trailing glyph.
+// Pure: state in, styled segments out (the renderer paints per-cell fg — bg spans mis-position).
+// Capability fallback: truecolor shimmers smoothly, lower tiers degrade to a 2-colour band, ascii drops
+// to a plain word. Everything ticks ONLY while busy (the animator is torn down at idle → idle quiescence).
 import { Static } from 'ivue/extras';
 import type { Palette } from '../theme/ThemePalettes';
 import type { GlyphLevel, ColorDepth } from '../theme/TerminalCapabilities';
@@ -105,16 +106,10 @@ const GRADIENT_SCHEMES: ReadonlyArray<readonly [keyof Palette, keyof Palette]> =
   ['number', 'error'], // orange → pink
 ];
 
-/** Sparkle glyphs that twinkle beside the word (single '*' on the ascii tier). */
-const SPARKLE_GLYPHS = ['✦', '✧', '⋆', '∗'] as const;
-
-/** A twinkling sparkle at a phase-shifted position, or null while it is dark this frame. */
-function sparkle(frameIndex: number, seed: number, color: string, glyphLevel: GlyphLevel): ThinkingSegment | null {
-  const period = 14;
-  const phase = (frameIndex + seed) % period;
-  if (phase >= 3) return null; // lit ~3 of every 14 frames — a twinkle, not a strobe
-  const glyph = glyphLevel === 'ascii' ? '*' : SPARKLE_GLYPHS[(Math.floor(frameIndex / 2) + seed) % SPARKLE_GLYPHS.length]!;
-  return { text: glyph, color, bold: true };
+/** The glyph twinkles (brightens toward the crest fg) ~2 of every 12 frames — a colour pulse on the
+ *  ONE glyph, never an extra glyph cell. */
+function twinkleGlyphColor(frameIndex: number, highlightColor: string, brightColor: string): string {
+  return frameIndex % 12 < 2 ? brightColor : highlightColor;
 }
 
 function $compose(state: ThinkingState): ThinkingSegment[] {
@@ -138,24 +133,15 @@ function $compose(state: ThinkingState): ThinkingSegment[] {
       : AgentSpinnerFrames.Class.shimmerColors(characters.length, frameIndex, colorDepth, baseColor, highlightColor);
 
   const segments: ThinkingSegment[] = [];
-  // Leading braille glyph rides the crest colour.
-  segments.push({ text: glyph, color: highlightColor, bold: true });
+  // EXACTLY ONE front glyph (a single-width braille cell at a fixed column), twinkling by COLOUR — the
+  // word after it always starts at the same column, so the line never reflows.
+  segments.push({ text: glyph, color: twinkleGlyphColor(frameIndex, highlightColor, palette.fg), bold: true });
   segments.push({ text: ' ', color: palette.dim, bold: false });
-  const leadingSparkle = sparkle(frameIndex, 0, highlightColor, glyphLevel);
-  if (leadingSparkle) {
-    segments.push(leadingSparkle);
-    segments.push({ text: ' ', color: palette.dim, bold: false });
-  }
   // The shimmering word, one segment per glyph so each carries its own gradient colour.
   characters.forEach((character, index) => {
     segments.push({ text: character, color: shimmer[index] ?? highlightColor, bold: true });
   });
-  const trailingSparkle = sparkle(frameIndex, 7, highlightColor, glyphLevel);
-  if (trailingSparkle) {
-    segments.push({ text: ' ', color: palette.dim, bold: false });
-    segments.push(trailingSparkle);
-  }
-  // Dim elapsed-seconds counter.
+  // Dim elapsed-seconds counter (trailing TEXT, never a glyph).
   segments.push({ text: `  ${AgentSpinnerFrames.Class.formatElapsed(elapsedSeconds)}`, color: palette.dim, bold: false });
   return segments;
 }

@@ -44,7 +44,7 @@ has "top+bottom horizontal rules frame the composer" "────────�
 has "permission mode line renders" "bypass permissions"
 has "mode line hint renders" "(shift+tab to cycle)"
 has "composer prompt glyph renders" "❯"
-has "transcript text is padded (leading space before the hint)" " Ask Claude"
+has "transcript text is padded (2-col left gutter before the hint)" "  Ask Claude"
 
 echo "== Shift+Tab cycles the permission mode live =="
 mode0="$("$H" capture "$S" | grep -o 'bypass permissions o[nf]*' | head -1)"
@@ -61,19 +61,37 @@ if "$H" capture "$S" | grep -qE 'Reducing|Distilling|Carving|Removing|Collapsing
   echo "  PASS  animated thinking word renders"; else echo "  FAIL  no thinking word"; "$H" capture "$S" | tail -14; fail=1; fi
 has "elapsed-seconds counter renders" "0s"
 has "waiting note shows the pending tool" "⧗ Bash"
+# EXACTLY ONE loader glyph at the front, no inline/trailing sparkle glyph (would reflow the line). Scope
+# to the THINKING line (found by its braille spinner) so the status-bar '✦' agent icon doesn't false-hit.
+think_line() { "$H" capture "$S" | grep -m1 -E '⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧'; }
+tl="$(think_line || true)"
+for spark in '✦' '✧' '⋆' '∗'; do
+  if printf '%s' "$tl" | grep -qF "$spark"; then echo "  FAIL  stray sparkle glyph ($spark) on the thinking line"; fail=1; else echo "  PASS  no stray sparkle glyph ($spark)"; fi
+done
+# The thinking word's start column is STABLE across frames (ONE fixed-width front glyph, no reflow).
+col_of_word() { think_line | bun -e 'const s=require("fs").readFileSync(0,"utf8").replace(/\n+$/,""); const m=s.match(/[A-Z][a-z]+/); process.stdout.write(m?String([...s.slice(0,s.indexOf(m[0]))].length):"none")'; }
+c1="$(col_of_word)"; sleep 0.4; c2="$(col_of_word)"; sleep 0.4; c3="$(col_of_word)"
+if [ "$c1" != none ] && [ "$c1" = "$c2" ] && [ "$c2" = "$c3" ]; then echo "  PASS  thinking word start column stable across frames (col $c1)"; else echo "  FAIL  thinking word column shifted ($c1/$c2/$c3)"; fail=1; fi
 wait_idle
 chk "session returns to idle" "$(f agentBusy)" "false"
 hasnt "waiting note is gone at idle" "⧗ Bash"
+# A blank line follows the user's just-posted turn (airy turn spacing includes the user's own turn).
+uy="$(row_of 'alpha-marker')"
+if [ -n "$uy" ]; then
+  nextline="$("$H" capture "$S" | sed -n "$((uy+2))p")"
+  if echo "$nextline" | grep -qE '^│[[:space:]█▄░]*│$'; then echo "  PASS  a blank line follows the user's posted turn"; else echo "  FAIL  no blank after user turn: [$nextline]"; fail=1; fi
+else echo "  FAIL  could not locate the user turn"; fail=1; fi
 
-echo "== collapsible tool call: collapsed by default, click-to-expand (row located dynamically) =="
-has "tool-use renders collapsed (caret + gear + name)" "▸ ⚙ Bash"
+echo "== collapsible tool call: COLLAPSED = human phrase, EXPANDED = full JSON (row located dynamically) =="
+has "tool-use collapses to the HUMAN phrase (\$ <command>)" "$ echo"
+hasnt "raw JSON blob is NOT shown collapsed" '{"command"'
 hasnt "pretty (indented) tool input hidden while collapsed" '  "command"'
 chk "nothing expanded yet" "$(f agentExpandedCount)" "0"
 tool_y="$(row_of '▸ ⚙ Bash')"
 if [ -n "$tool_y" ]; then
   "$H" click "$S" 4 "$tool_y" >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
   chk "clicking the tool row expands one entry" "$(f agentExpandedCount)" "1"
-  has "expanded tool-use shows the pretty (indented) input" '  "command"'
+  has "expanded tool-use shows the FULL pretty (indented) input" '  "command"'
   tool_y2="$(row_of '▾ ⚙ Bash')"
   [ -n "$tool_y2" ] && { "$H" click "$S" 4 "$tool_y2" >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; }
   chk "clicking again collapses it" "$(f agentExpandedCount)" "0"

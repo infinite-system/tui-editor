@@ -65,10 +65,23 @@ describe('AgentThinkingIndicator.compose', () => {
     expect(word(early)).not.toBe(word(later));
   });
 
-  test('the per-character shimmer gives interior glyphs DIFFERENT colours (truecolor gradient)', () => {
+  test('EXACTLY ONE leading single-cell glyph, a fixed word column, and NO trailing glyph — no reflow', () => {
+    for (const frameIndex of [0, 1, 2, 3, 5, 7, 11, 23]) {
+      const composed = AgentThinkingIndicator.Class.compose(baseState({ frameIndex, elapsedSeconds: 4 }));
+      // The front is one single-width glyph, then a space — so the word always starts at cell column 2.
+      expect(Array.from(composed[0]!.text)).toHaveLength(1);
+      expect(composed[1]!.text).toBe(' ');
+      // The last segment is the DIM elapsed counter (trailing TEXT ending in "s"), never a glyph.
+      const last = composed[composed.length - 1]!;
+      expect(last.bold).toBe(false);
+      expect(last.text.trim().endsWith('s')).toBe(true);
+    }
+  });
+
+  test('the per-character shimmer gives the WORD glyphs DIFFERENT colours (truecolor gradient)', () => {
     const composed = AgentThinkingIndicator.Class.compose(baseState({ elapsedSeconds: 0, frameIndex: 3 }));
-    // The word glyphs are the bold single-char segments; gather their colours.
-    const wordColors = composed.filter((segment) => segment.bold && segment.text.length === 1).map((segment) => segment.color);
+    // Word glyphs = the bold single-cell segments AFTER the leading spinner glyph (segment 0).
+    const wordColors = composed.filter((segment) => segment.bold && Array.from(segment.text).length === 1).slice(1).map((segment) => segment.color);
     expect(new Set(wordColors).size).toBeGreaterThan(1); // a gradient, not a flat colour
   });
 
@@ -79,7 +92,8 @@ describe('AgentThinkingIndicator.compose', () => {
 
   test('the ascii tier uses a plain word (single colour) and no braille', () => {
     const composed = AgentThinkingIndicator.Class.compose(baseState({ glyphLevel: 'ascii', colorDepth: '16' }));
-    const wordColors = composed.filter((segment) => segment.bold && segment.text.length === 1).map((segment) => segment.color);
+    // Skip the leading glyph (its twinkle colour differs); the WORD glyphs are a single flat colour.
+    const wordColors = composed.filter((segment) => segment.bold && Array.from(segment.text).length === 1).slice(1).map((segment) => segment.color);
     expect(new Set(wordColors).size).toBe(1); // no gradient on ascii
   });
 });

@@ -96,21 +96,27 @@ function $render(context: AgentPaneRenderContext): StyledText {
     chunks.push(fg(palette.fg)('\n'));
   }
 
-  // Composer frame: a blank spacer, a top rule, the wrapped composer rows, a bottom rule, the mode line.
-  chunks.push(fg(palette.fg)('\n')); // blank spacer
+  // Composer frame: TWO blank spacers, an (inset) top rule, the wrapped composer rows (inset), a bottom
+  // rule, the mode line, and a blank bottom-pad row — airy margins above and below the composer canvas.
+  chunks.push(fg(palette.fg)('\n')); // blank spacer 1
+  chunks.push(fg(palette.fg)('\n')); // blank spacer 2
+  if (leftPad) chunks.push(fg(palette.fg)(leftPad));
   chunks.push(fg(palette.dim)(rule));
   chunks.push(fg(palette.fg)('\n'));
 
   const promptColor = focused ? palette.accent : palette.dim;
   composer.forEach((row) => {
+    if (leftPad) chunks.push(fg(palette.fg)(leftPad));
     chunks.push(fg(promptColor)(row.isFirstLine ? '❯ ' : '  '));
     pushHighlighted(chunks, row.text, row.selection, (text) => fg(palette.fg)(text), palette);
     chunks.push(fg(palette.fg)('\n'));
   });
 
+  if (leftPad) chunks.push(fg(palette.fg)(leftPad));
   chunks.push(fg(palette.dim)(rule));
   chunks.push(fg(palette.fg)('\n'));
-  pushSegments(chunks, modeLine); // the last line carries no trailing newline
+  pushSegments(chunks, modeLine);
+  chunks.push(fg(palette.fg)('\n')); // trailing newline → a blank bottom-pad row at the very bottom
 
   return new StyledText(chunks);
 }

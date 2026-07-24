@@ -26,11 +26,12 @@ import { AgentSpinner } from './AgentSpinner';
 import { AgentThinkingIndicator, type ThinkingSegment } from './AgentThinkingIndicator';
 import type { AgentSession } from './AgentSession';
 
-/** Transcript gutter: blank columns of breathing room on the left and right of the transcript text. */
-const TRANSCRIPT_PAD_LEFT = 1;
-const TRANSCRIPT_PAD_RIGHT = 1;
-/** Fixed chrome rows around the composer: blank spacer + top rule + bottom rule + mode line. */
-const COMPOSER_CHROME_ROWS = 4;
+/** Transcript gutter: blank columns of breathing room on the left and right of the canvas (airier). */
+const TRANSCRIPT_PAD_LEFT = 2;
+const TRANSCRIPT_PAD_RIGHT = 2;
+/** Fixed chrome rows around the composer: 2 blank spacers above the frame + top rule + bottom rule +
+ *  mode line + 1 blank bottom pad (breathing room above and below the composer canvas). */
+const COMPOSER_CHROME_ROWS = 6;
 /** How long each pending tool is shown before the waiting-note cycles to the next one. */
 const WAITING_CYCLE_MILLISECONDS = 1500;
 
@@ -196,14 +197,15 @@ class $AgentPaneContent implements PaneContent {
     const waitingNote = busy ? this.composeWaitingNote(context) : null;
     const indicatorRows = busy ? (waitingNote ? 3 : 1) : 0;
 
-    // Layout top→bottom: transcript body (flex, padded L/R) · thinking · [blank · note] · blank · rule ·
-    // composer (1..cap) · rule · mode line. The composer + chrome take fixed rows; the body flexes.
-    const composerLayout = this.composer.layout(context.width);
+    // Layout top→bottom: transcript body (flex, padded L/R) · thinking · [blank · note] · blank · blank ·
+    // rule · composer (1..cap) · rule · mode line · blank(bottom pad). Chrome takes fixed rows; body flexes.
+    // The composer is indented by the same left gutter, so it wraps to width − padLeft.
+    const composerLayout = this.composer.layout(context.width - TRANSCRIPT_PAD_LEFT);
     const composerRows = composerLayout.rowCount;
     const bodyHeight = Math.max(1, context.height - COMPOSER_CHROME_ROWS - composerRows - indicatorRows);
     this.lastSpinnerRows = indicatorRows;
     this.lastComposerRows = composerRows;
-    this.lastComposerStart = bodyHeight + indicatorRows + 2; // below body + indicator + blank + top rule
+    this.lastComposerStart = bodyHeight + indicatorRows + 3; // below body + indicator + 2 blanks + top rule
 
     // The transcript text wraps inside its L/R padding (the scrollbar column is already reserved by the
     // host via context.width).
@@ -239,11 +241,13 @@ class $AgentPaneContent implements PaneContent {
       return this.transcriptSelection.rangeForLine(absoluteLine, row.text.length);
     });
 
-    const rule = (context.glyphLevel === 'ascii' ? '-' : '─').repeat(Math.max(1, context.width));
+    // The rule is inset by the L/R gutter too (side margins → airier canvas).
+    const ruleWidth = Math.max(1, context.width - TRANSCRIPT_PAD_LEFT - TRANSCRIPT_PAD_RIGHT);
+    const rule = (context.glyphLevel === 'ascii' ? '-' : '─').repeat(ruleWidth);
 
-    // The composer caret sits on its last visible row inside the frame.
+    // The composer caret sits on its last visible row inside the frame, shifted right by the left gutter.
     this.lastCaret = {
-      column: composerLayout.caretColumn,
+      column: TRANSCRIPT_PAD_LEFT + composerLayout.caretColumn,
       row: this.lastComposerStart + composerLayout.caretRow,
     };
 
@@ -413,9 +417,10 @@ class $AgentPaneContent implements PaneContent {
     return this.lastProjectedLines[lineIndex]?.text.length ?? 0;
   }
 
-  // Composer selection (a small manual drag through the host — no momentum/edge-autoscroll).
+  // Composer selection (a small manual drag through the host — no momentum/edge-autoscroll). The composer
+  // is inset by the left gutter too, so the pointer column subtracts it before mapping into composer space.
   composerPointAt(localColumn: number, visibleRow: number): SelectionPoint {
-    return this.composer.pointAt(localColumn, visibleRow);
+    return this.composer.pointAt(localColumn - TRANSCRIPT_PAD_LEFT, visibleRow);
   }
   beginComposerSelection(point: SelectionPoint): void {
     this.transcriptSelection.clear();
