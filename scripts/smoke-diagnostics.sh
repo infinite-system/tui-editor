@@ -51,7 +51,7 @@ JSON
   result="$(FRAME="$PROJECT_ROOT/artifacts/frame-$SESSION.json" python3 - <<'PY'
 import json, os
 rows=json.load(open(os.environ['FRAME']))['rows']
-red='247,118,142'  # palette.error (dark) — Tokyo Night red #f7768e
+red='219,75,75'  # palette.error (dark) — Tokyo Night error/strong-red #db4b4b
 gutter=underline=0
 for r in rows:
     t=r.get('text','')

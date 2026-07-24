@@ -12,11 +12,11 @@ fixture_root="$(mktemp -d /tmp/tui-selection.XXXXXX)"
 test_home="$(mktemp -d /tmp/tui-selection-home.XXXXXX)"
 session_name="selection-$$"
 failure_count=0
-focused_selection_color='40,52,87,255'   # Tokyo Night selection #283457
+focused_selection_color='43,47,65,255'   # Tokyo Night selection #2b2f41 (#515C7E@0x4D over bg)
 # The git changes/staging panel paints its selected rows with the softer-blue selectionMuted token
-# (#33467c) so a multi-selection stays legible; tree + commit-log still use the standard selection bg.
-changes_focused_selection_color='51,70,124,255'   # selectionMuted #33467c
-unfocused_selection_color='44,51,80,255'   # cursorLine #2c3350
+# (#283457) so a multi-selection stays legible; tree + commit-log still use the standard selection bg.
+changes_focused_selection_color='40,52,87,255'   # selectionMuted #283457
+unfocused_selection_color='30,32,46,255'   # cursorLine / active-line #1e202e
 
 cleanup() {
   "$harness" kill "$session_name" >/dev/null 2>&1 || true

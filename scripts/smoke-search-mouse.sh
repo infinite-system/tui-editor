@@ -207,8 +207,9 @@ PY
 )"
 read -r alert_glyph alert_color <<<"$alert_probe"
 expect_equal "$alert_glyph" "!" "an alert glyph is painted next to an un-openable path"
-# The warning colour is not the ordinary foreground (215,215,255) — it is a distinct warning tone.
-if [ "$alert_color" != "none" ] && [ "$alert_color" != "215,215,255,255" ]; then
+# The warning colour is not the ordinary foreground (Tokyo Night fg #a9b1d6 = 169,177,214) — it is a
+# distinct warning tone. (Now that truecolor detection is fixed, fg renders exact, not 256-quantized.)
+if [ "$alert_color" != "none" ] && [ "$alert_color" != "169,177,214,255" ]; then
   pass "the alert glyph is painted in a distinct warning colour ($alert_color)"
 else
   fail "the alert glyph is not in a distinct warning colour ($alert_color)"
