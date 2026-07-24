@@ -3,7 +3,56 @@
 Measured with `scripts/perf-baselines.sh` (rerunnable, session-scoped: unique tmux sessions +
 per-session status side channels, so live demo instances are never touched).
 
-> ## ⚠️ Two builds measured — read this first
+## CURRENT baseline — 2026-07-24, repaired harness (the authoritative numbers)
+
+Single full run on main@56fe6df + the review-fix branch (`fix-git-perf-review`), after the harness
+repair that makes these numbers able to support their claims: hard open/cursor preconditions,
+REAL close→dispose→reopen memory cycles asserted through `bufferTabCount`/`bufferLiveCount`, a
+leak-signal threshold, a one-frame minute-clock allowance in the idle window, and distinct exit
+codes (**1** invariant violation / **2** measurement failure / **3** target miss / **0** clean).
+This run: **EXIT 3 — zero measurement failures, zero orphans, one budget target missed (memory).**
+
+Measurement context: machine otherwise silent (all builder activity held); ONE user-owned Invar
+instance (main checkout, ~0.8% ambient CPU) ran concurrently — all figures below are pinned to the
+pids this script launches, so it affects at most scheduler ambience, not any per-pid number.
+
+| Measurement | 2026-07-24 | Target | Verdict |
+|---|---|---|---|
+| Idle frame delta, final 5s untouched | **0** (13/13; minute-boundary allowance unused) | 0 (+1 if a minute boundary crosses) | **PASS** — enforced, blocking |
+| Idle CPU, final 5s window | **1.00%** | <2% | **PASS** |
+| RSS at rest (fixtures + 1 open file + LSP-adjacent state) | 220.6 MB | — | info; well above the 07-21 run's 99.4 MB — see growth note |
+| RSS after boot (scratch workspace, no file) | **140.3 MB** | — | info (bun floor 33.4 MB + app delta 106.9 MB) |
+| RSS after opening the 5 MB / 50k-line file | 161.9 MB | — | info |
+| RSS after 60s idle, 5 MB file open | **164.9 MB** | <100 MB idle | **FAIL — target miss (real, documented below)** |
+| RSS growth over 3 REAL dispose→reopen cycles | **−3.6 MB** (175.6 → 190.1 → 172.0) | <16 MB leak threshold | **PASS** (no leak signal; cycles provably dispose: tabs 1→0→1, live 1 each cycle) |
+| Boot-to-ready, harness-inclusive | 314–345 ms | — | info (tmux + login shell + bun resolve included) |
+| Boot IN-APP (`bootDurationMilliseconds`, performance.now at markStarted) | **175–184 ms** | <150 ms cold start | **miss by ~25–35 ms** — first bare-process measurement of this target |
+| Clean exit / orphans | **5/5, zero orphans** (7 spawned, all exited) | clean | **PASS** |
+| Input latency proxy p50 / p95 | **28 ms / 32 ms** (20/20 valid presses) | <16 ms input-to-screen | proxy ≈ one 33 ms frame period — see regression note |
+
+### Memory growth is real — document, don't hide
+
+The 60s-idle figure moved **121.4 MB (2026-07-21) → 164.9 MB (2026-07-24)** against the same
+100 MB budget, and boot RSS moved ~99 → 140 MB. The dispose cycles are near-flat and provably real
+(close→dispose→reopen asserted through the tab/flyweight counters), so this is **working-set
+growth, not a leak** — the delta tracks the modules that shipped in between: the agent pane +
+backends, terminal emulation + PTY, narration, image/pixel tiers, Tokyo Night theme, blame/indent/
+bracket features. The 100 MB budget is now structurally exceeded at boot-plus-one-file on the
+current feature set. Options (a decision for the maintainer, not this doc): raise the budget to
+match the shipped scope, or fund a diet pass (the boot delta — 106.9 MB over the bun floor — is
+the biggest single line).
+
+### Input-latency proxy regression note
+
+The 2026-07-21 post-fix run measured p50 ≈ 5 ms (immediate one-shot frame on keypress). Today's
+p50 is back at ~one frame period (28 ms). The idle loop is still quiescent (frame delta 0), so
+this is not the old always-on-loop bug; the flush path or render scheduling has re-quantized to
+the frame cadence somewhere in the feature growth since. Worth a targeted investigation; the 16 ms
+brief target is not met by this proxy today.
+
+---
+
+> ## ⚠️ Historical runs below (2026-07-21) — superseded by the CURRENT section above
 >
 > The original table (further down, "run1 / run2") was measured against the perfbaselines worktree
 > BASE commit **`f8771ab`**, which **predates the demand-driven idle fix `68f897e`**. At `f8771ab`
@@ -130,6 +179,7 @@ freshly booted instance with zero interaction pending, momentum velocity at zero
 ## How to rerun
 
 ```
-bash scripts/perf-baselines.sh    # ~3.5 min; exits non-zero only if a MEASUREMENT could not be taken
+bash scripts/perf-baselines.sh    # ~3.5 min; exit 0 clean · 1 idle-invariant violation ·
+                                  # 2 measurement failure · 3 target miss (see script header)
 bash scripts/smoke-editor.sh      # verified ALL-PASS after both perf runs
 ```
