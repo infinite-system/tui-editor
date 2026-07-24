@@ -503,6 +503,51 @@ reasoning). No main change needed.
 
 ---
 
+## Part 10 — The big feature run (2026-07-23→24): agent pane, voice, theme, permissions
+
+The session that took the agent pane from placeholder to approval surface (~15 features landed:
+paste/dictation, narration fixes, voice picker, agent scroll/copy/composer/chrome/thinking-indicator,
+terminal padding, Tokyo Night, truecolor detection, permission prompts, JPEG preview, AppLoader).
+Lessons, most general first:
+
+- **Convention is not a generator.** Asked "should main.ts be a class?", the first reduction defended
+  the file with "entry points are done this way" — habit wearing the costume of structure. The user
+  wielded the *Construction goes through overridable seams* invariant and was right: everything but the
+  4-line load-ordering shim became AppLoader (Static, overridable), and the entry became unit-testable.
+  The tell was pre-existing: a real bug had just been found in exactly the untested region ("untested
+  because untestable because unseamed"). Run eliminate-assumptions on your OWN defense of surviving code.
+- **A live toggle must reach the CONSUMER, not just the label.** Shift+Tab flipped the setting + mode
+  line while the backend kept its creation-time boolean — the UI lied. Pass a getter down and resolve at
+  the point of use; trace every live control to the thing that ACTS on it. Same class of miss as the
+  untested truecolor detection (`COLORTERM` unset + `TERM=xterm-256color` fell to 256-cube → "MS-DOS"
+  theme): env-branching capability detection and per-use resolution are load-bearing and need their own
+  tests — the consumer's tests cannot catch them.
+- **The conductor is a CPU citizen too.** Ran tsc+tests during a builder's merge-gate → flaked the wrap
+  canary → cost a full re-gate. When ANY gate runs, the conductor also holds all heavy work. Corollary
+  proven twice after: gates run with held CPU passed first try, including wrap.
+- **Diff a branch against its merge-base, never a moved main.** A builder read `origin/main..HEAD` after
+  main advanced past its base and "saw" a 30-file contamination that didn't exist. `git diff
+  $(git merge-base origin/main HEAD)..HEAD` is the branch's actual content. Related sequencing rule:
+  land the sibling first, rebase the stale-based branch onto CURRENT main, gate the rebased tree.
+- **Smokes that mutate settings need a per-run HOME.** The harness's shared artifacts/home persists
+  settings.json across gate smokes; a prior smoke's values leaked into voice-picker's "defaults"
+  assertions (failed only in-gate, passed solo). `env HOME=$(mktemp -d)` per run; XDG_DATA_HOME alone
+  does not isolate settings.
+- **Verify the stack layer by layer before blaming the app.** "No narration audio" reproduced through:
+  settings ✓ engine ✓ raw pipeline ✓ real backend ✓ wiring ✓ — leaving only the VM audio route, which it
+  was (host device switch broke the guest sink). The app was never broken; an hour of code-spelunking was
+  avoided by driving each layer cheaply first.
+- **Demo-hold protocol.** While the user demos main to someone: freeze main, hold all gates/merges/heavy
+  CPU, builders commit-and-hold. Landing resumes on their word. Provenance of the pause is the user's
+  presence, not the work's readiness.
+- **Placement leverage for doctrine.** The *Seams are drawn at the shared generator* invariant got its
+  reminders where agents actually read (AGENTS.md #2, conventions, the canonical seam annotations) —
+  not sprayed across files. Reminder-leverage is always-read placement, not file count; dense where
+  load-bearing, absent where it would be noise. (The invariant then held live: a builder refused to
+  over-unify composer scroll into the viewport engine and split to the honest wrap+selection seams.)
+
+---
+
 ## Live cron prompts (canonical copy now in the /conductor SKILL.md "Live cron prompts" section — edit THERE; the copy below may lag)
 
 These are the exact prompts driving the orchestration loop this session. **Improve them HERE, then
