@@ -11,7 +11,7 @@
    Extraction: add a low-level `Processes.spawn(argv, options)` and layer `run` over it; explicitly exempt the interactive PTY, whose environment generator is different.
 
 3. **FATAL — Provider resolution has two authorities and can report a different engine from the one running.**  
-   Files: [AgentFactory.ts](/home/parallels/dev/tui-editor/src/modules/agent/AgentFactory.ts:40), [Bootstrap.ts](/home/parallels/dev/tui-editor/src/modules/app/Bootstrap.ts:256), [agent.invariants.md](/home/parallels/dev/tui-editor/src/modules/agent/agent.invariants.md:98).  
+   Files: [AgentFactory.ts](/home/parallels/dev/tui-editor/src/modules/agent/AgentFactory.ts:40), [Bootstrap.ts](/home/parallels/dev/tui-editor/src/modules/app/Bootstrap.ts:256), `src/modules/agent/agent.invariants.md:98` (a line citation, not a record link — kept unlinked so the checker's anchor rule holds).  
    Shared generator: provider inventory, availability, fallback, construction, current-provider identity, and cycling. For example, configured `codex` with Codex absent and Claude present makes Bootstrap report `codex` while `AgentFactory` silently creates Claude; with neither installed Bootstrap reports Claude while the factory creates Echo. Adding a provider also requires changes outside the promised factory/enum seam.  
    Extraction: create an `AgentProviderRegistry` returning one resolved provider record used for labels, construction, availability, fallback, and cycling.
 
