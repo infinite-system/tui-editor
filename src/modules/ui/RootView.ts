@@ -14,7 +14,10 @@ import {
   bold,
   type TextChunk,
   type CliRenderer,
+  type MouseEvent,
 } from '@opentui/core';
+import { ScrollableTextViewport } from './ScrollableTextViewport';
+import { AgentPaneContent, type AgentScrollPort } from '../agent/AgentPaneContent';
 import { Static } from 'ivue/extras';
 import type { WorkspaceSet } from '../workspace/WorkspaceSet';
 import type { App } from '../app/App';
@@ -81,6 +84,9 @@ export interface RootView {
   shortcutHelpViewportRows(): number;
   /** Frame-tick hook: advance the LSP hover-card dwell; true while counting or a request is in flight. */
   tickHover(dtSeconds: number): boolean;
+  /** Frame-tick hook: advance the agent transcript's scroll-momentum glide + drag edge-autoscroll; true
+   *  while moving (keeps frames coming until the fling decays, then stops so idle-quiescence holds). */
+  tickPanelScroll(dtSeconds: number): boolean;
   /** Dismiss the LSP hover card unconditionally (Escape — always closes, even while engaged). */
   dismissHover(): void;
   /** Dismiss the LSP hover card UNLESS it is engaged (pointer over it / dragging a selection): a stray
@@ -370,6 +376,76 @@ function $buildRootView(
   });
   let panelMounted = false;
 
+  // --- Agent transcript scroll engine ------------------------------------------------------------
+  // The agent pane reuses the ONE shared scroll surface (momentum + smooth glide + a vertical scrollbar)
+  // in WRAP mode (disableHorizontal: no h-wheel, no h-bar) with tail-anchor (followBottom: stay pinned to
+  // the newest turn until the user scrolls up). The pane stays a pure model — it reads scrollTop through
+  // the injected port and never touches a renderable. RootView owns the renderable side: it mounts the
+  // bar into panelBox, positions it over whichever visible cell shows the agent, and feeds the drag its
+  // screen↔content mapping (the pane owns the selection MODEL).
+  const agentContent = (): AgentPaneContent.Model | null => {
+    const content = panelHost.content('agent');
+    return content instanceof AgentPaneContent.Class ? content : null;
+  };
+  // Live geometry of the cell currently showing the agent (null when the agent is not a visible cell).
+  let agentCellGeometry: { bodyX: number; bodyY: number; width: number; bodyRows: number } | null = null;
+  const agentScrollViewport = new ScrollableTextViewport.Class({
+    renderer,
+    settings,
+    parent: panelBox,
+    id: 'panel-agent',
+    disableHorizontal: true,
+    followBottom: true,
+    scrollbarZIndex: 50, // the panel adds its cell bodies AFTER this viewport; keep the bar on top
+    extent: () => {
+      const agent = agentContent();
+      return {
+        contentRows: agent?.contentLineCount ?? 0,
+        contentColumns: 0,
+        viewportRows: Math.max(1, agent?.viewportRows ?? 1),
+        viewportColumns: 1,
+      };
+    },
+    colors: () => ({ track: readPalette().panel, thumb: readPalette().dim }),
+    // A scroll change moves the viewport's (non-reactive) scrollTop; bump the pane's reactive paint
+    // signal so the frame effect re-projects the window (else wheel/momentum/keys wouldn't repaint).
+    onScroll: () => { agentContent()?.notifyScrolled(); renderer.requestRender(); },
+    selection: {
+      positionAtCell: (screenColumn, screenRow) => {
+        const agent = agentContent();
+        const geometry = agentCellGeometry;
+        if (!agent || !geometry) return null;
+        return agent.transcriptPointAt(screenColumn - geometry.bodyX, screenRow - geometry.bodyY);
+      },
+      begin: (position) => agentContent()?.beginTranscriptSelection(position),
+      extend: (position) => agentContent()?.extendTranscriptSelection(position),
+      finish: () => agentContent()?.finishTranscriptSelection(),
+      viewportRectangle: () => {
+        const geometry = agentCellGeometry;
+        if (!geometry) return { leftColumn: 0, rightColumn: 0, topRow: 0, bottomRow: 0 };
+        return {
+          leftColumn: geometry.bodyX,
+          rightColumn: geometry.bodyX + geometry.width - 1,
+          topRow: geometry.bodyY,
+          bottomRow: geometry.bodyY + geometry.bodyRows - 1,
+        };
+      },
+      lineGraphemeCount: (lineIndex) => agentContent()?.transcriptLineGraphemeCount(lineIndex) ?? 0,
+    },
+  });
+  const agentScrollPort: AgentScrollPort = {
+    get scrollTop() { return agentScrollViewport.scrollTop; },
+    get stuckToBottom() { return agentScrollViewport.stuckToBottom; },
+    scrollRowsBy: (delta) => { agentScrollViewport.scrollRowsBy(delta); renderer.requestRender(); },
+    scrollToBottom: () => { agentScrollViewport.scrollToBottom(); renderer.requestRender(); },
+  };
+  let agentPortAttached = false;
+  // A small manual drag for the COMPOSER selection (it needs no momentum/edge-autoscroll, so it does NOT
+  // go through the viewport): true while a composer drag is in flight. `transcriptDragging` marks a
+  // transcript drag routed through the viewport (so a click on inert chrome rows starts neither).
+  let composerDragging = false;
+  let transcriptDragging = false;
+
   // Split-aware panel body: a reconciling POOL of cell views. Each visible cell is one TextRenderable
   // body; adjacent cells are separated by a 1-column divider whose drag re-flows the two it sits
   // between (a vertical ratio SplitterModel over the panel's inner width). ONE visible cell means no
@@ -397,19 +473,81 @@ function $buildRootView(
     const existing = panelCellViews[index];
     if (existing) return existing;
     const body = new TextRenderable(renderer, { id: `panel-cell-${index}`, content: '', wrapMode: 'none', flexShrink: 0 });
-    // Focus-follows-click at the CELL grain: clicking a cell body focuses the panel and that cell, then
-    // routes the click to the content at content-local coordinates (for row hit-testing, e.g. toggling
-    // a collapsed tool row in the agent pane).
-    body.onMouseDown = (event) => {
+    // The cell at this pool index whose content is the agent, else null (for scroll/selection routing).
+    const agentAtCell = (): AgentPaneContent.Model | null => {
+      const content = panelHost.resolvedCells[index]?.content;
+      return content instanceof AgentPaneContent.Class ? content : null;
+    };
+    // Focus-follows-click at the CELL grain: clicking a cell body focuses the panel and that cell. For the
+    // AGENT it also begins a drag-selection (transcript via the shared viewport engine, composer via a
+    // small manual drag), grabbing pointer capture so the drag routes here wherever it travels; a BARE
+    // click (no drag) toggles a collapsed tool row on mouse-up. Other panes keep the click hit-test.
+    body.onMouseDown = (event: MouseEvent) => {
       panelHost.focus();
       panelHost.focusCell(index);
-      const content = panelHost.resolvedCells[index]?.content;
-      content?.onPointerDown?.((event.x as number) - (body.x as number), (event.y as number) - (body.y as number));
+      const agent = agentAtCell();
+      const localColumn = (event.x as number) - (body.x as number);
+      const localRow = (event.y as number) - (body.y as number);
+      if (agent) {
+        const region = agent.regionAtRow(localRow);
+        if (region.kind === 'composer') {
+          composerDragging = true;
+          transcriptDragging = false;
+          agent.beginComposerSelection(agent.composerPointAt(localColumn, region.visibleRow));
+        } else if (region.kind === 'transcript') {
+          composerDragging = false;
+          transcriptDragging = true;
+          agentScrollViewport.beginDrag(event.x as number, event.y as number);
+        } else {
+          composerDragging = false; // 'other' rows (spinner/rule/mode line) start no selection
+          transcriptDragging = false;
+        }
+      } else {
+        const content = panelHost.resolvedCells[index]?.content;
+        content?.onPointerDown?.(localColumn, localRow);
+      }
       renderer.requestRender();
     };
-    // Vertical wheel over a cell scrolls its content (the agent pane's transcript). The pane WRAPS —
-    // horizontal wheel is intentionally ignored (no horizontal scroll). Reuses the settings-sourced step.
+    body.onMouseDrag = (event: MouseEvent) => {
+      const agent = agentAtCell();
+      if (!agent) return;
+      if (composerDragging) {
+        const region = agent.regionAtRow((event.y as number) - (body.y as number));
+        const visibleRow = region.kind === 'composer' ? region.visibleRow : agent.viewportRows; // clamp below
+        agent.extendComposerSelection(agent.composerPointAt((event.x as number) - (body.x as number), visibleRow));
+      } else if (transcriptDragging) {
+        agentScrollViewport.dragTo(event.x as number, event.y as number);
+      } else {
+        return;
+      }
+      renderer.requestRender();
+    };
+    const endAgentDrag = (event: MouseEvent): void => {
+      const agent = agentAtCell();
+      if (!agent) return;
+      if (composerDragging) {
+        composerDragging = false;
+        agent.finishComposerSelection();
+      } else if (transcriptDragging) {
+        transcriptDragging = false;
+        agentScrollViewport.endDrag();
+        // A bare click (no selection was made) in the transcript toggles a collapsed tool row.
+        if (!agent.hasSelection()) {
+          agent.onPointerDown((event.x as number) - (body.x as number), (event.y as number) - (body.y as number));
+        }
+      }
+      renderer.requestRender();
+    };
+    body.onMouseUp = endAgentDrag;
+    body.onMouseDragEnd = endAgentDrag;
+    // Vertical wheel over a cell scrolls its content. The agent transcript flings through the shared
+    // momentum engine (wrap mode: no horizontal); other panes route through their optional onWheel.
     body.onMouseScroll = (event) => {
+      if (agentAtCell()) {
+        agentScrollViewport.handleWheel(event);
+        renderer.requestRender();
+        return;
+      }
       const content = panelHost.resolvedCells[index]?.content;
       if (!content?.onWheel) return;
       const direction = event.scroll?.direction;
@@ -910,15 +1048,47 @@ function $buildRootView(
       panelBox.height = panelHeightRows;
       panelDivider.backgroundColor = panelFocused ? palette.accent : palette.border;
       const cellRows = panelViewportRows();
+      const panelContentTop = (panelBox.y as number) + 1; // inside the rounded border
+      const panelContentLeft = (panelBox.x as number) + 1;
+      let agentVisible = false;
       spans.forEach((span, index) => {
         const view = panelCellViews[index];
         if (!view) return;
         const cellFocused = panelFocused && index === focusedIndex;
         view.body.width = span.columns;
         view.body.fg = palette.fg;
-        view.body.content = span.content.render({ width: span.columns, height: cellRows, palette, glyphLevel: theme.glyphLevel.value, focused: cellFocused });
+        const agent = span.content instanceof AgentPaneContent.Class ? span.content : null;
+        if (agent) {
+          if (!agentPortAttached) { agent.attachScrollPort(agentScrollPort); agentPortAttached = true; }
+          agentScrollViewport.followContentTail(); // tail-anchor before reading scrollTop for the window
+          // Reserve the cell's trailing column for the vertical bar when the transcript overflows.
+          const overflow = agent.contentLineCount > agent.viewportRows;
+          const renderWidth = overflow ? Math.max(1, span.columns - 1) : span.columns;
+          view.body.content = agent.render({ width: renderWidth, height: cellRows, palette, glyphLevel: theme.glyphLevel.value, colorDepth: theme.colorDepth.value, focused: cellFocused });
+          agentCellGeometry = {
+            bodyX: view.body.x as number,
+            bodyY: view.body.y as number,
+            width: renderWidth,
+            bodyRows: agent.viewportRows,
+          };
+          agentVisible = true;
+          // Position the vertical scrollbar in the cell's trailing column, spanning the transcript rows
+          // (region is in panelBox CONTENT-local coordinates; width includes the reserved bar column).
+          agentScrollViewport.updateScrollbars({
+            top: (view.body.y as number) - panelContentTop,
+            left: (view.body.x as number) - panelContentLeft,
+            width: span.columns,
+            height: agent.viewportRows,
+          });
+        } else {
+          view.body.content = span.content.render({ width: span.columns, height: cellRows, palette, glyphLevel: theme.glyphLevel.value, colorDepth: theme.colorDepth.value, focused: cellFocused });
+        }
         if (view.dividerBox) view.dividerBox.backgroundColor = panelFocused ? palette.borderActive : palette.border;
       });
+      if (!agentVisible) { agentScrollViewport.hideBars(); agentCellGeometry = null; }
+    } else {
+      agentScrollViewport.hideBars();
+      agentCellGeometry = null;
     }
     statusBar.update(palette, editorContentMount.markdownSplitView?.previewFocused ?? false);
     overlayLayer.update(palette);
@@ -1170,6 +1340,7 @@ function $buildRootView(
     findTarget,
     shortcutHelpViewportRows: () => overlayLayer.shortcutHelpViewportRows(),
     tickHover: (dtSeconds: number) => hoverCard.tick(dtSeconds),
+    tickPanelScroll: (dtSeconds: number) => agentScrollViewport.tick(dtSeconds),
     dismissHover: () => hoverCard.clear(),
     dismissHoverSoft: () => { if (!hoverCard.engaged()) hoverCard.clear(); },
     hoverHasSelection: () => hoverCard.hasSelection(),

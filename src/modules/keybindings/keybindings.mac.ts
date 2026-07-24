@@ -32,6 +32,7 @@ export const macOverlayBindings: Keybinding[] = [
   // Cmd editing chords (kitty protocol only — legacy terminals never deliver super, and the
   // Ctrl forms remain the floor).
   { chord: { key: 'c', super: true }, action: 'editor.copy', context: 'editor' },
+  { chord: { key: 'c', super: true }, action: 'agent.copy', context: 'agent' },
   { chord: { key: 'v', super: true }, action: 'editor.paste', context: 'editor' },
   { chord: { key: 'x', super: true }, action: 'editor.cut', context: 'editor', when: 'editorHasSelection' },
   { chord: { key: 'a', super: true }, action: 'editor.selectAll', context: 'editor' },

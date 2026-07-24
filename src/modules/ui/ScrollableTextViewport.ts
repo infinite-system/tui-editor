@@ -4,8 +4,11 @@
 // whose thickness comes from ONE setting (never freestyled), and drag-select with edge auto-scroll.
 // A host pane supplies only its IDENTITY via deps — content extent, viewport extent, the selection
 // model, and how a screen cell maps to a content position — and gets the whole behaviour uniformly.
+// Consumers today: the hover card, the editor/diff surfaces, and the agent transcript (wrap mode:
+// disableHorizontal + followBottom tail-anchor).
 //
 // invariant: A scrollable text surface is drag-selectable with edge auto-scroll (src/modules/ui/ui.invariants.md)
+// invariant: Seams are drawn at the shared generator (project.invariants.md)
 import { ScrollBarRenderable, type MouseEvent, type CliRenderer } from '@opentui/core';
 import { Reactive } from 'ivue';
 import {
@@ -50,6 +53,16 @@ export interface ScrollableTextViewportDeps {
   colors: () => { track: string; thumb: string };
   /** Repaint hook — a scroll change carries no keypress/mouse event, so the host must re-project. */
   onScroll: () => void;
+  /** WRAP MODE: the content wraps to the viewport width, so there is no horizontal overflow — never
+   *  route a horizontal wheel and never show the horizontal scrollbar. Used by the agent transcript. */
+  disableHorizontal?: boolean;
+  /** TAIL-ANCHOR: while the scroll sits at the bottom, keep it pinned to the newest content as the
+   *  content grows (a log/transcript tail). Auto-derives from position: any scroll that lands at the
+   *  bottom re-arms it, any scroll above releases it. `followContentTail()` applies the pin each frame. */
+  followBottom?: boolean;
+  /** z-index for the bars — raise it above a parent whose CONTENT is mounted AFTER this viewport (the
+   *  panel adds its cell bodies later, so the bar would otherwise render beneath them). Defaults to 0. */
+  scrollbarZIndex?: number;
   /** Selection model hooks (the host owns the selection; the drag only drives it + the scroll). */
   selection: {
     positionAtCell: (screenColumn: number, screenRow: number) => SelectionDragPosition | null;
@@ -77,9 +90,11 @@ class $ScrollableTextViewport {
 
   constructor(private readonly deps: ScrollableTextViewportDeps) {
     const { renderer, id } = deps;
+    this.followBottomActive = deps.followBottom === true;
+    const scrollbarZIndex = deps.scrollbarZIndex ?? 0;
     this.verticalBar = new ScrollBarRenderable(renderer, {
       id: `${id}-scrollbar-v`, orientation: 'vertical', position: 'absolute', width: 1,
-      showArrows: false, visible: false,
+      showArrows: false, visible: false, zIndex: scrollbarZIndex,
       onChange: (position) => {
         if (this.applyingBarGeometry) return;
         this.setScrollTop(Math.round(position * this.verticalBarScale));
@@ -87,7 +102,7 @@ class $ScrollableTextViewport {
     });
     this.horizontalBar = new ScrollBarRenderable(renderer, {
       id: `${id}-scrollbar-h`, orientation: 'horizontal', position: 'absolute', height: 1,
-      showArrows: false, visible: false,
+      showArrows: false, visible: false, zIndex: scrollbarZIndex,
       onChange: (position) => {
         if (this.applyingBarGeometry) return;
         this.setScrollLeft(Math.round(position * this.horizontalBarScale));
@@ -113,9 +128,21 @@ class $ScrollableTextViewport {
     });
   }
 
+  /** Tail-anchor state (followBottom mode only): true while the scroll is pinned to the newest content.
+   *  Set in the constructor (after `deps` is assigned) so the initializer never reads deps too early. */
+  private followBottomActive = false;
+
   get scrollTop(): number { return this.scrollTopValue; }
   get scrollLeft(): number { return this.scrollLeftValue; }
   get dragActive(): boolean { return this.drag.active; }
+  /** True while tail-anchored to the bottom (followBottom mode) — drives the pane's stuck-to-bottom UX. */
+  get stuckToBottom(): boolean { return this.followBottomActive; }
+
+  /** Apply the tail-anchor pin: while followBottom is active, snap to the current bottom so content that
+   *  grew since last frame stays in view. A no-op when already at the bottom (no repaint churn). */
+  followContentTail(): void {
+    if (this.deps.followBottom && this.followBottomActive) this.setScrollTop(this.maximumScrollTop());
+  }
 
   private maximumScrollTop(): number {
     const extent = this.deps.extent();
@@ -143,11 +170,17 @@ class $ScrollableTextViewport {
     const direction = event.scroll?.direction;
     const step = ScrollGesture.Class.wheelStep(event, this.deps.settings);
     const modifierHorizontal = ScrollGesture.Class.modifierHeld(event, this.deps.settings.horizontalScrollModifier.value);
-    const horizontal = direction === 'left' || direction === 'right' || modifierHorizontal;
+    // Wrap mode: the content has no horizontal overflow, so a horizontal wheel is meaningless — treat
+    // every wheel as vertical (never fling sideways).
+    const horizontal = !this.deps.disableHorizontal &&
+      (direction === 'left' || direction === 'right' || modifierHorizontal);
     if (horizontal && this.maximumScrollLeft() > 0) {
       const backward = direction === 'left' || direction === 'up';
       this.horizontalMomentum = Momentum.Class.addImpulse(this.horizontalMomentum, (backward ? -1 : 1) * step, DEFAULT_MOMENTUM);
     } else if (!horizontal) {
+      // An upward wheel releases the tail-anchor IMMEDIATELY (before any momentum step), so
+      // followContentTail() stops snapping the glide back to the bottom.
+      if (direction === 'up' && this.deps.followBottom) this.followBottomActive = false;
       this.verticalMomentum = Momentum.Class.addImpulse(this.verticalMomentum, (direction === 'up' ? -1 : 1) * step, this.verticalMomentumOptions());
     }
     this.deps.onScroll();
@@ -180,15 +213,24 @@ class $ScrollableTextViewport {
     this.horizontalMomentum = Momentum.Class.halt();
     this.setScrollLeft(this.scrollLeftValue + deltaColumns);
   }
+  /** Jump to the bottom (re-arms tail-anchor in followBottom mode). Halts momentum. */
+  scrollToBottom(): void {
+    this.verticalMomentum = Momentum.Class.halt();
+    this.setScrollTop(this.maximumScrollTop());
+  }
   haltMomentum(): void {
     this.verticalMomentum = Momentum.Class.halt();
     this.horizontalMomentum = Momentum.Class.halt();
   }
 
   private setScrollTop(value: number): void {
-    const clamped = Math.max(0, Math.min(value, this.maximumScrollTop()));
+    const maximum = this.maximumScrollTop();
+    const clamped = Math.max(0, Math.min(value, maximum));
     if (clamped !== this.scrollTopValue) { this.scrollTopValue = clamped; this.deps.onScroll(); }
-    if (clamped === 0 || clamped === this.maximumScrollTop()) this.verticalMomentum = Momentum.Class.halt();
+    if (clamped === 0 || clamped === maximum) this.verticalMomentum = Momentum.Class.halt();
+    // Tail-anchor re-derives from position: landing at the bottom re-arms the pin, any position above
+    // it releases the pin (so a scroll-up holds and a scroll-back-to-bottom resumes following).
+    if (this.deps.followBottom) this.followBottomActive = clamped >= maximum;
   }
   private setScrollLeft(value: number): void {
     const clamped = Math.max(0, Math.min(value, this.maximumScrollLeft()));
@@ -224,7 +266,8 @@ class $ScrollableTextViewport {
     const { track, thumb } = this.deps.colors();
     const thickness = Math.max(1, Math.round(this.deps.settings.scrollbarThickness.value));
     const verticalOverflow = extent.contentRows > extent.viewportRows;
-    const horizontalOverflow = extent.contentColumns > extent.viewportColumns;
+    // Wrap mode never shows the horizontal bar (there is no horizontal overflow to scroll).
+    const horizontalOverflow = !this.deps.disableHorizontal && extent.contentColumns > extent.viewportColumns;
     const rect = { top: region.top, left: region.left, width: region.width, height: region.height };
 
     if (verticalOverflow) {

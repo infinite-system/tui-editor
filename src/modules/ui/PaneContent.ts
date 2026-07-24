@@ -11,7 +11,7 @@ import type { StyledText } from '@opentui/core';
 import type { KeyEvent } from '@opentui/core';
 import type { Ref } from 'vue';
 import type { Palette } from '../theme/ThemePalettes';
-import type { GlyphLevel } from '../theme/TerminalCapabilities';
+import type { GlyphLevel, ColorDepth } from '../theme/TerminalCapabilities';
 
 /** What a pane content is handed to render itself into the panel slot. */
 export interface PaneRenderContext {
@@ -22,6 +22,8 @@ export interface PaneRenderContext {
   palette: Palette;
   /** The active glyph fallback tier (nerd → unicode → ascii) — one source for every pane's icons. */
   glyphLevel: GlyphLevel;
+  /** The active colour depth (truecolor → 256 → 16) — one source for every pane's gradient fallback. */
+  colorDepth: ColorDepth;
   /** True while the panel owns the keyboard (content may paint focus affordances). */
   focused: boolean;
 }

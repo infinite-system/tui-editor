@@ -97,6 +97,13 @@ class $PanelHost {
     return this.contents.has(id);
   }
 
+  /** The registered content for an id (whether or not it is currently visible), or null. Lets a host
+   *  bind extra machinery to a specific pane (e.g. the agent's shared scroll engine) without waiting for
+   *  it to be the active/visible cell. */
+  content(id: string): PaneContent | null {
+    return this.contents.get(id) ?? null;
+  }
+
   /** The active content, or null. */
   get activeContent(): PaneContent | null {
     const id = this.activeId.value;

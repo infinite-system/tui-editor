@@ -262,6 +262,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     panelHost.register(agentPane);
     if (agentPane instanceof AgentPaneContent.Class) {
       agentPaneContent = agentPane;
+      agentPane.attachPermissionMode(settings.agentSkipPermissions); // mode line + Shift+Tab toggle
       narration = new NarrationProjection.Class(
         agentPane.agentSession,
         settings.agentAudioNarration,
@@ -494,6 +495,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       agentBusy: agentPaneContent?.agentSession.busy ?? false,
       agentStuckToBottom: agentPaneContent?.stuckToBottom ?? true,
       agentExpandedCount: agentPaneContent?.expandedCount ?? 0,
+      agentScrollTop: agentPaneContent?.scrollTop ?? 0,
     });
   };
 
@@ -671,6 +673,9 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     // The LSP hover-card dwell advances on the SAME frame tick (holds a frame while counting or while a
     // hover request is in flight, false once the card is shown or disarmed).
     animating = view.tickHover(deltaTimeSeconds) || animating;
+    // The agent transcript's scroll-momentum glide + drag edge-autoscroll advance on the SAME tick and
+    // settle to zero at rest (idle-quiescence preserved).
+    animating = view.tickPanelScroll(deltaTimeSeconds) || animating;
     syncAnimationLiveness(animating);
     // Converge the viewport size with the LAID-OUT layout (gutter width changes when a file opens
     // or its line count crosses a digit boundary; boot/resize alone goes stale). Mutating outside
@@ -1113,6 +1118,23 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
         StatusChannel.Class.flush();
       });
     },
+    // The focused agent pane owns Ctrl+C / Cmd+C: copy its transcript OR composer selection (whichever is
+    // set) to the clipboard, publishing the same character-count proof channel as editor.copy.
+    'agent.copy': () => {
+      const pane = agentPaneContent;
+      if (!pane) return;
+      void pane.copySelection().then((copiedCharacters) => {
+        if (copiedCharacters > 0) {
+          app.copyNotice.value = `Copied ${copiedCharacters} chars (${Clipboard.Class.lastBackend ?? 'no backend'})`;
+        }
+        StatusChannel.Class.update({
+          lastCopyChars: copiedCharacters,
+          lastCopyHash: Clipboard.Class.lastCopiedTextHash,
+          clipboardBackend: Clipboard.Class.lastBackend,
+        });
+        StatusChannel.Class.flush();
+      });
+    },
     'editor.cut': () => {
       if (!view.activeMarkdownSplitView()?.previewFocused) void workspaceSet.active.editor.cutSelection();
     },
@@ -1191,6 +1213,20 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     // unencodable key is swallowed so it never drives the hidden editor beneath.
     // invariant: A focused panel routes keystrokes to its active pane content (src/modules/terminal/terminal.invariants.md)
     if (panelHost.visible.value && panelHost.focused.value) {
+      // The focused agent pane resolves ONE binding before its composer swallows the key: Ctrl+C / Cmd+C
+      // copies its selection (transcript or composer). Everything else is delivered to the pane.
+      const focusedContent = panelHost.focusedContent;
+      if (focusedContent?.id === 'agent' && agentPaneContent?.hasSelection()) {
+        const resolution = keybindings.resolve(
+          { name: key.name, ctrl: key.ctrl, shift: key.shift, option: key.option || key.meta, super: key.super },
+          'agent',
+          Date.now(),
+        );
+        if (resolution.action === 'agent.copy') {
+          actionHandlers['agent.copy']?.(key);
+          return;
+        }
+      }
       panelHost.handleKey(key);
       return;
     }

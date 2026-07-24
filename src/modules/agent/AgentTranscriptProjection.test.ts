@@ -29,8 +29,10 @@ describe('AgentTranscriptProjection.project', () => {
     );
     expect(lines[0]).toMatchObject({ text: 'You', bold: true, entryIndex: 0, toggleable: false });
     expect(lines[1]).toMatchObject({ text: 'hello', bold: false, entryIndex: 0 });
-    expect(lines[2]).toMatchObject({ text: 'Claude', bold: true, entryIndex: 1, toggleable: false });
-    expect(lines[3]).toMatchObject({ text: 'hi there', bold: false, entryIndex: 1 });
+    // A blank turn-separator line precedes the assistant turn (airy spacing).
+    expect(lines[2]).toMatchObject({ text: '', entryIndex: -1, toggleable: false });
+    expect(lines[3]).toMatchObject({ text: 'Claude', bold: true, entryIndex: 1, toggleable: false });
+    expect(lines[4]).toMatchObject({ text: 'hi there', bold: false, entryIndex: 1 });
   });
 
   test('a tool-use collapses to ONE toggleable summary line with caret + gear + name + input', () => {

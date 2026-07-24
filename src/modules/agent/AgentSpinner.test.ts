@@ -3,8 +3,9 @@ import { AgentSpinner, type SpinnerScheduler } from './AgentSpinner';
 import { AgentSpinnerFrames } from './AgentSpinnerFrames';
 
 /** A controllable clock: capture the interval callback so a test can tick it deterministically. */
-function fakeScheduler(): { scheduler: SpinnerScheduler; tick: () => void; armed: () => boolean } {
+function fakeScheduler(): { scheduler: SpinnerScheduler; tick: () => void; armed: () => boolean; advance: (ms: number) => void } {
   let callback: (() => void) | null = null;
+  let clock = 0;
   return {
     scheduler: {
       setInterval: (fn) => {
@@ -14,9 +15,11 @@ function fakeScheduler(): { scheduler: SpinnerScheduler; tick: () => void; armed
       clearInterval: () => {
         callback = null;
       },
+      now: () => clock,
     },
     tick: () => callback?.(),
     armed: () => callback !== null,
+    advance: (ms: number) => { clock += ms; },
   };
 }
 
@@ -82,5 +85,18 @@ describe('AgentSpinner (injected clock)', () => {
     spinner.start();
     spinner.dispose();
     expect(clock.armed()).toBe(false);
+  });
+
+  test('elapsedSeconds counts whole seconds since start; 0 at rest', () => {
+    const clock = fakeScheduler();
+    const spinner = new AgentSpinner.Class(clock.scheduler);
+    expect(spinner.elapsedSeconds()).toBe(0); // at rest
+    spinner.start();
+    clock.advance(2500);
+    expect(spinner.elapsedSeconds()).toBe(2);
+    clock.advance(1000);
+    expect(spinner.elapsedSeconds()).toBe(3);
+    spinner.stop();
+    expect(spinner.elapsedSeconds()).toBe(0); // torn down at rest
   });
 });

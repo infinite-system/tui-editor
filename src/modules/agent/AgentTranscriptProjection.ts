@@ -9,6 +9,7 @@
 import { Static } from 'ivue/extras';
 import type { Palette } from '../theme/ThemePalettes';
 import type { GlyphLevel } from '../theme/TerminalCapabilities';
+import { WrapText } from '../ui/WrapText';
 import type { TranscriptEntry } from './AgentEvents';
 
 /** One projected visual line: its text, paint colour, weight, the transcript entry it belongs to, and
@@ -57,18 +58,9 @@ function truncate(text: string, width: number, glyphLevel: GlyphLevel): string {
   return codePoints.slice(0, Math.max(0, width - 1)).join('') + ellipsis;
 }
 
-/** Hard-wrap a string to `width` columns (no word logic — deterministic and width-exact). */
+/** Hard-wrap a string to `width` columns via the shared, width-exact seam. */
 function wrap(text: string, width: number): string[] {
-  if (width <= 0) return [text];
-  const out: string[] = [];
-  for (const rawLine of text.split('\n')) {
-    if (rawLine.length === 0) {
-      out.push('');
-      continue;
-    }
-    for (let start = 0; start < rawLine.length; start += width) out.push(rawLine.slice(start, start + width));
-  }
-  return out;
+  return WrapText.Class.wrap(text, width);
 }
 
 /** The one-line body a tool-use entry summarises to (its input, whitespace-collapsed). */
@@ -92,6 +84,12 @@ function $project(
   const lines: ProjectedLine[] = [];
   const caret = CARET[glyphLevel];
   transcript.forEach((entry, entryIndex) => {
+    // A blank line separates TURNS (before each user/assistant/error entry, not the first) for the airy
+    // Claude spacing. Tool-use/tool-result stay tight under their assistant. The blank is a real
+    // projected line, so it wraps/scrolls/selects with the content (a within-turn copy drags no blanks).
+    if (entryIndex > 0 && (entry.role === 'user' || entry.role === 'assistant' || entry.role === 'error')) {
+      lines.push({ text: '', color: palette.dim, bold: false, entryIndex: -1, toggleable: false });
+    }
     switch (entry.role) {
       case 'user':
         lines.push({ text: 'You', color: palette.accent, bold: true, entryIndex, toggleable: false });

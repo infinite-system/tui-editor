@@ -196,6 +196,8 @@ export const canonicalBindings: Keybinding[] = [
   { chord: { key: 's', ctrl: true }, action: 'editor.save', context: 'editor' },
   { chord: { key: 'a', ctrl: true }, action: 'editor.selectAll', context: 'editor' },
   { chord: { key: 'c', ctrl: true }, action: 'editor.copy', context: 'editor' },
+  // Copy the agent pane's transcript/composer selection (the focused agent pane owns Ctrl+C).
+  { chord: { key: 'c', ctrl: true }, action: 'agent.copy', context: 'agent' },
   // Guarded: with a selection Ctrl+X cuts (outranks starting the quit chord); without, the
   // global quit chord starts.
   { chord: { key: 'x', ctrl: true }, action: 'editor.cut', context: 'editor', when: 'editorHasSelection' },
