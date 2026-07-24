@@ -21,10 +21,12 @@ toggle_agent() { tmux send-keys -t "$S" -l "$(printf '\033[27;6;97~')"; sleep 0.
 submit() { "$H" send "$S" -l "$1" >/dev/null; sleep 0.15; "$H" send "$S" Enter >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; }
 ctrl_e() { tmux send-keys -t "$S" -l "$(printf '\033[27;5;101~')"; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1; }
 
-trap '"$H" kill "$S" >/dev/null 2>&1' EXIT INT TERM
-
 echo "== boot with the echo backend + two forced engines =="
-"$H" launch "$S" 110x34 env TUI_FRAME_DUMP=1 INVAR_AGENT_BACKEND=echo INVAR_AGENT_ENGINES=claude,codex bun run src/main.ts "$FIX" >/dev/null
+# Per-run isolated HOME: the engine switch PERSISTS agentProvider via settings.save(), and the shared
+# harness HOME would leak that across smoke runs (the persisted-HOME lesson).
+RUN_HOME="$(mktemp -d)"
+trap 'rm -rf "$RUN_HOME"; "$H" kill "$S" >/dev/null 2>&1' EXIT INT TERM
+"$H" launch "$S" 110x34 env TUI_FRAME_DUMP=1 HOME="$RUN_HOME" INVAR_AGENT_BACKEND=echo INVAR_AGENT_ENGINES=claude,codex bun run src/main.ts "$FIX" >/dev/null
 if "$H" ready "$S" 20 >/dev/null; then echo "  PASS  boot"; else echo "  FAIL  boot"; "$H" capture "$S"; exit 1; fi
 toggle_agent
 chk "agent pane open + focused" "$(f terminalFocused)" "true"
@@ -52,7 +54,8 @@ has "the new engine received the ported-context preamble" "Context ported from t
 has "the ported context carried the fact" "MAGENTA-8842"
 
 echo "== a CLICK on the engine segment also cycles (back to claude) =="
-sb_h="$(f height)"; mode_y=$(( sb_h - 2 ))
+# Screen rows bottom-up: status bar (h-1), panel border (h-2), bottom pad (h-3), MODE LINE (h-4).
+sb_h="$(f height)"; mode_y=$(( sb_h - 4 ))
 "$H" click "$S" 4 "$mode_y" >/dev/null; sleep 0.3; "$H" settle "$S" >/dev/null 2>&1
 chk "clicking the engine segment switched back to claude" "$(f agentEngine)" "claude"
 has "second switch note renders" "switched to claude"

@@ -285,7 +285,8 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       model: settings.agentModel.value,
     });
     if (agentPaneContent.agentSession.swapBackend(nextBackend, next)) {
-      settings.agentProvider.value = next as typeof settings.agentProvider.value; // write-back (persists)
+      settings.agentProvider.value = next as typeof settings.agentProvider.value;
+      settings.save(); // persist the write-back (a bare ref write live-applies but does not persist)
       return true;
     }
     nextBackend.dispose(); // swap refused (busy) — don't leak the backend we built
