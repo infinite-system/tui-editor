@@ -31,9 +31,14 @@ type_str() { local S="$1"; shift; local i; for ((i=0;i<${#1};i++)); do "$H" send
 
 # Scratch repo: a committed file (author "Blame Tester", all lines) — so any cursor line blames to it —
 # plus an UNTRACKED file (created, never `git add`ed) — blame exits nonzero → no author.
+# env -u GIT_AUTHOR_*/GIT_COMMITTER_*: a hook-invoked caller (`git commit` running the merge gate)
+# exports the PARENT repo's identity, which would override the explicit -c author below and break the
+# author assertion — the scratch commit must be self-hermetic no matter who launched this smoke.
 ( cd "$REPO" && git init -q && git config user.name "Blame Tester" && git config user.email blame@test.local \
   && printf 'first line\nsecond line\nthird line\n' > tracked.txt \
-  && git add tracked.txt && git -c user.name="Blame Tester" -c user.email=blame@test.local commit -qm "add tracked file" \
+  && git add tracked.txt \
+  && env -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_AUTHOR_DATE -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL -u GIT_COMMITTER_DATE \
+    git -c user.name="Blame Tester" -c user.email=blame@test.local commit -qm "add tracked file" \
   && printf 'untracked one\nuntracked two\n' > untracked.txt )
 
 trap 'for s in $SESSIONS; do "$H" kill "$s" >/dev/null 2>&1; done; rm -rf "$REPO"' EXIT INT TERM

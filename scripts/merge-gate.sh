@@ -20,7 +20,12 @@ export PATH="$HOME/.bun/bin:$PATH"
 # non-deterministic, parent-state-dependent failure (a fixture `git init` re-inits the parent, etc.).
 # The app is already hermetic (Processes.hermeticEnvironment); clearing here also covers the shell
 # fixtures. Harmless when run directly (these are normally unset). One boundary, whole gate hermetic.
+# The IDENTITY family too: `git commit` exports GIT_AUTHOR_NAME/EMAIL (the PARENT repo's identity) to
+# its pre-commit hook, and those env vars OVERRIDE a fixture's explicit `-c user.name=…` — the blame
+# smoke's scratch commit then carries the parent identity and its author assertion fails on every
+# hook-invoked gate while passing solo (driven-reproduced: GIT_AUTHOR_NAME=X flips it red).
 unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR GIT_PREFIX GIT_INDEX_VERSION GIT_NAMESPACE
+unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_AUTHOR_DATE GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL GIT_COMMITTER_DATE
 
 # PRE-GATE PROCESS HYGIENE — the true determinism seal (NOT architecture: Bun multiplexes every
 # fs.watch onto ONE inotify instance per PROCESS, so each running app = 1 instance). Orphaned app
