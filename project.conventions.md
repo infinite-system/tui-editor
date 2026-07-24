@@ -113,6 +113,13 @@ Change a convention → change it HERE (and note the why in decisions.md).
   (peripheral config is fine). Governs the *Seams are drawn at the shared generator* invariant
   (`project.invariants.md`).
 
+## Git branch lifecycle
+- Branches are NEVER deleted. Terminal states are MARKED: `finished/<branch>` tag (merged into main)
+  or `orphaned/<branch>` tag (content never landed — superseded, unadopted, or a pre-rebase twin).
+  In-flight branches carry neither. Cleanup = worktree removal only. The tags are the greppable
+  historical record (`git tag -l 'finished/*'`); the labels are the provenance. Canonical doctrine:
+  the /conductor SKILL.md "terminal states" section.
+
 ## Delegation
 - Every delegate packet is assembled MECHANICALLY by `scripts/delegate-packet.sh` — conventions +
   method essentials + target contracts + task spec. Never hand-assembled from memory.

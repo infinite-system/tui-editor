@@ -582,3 +582,12 @@ hourly one names "the 7 UI-polish requests, then the pull-diagnostics follow-up"
 and pull-diagnostics landing, the next edit should re-point the backlog to the polish/tooltip/activity-bar
 queue and generalize the fork's task framing. The `past f64e15e` and agent-id references are also
 session-specific and should be reviewed on reuse.
+
+### Part 10 addendum — the reader failed, not the rule (2026-07-24, night shift)
+The branch-lifecycle doctrine (finished/ + orphaned/ tags, never delete) was ALREADY in the
+/conductor SKILL.md — and I deleted 19 merged branch labels anyway, because after the
+compaction/restart I ran on carried memory instead of re-reading the skill. All labels restored
+same night from transcript SHAs; taxonomy re-applied (90 finished/, 13 orphaned/). Fixes: the rule
+now also lives in AGENTS.md (#6) + project.conventions.md (cold agents see it, not just the
+conductor), and the standing rule: ON ANY RESUME, RE-READ THE SKILL — doctrine you merely remember
+is doctrine you will eventually violate.
