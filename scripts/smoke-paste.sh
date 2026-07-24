@@ -78,6 +78,31 @@ chk "active pane is the agent" "$(f panelActiveContent)" "agent"
 "$H" paste "$S" "PASTEDINAGENT" >/dev/null
 "$H" settle "$S" >/dev/null 2>&1
 has "paste renders in the agent composer" "PASTEDINAGENT"
+toggle_agent   # close the agent pane; focus returns to the editor
+
+echo "== 5) paste SURVIVES a tab defocus->refocus (recovery re-enters bracketed paste) =="
+# The regression this gates: mode ownership was split — boot enabled DECSET 2004 inline, but the
+# focus-in recovery reasserted only OpenTUI's modes, so a VS Code tab round-trip silently killed
+# paste/dictation until restart. Recovery now re-enters the app-owned bundle; the raw pty stream
+# must show a FRESH 2004h after focus-in, and a real paste must still land.
+RAWLOG="/tmp/paste-raw-$$.log"
+tmux pipe-pane -t "$S" "cat >> $RAWLOG"
+"$H" focus "$S" out >/dev/null
+"$H" focus "$S" in >/dev/null
+sleep 0.5
+"$H" settle "$S" >/dev/null 2>&1
+if grep -aq $'\x1b\[?2004h' "$RAWLOG"; then
+  echo "  PASS  recovery re-emitted bracketed-paste enable (2004h) after focus-in"
+else
+  echo "  FAIL  no 2004h in the raw stream after the focus round-trip"; fail=1
+fi
+rev3="$(f bufferRevision)"
+"$H" paste "$S" "PASTEAFTERREFOCUS" >/dev/null
+"$H" settle "$S" >/dev/null 2>&1
+gt "paste after refocus bumped bufferRevision" "$(f bufferRevision)" "$rev3"
+has "paste after the focus round-trip renders in the editor" "PASTEAFTERREFOCUS"
+tmux pipe-pane -t "$S"   # detach the pipe
+rm -f "$RAWLOG"
 
 echo
 if [ "$fail" = 0 ]; then echo "PASTE SMOKE: ALL-PASS"; else echo "PASTE SMOKE: FAIL"; fi

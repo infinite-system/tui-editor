@@ -1044,7 +1044,7 @@ function $buildRootView(
         });
       } else {
         pixelMount.clear();
-        codeBody.content = imagePreview.render(imagePath, previewColumns, previewRows, palette.panel);
+        codeBody.content = imagePreview.render(imagePath, previewColumns, previewRows, palette.panel, palette.error);
       }
     } else if (rendered) {
       gutterBody.width = gutterWidth();

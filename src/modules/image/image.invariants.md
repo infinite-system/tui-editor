@@ -54,7 +54,7 @@ inspects PNG or JPEG structure instead of the decoded RGBA.
 
 **Status:** provisional
 
-**Last refined:** 2026-07-24
+**Last refined:** 2026-07-25
 
 ## Chosen invariants
 
@@ -74,11 +74,14 @@ encoders behind `ImageRenderers` (`KittyGraphics` — placement identity, explic
 branch + `onDispose` wiring in `RootView`. The half-block floor is out of scope — cells need no
 placement management.
 
-**Mechanism:** `PixelImageMount.sync` computes the fitted rect through `ImageResample.fitWithin`,
-no-ops on an unchanged key, otherwise builds delete-previous + place payloads and emits them
-after `afterFramesSettled()` under a generation guard (a superseded placement never reaches the
-terminal). `clear()` deletes immediately and cancels in-flight places; `dispose()` clears then
-emits the encoder's removeAll sweep. Kitty payloads are ≤4096-byte base64 chunks with q=2 (the
+**Mechanism:** `PixelImageMount.sync` computes the fitted rect through `ImageResample.fitWithin`
+and no-ops on an unchanged key (the key carries the fitted CELL rect AND the fitted PIXEL dims, so
+a font-zoom that moves only the cell pixel size still re-places). The mount splits PENDING from
+EMITTED state: the place payload is built eagerly, but the delete-previous half is computed AT
+WRITE TIME from the emitted id, and the new id is committed only when its payload actually writes
+— so a queued placement that a generation guard cancels never becomes the thing `clear()` deletes
+(that was the orphaned-visible-image bug). `clear()` deletes the EMITTED placement immediately and
+cancels in-flight places; `dispose()` clears then emits the encoder's removeAll sweep. Kitty payloads are ≤4096-byte base64 chunks with q=2 (the
 terminal never answers into the input parser) and C=1 + cursor save/restore (the cursor never
 moves). RootView blanks `codeBody` under any pixel tier and clears the mount on every non-image
 frame.
@@ -102,7 +105,7 @@ base64 chunk over 4096 bytes.
 
 **Status:** provisional
 
-**Last refined:** 2026-07-24
+**Last refined:** 2026-07-25
 
 ### An image buffer replaces the code text and leaves other files untouched
 
@@ -148,4 +151,4 @@ of the active image.
 
 **Status:** provisional
 
-**Last refined:** 2026-07-24
+**Last refined:** 2026-07-25

@@ -1,10 +1,14 @@
 // The terminal is external session state the app does NOT own exclusively: a VS Code terminal tab
 // (and others) resets that state when the tab is hidden and does not restore it — nor redraw — on
-// return. Three symptoms follow a tab defocus→refocus, all from the same lost state:
+// return. Four symptoms follow a tab defocus→refocus, all from the same lost state:
 //   1. TERMIOS raw mode reverts (IXON/flow-control back) → Ctrl+Q (XON) is eaten, the app can't quit.
 //   2. SGR mouse tracking + focus reporting + alt-screen escape modes drop → wheel-scroll and
 //      click-to-focus die.
 //   3. The last painted frame is stale → the app looks frozen though it is alive.
+//   4. Bracketed paste (DECSET 2004) drops → paste and Hex dictation silently vanish. OpenTUI's
+//      resume() re-asserts ITS modes but knows nothing of this one, so this module owns the complete
+//      app-mode bundle (enter/reenter/leave) — mode ownership split across files is how a recovery
+//      path forgets one.
 //
 // The fix is to re-assert the FULL terminal setup on return. OpenTUI already owns a complete,
 // idempotent routine for this: suspend()+resume(). resume() re-applies termios raw mode
@@ -27,18 +31,26 @@ export interface TerminalControl {
 }
 
 class $TerminalSession {
-  /** DECSET 2004-style focus reporting: the terminal emits \e[I on focus-in, \e[O on focus-out. */
+  /** DECSET 1004 focus reporting: the terminal emits \e[I on focus-in, \e[O on focus-out. */
   static readonly FOCUS_REPORTING_ON = '\x1b[?1004h';
   static readonly FOCUS_REPORTING_OFF = '\x1b[?1004l';
+  /** DECSET 2004 bracketed paste: pastes arrive framed \e[200~…\e[201~ (OpenTUI parses the framing
+   *  into its `paste` event but never enables the mode — the app owns it). */
+  static readonly BRACKETED_PASTE_ON = '\x1b[?2004h';
+  static readonly BRACKETED_PASTE_OFF = '\x1b[?2004l';
 
-  /** Enable focus reporting so the app RECEIVES focus-in (\e[I) — the trigger for the re-assert. */
-  static enableFocusReporting(write: (sequence: string) => void): void {
-    write(this.FOCUS_REPORTING_ON);
+  /** Enter the APP-owned terminal modes — the ones OpenTUI's native setup does NOT manage: focus
+   *  reporting (insurance, so the recovery-triggering focus-in always arrives) and bracketed paste
+   *  (paste/dictation delivery). Idempotent; called at boot AND from every recovery path — a mode
+   *  asserted only at boot silently dies on the first tab defocus→refocus.
+   *  This method is the bundle's single home: a new app-owned mode is added HERE, never inline. */
+  static enterAppModes(write: (sequence: string) => void): void {
+    write(this.FOCUS_REPORTING_ON + this.BRACKETED_PASTE_ON);
   }
 
-  /** Disable focus reporting on shutdown so the shell we return to is not left in reporting mode. */
-  static disableFocusReporting(write: (sequence: string) => void): void {
-    write(this.FOCUS_REPORTING_OFF);
+  /** Leave the app-owned modes on shutdown (reverse order) so the shell we return to is clean. */
+  static leaveAppModes(write: (sequence: string) => void): void {
+    write(this.BRACKETED_PASTE_OFF + this.FOCUS_REPORTING_OFF);
   }
 
   /**
@@ -46,11 +58,13 @@ class $TerminalSession {
    * defocus→refocus, or a resize that dropped modes). suspend()+resume() is OpenTUI's own idempotent
    * routine: resume() re-applies termios raw (Ctrl+Q/XON restored), re-runs the native setup (mouse
    * SGR + focus reporting + alt-screen), re-enables mouse, and forces a FULL repaint of the true
-   * current state. One routine restores all three post-defocus symptoms at once.
+   * current state. The app-owned modes are NOT in OpenTUI's routine, so they are re-entered here
+   * too — recovery restores the COMPLETE bundle or paste dies silently until restart.
    */
-  static reenterTerminalModes(control: TerminalControl): void {
+  static reenterTerminalModes(control: TerminalControl, write: (sequence: string) => void): void {
     control.suspend();
     control.resume();
+    this.enterAppModes(write);
   }
 }
 

@@ -4,7 +4,8 @@
 // to nothing, so the binary-file guard keeps them (the negative case is load-bearing).
 import { describe, test, expect } from 'bun:test';
 import { encode as encodeJpeg } from 'jpeg-js';
-import { ImageDecoders } from './ImageDecoders';
+import { ImageDecoders, type DecodedImage } from './ImageDecoders';
+import { JpegDecoder } from './JpegDecoder';
 
 describe('ImageDecoders', () => {
   test('supports exactly the registered raster extensions, case-insensitively', () => {
@@ -39,6 +40,24 @@ describe('ImageDecoders', () => {
       expect(image.width).toBe(width);
       expect(image.height).toBe(height);
       expect(image.rgba.length).toBe(width * height * 4);
+    }
+  });
+
+  test('REGRESSION (review arch 11): the registry dereferences .Class at CALL time — a swap is honored', () => {
+    // The registry must store delegating closures, never module-init snapshots of X.Class.decode:
+    // swapping the decoder Class slot after import must change what the registry decodes with.
+    const originalJpegClass = JpegDecoder.Class;
+    class $FakeJpegDecoder {
+      static decode = (): DecodedImage => ({ width: 1, height: 1, rgba: new Uint8Array([9, 9, 9, 255]) });
+    }
+    try {
+      JpegDecoder.Class = $FakeJpegDecoder;
+      const decoder = ImageDecoders.Class.decoderFor('.jpg');
+      const image = decoder!(new Uint8Array([0, 1, 2]));
+      expect(image.width).toBe(1);
+      expect(Array.from(image.rgba)).toEqual([9, 9, 9, 255]);
+    } finally {
+      JpegDecoder.Class = originalJpegClass;
     }
   });
 

@@ -1550,14 +1550,11 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
   renderer.keyInput.on('keypress', onKey);
   app.onDispose(() => renderer.keyInput.off('keypress', onKey));
 
-  // Bracketed paste. A clipboard paste or a dictation tool (e.g. Hex) injects text framed as
-  // \e[200~…\e[201~; OpenTUI PARSES that framing into a single `paste` event but never ENABLES the
-  // mode itself, so we request DECSET 2004 here (clipboard pastes then arrive framed too) and disable
-  // it on teardown. Without this, framed paste bursts vanish — captured by OpenTUI's paste channel
-  // that nothing listened to. A framed paste yields NO keypresses, so this is the ONLY delivery path.
+  // Bracketed paste (DECSET 2004) is part of the app-owned mode bundle TerminalSession enters at
+  // startup and RE-enters on every recovery — never enabled inline here, or the tab-refocus recovery
+  // forgets it and paste/dictation dies until restart (the mode-ownership-split bug).
+  // A framed paste yields NO keypresses, so OpenTUI's paste event is the ONLY delivery path.
   // invariant: A focused panel routes keystrokes to its active pane content (src/modules/terminal/terminal.invariants.md)
-  process.stdout.write('\x1b[?2004h');
-  app.onDispose(() => process.stdout.write('\x1b[?2004l'));
   // Route a paste to the same target the keyboard has: the focused panel pane (terminal PTY / agent
   // composer), else a focused single-line modal input (quick-open / find), else the editor. Mirrors
   // keyTick's dispatch order so paste lands exactly where typing would.
@@ -1618,15 +1615,16 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
       /* stdout gone (shutdown) — nothing to assert against */
     }
   };
-  // Enable focus reporting at startup so the terminal emits \e[I / \e[O and the app RECEIVES the
-  // focus-in that triggers recovery (OpenTUI's native setup also enables it; this is idempotent
-  // insurance so a focus-in always arrives). Reset it on exit so the shell is left clean.
-  TerminalSession.Class.enableFocusReporting(writeSequence);
-  app.onDispose(() => TerminalSession.Class.disableFocusReporting(writeSequence));
+  // Enter the app-owned mode bundle at startup: focus reporting (so \e[I arrives and recovery
+  // triggers — OpenTUI's setup also enables it, this is idempotent insurance) AND bracketed paste
+  // (paste/dictation delivery). Leave the bundle on exit so the shell is left clean.
+  TerminalSession.Class.enterAppModes(writeSequence);
+  app.onDispose(() => TerminalSession.Class.leaveAppModes(writeSequence));
 
   const onFocus = (): void => {
     HandlerGuard.Class.run('focus', () => {
-      TerminalSession.Class.reenterTerminalModes(renderer); // termios raw + mouse + focus + alt-screen
+      // termios raw + mouse + focus + alt-screen (OpenTUI's routine) + the app modes (2004/1004)
+      TerminalSession.Class.reenterTerminalModes(renderer, writeSequence);
       syncSize();
       paint(); // push current model→renderables; resume() already armed the full repaint
     }, () => renderer.requestRender());
@@ -1636,10 +1634,10 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
 
   const onResize = (): void => {
     HandlerGuard.Class.run('resize', () => {
-      // Re-assert focus reporting (some terminals drop it on the geometry change that accompanies a
-      // tab-return) then re-lay-out + full-repaint. render() → processResize forces a full repaint on
-      // a genuine size change; a same-size return is handled by onFocus above.
-      TerminalSession.Class.enableFocusReporting(writeSequence);
+      // Re-assert the app-owned modes (some terminals drop them on the geometry change that
+      // accompanies a tab-return) then re-lay-out + full-repaint. render() → processResize forces a
+      // full repaint on a genuine size change; a same-size return is handled by onFocus above.
+      TerminalSession.Class.enterAppModes(writeSequence);
       void render();
     }, () => renderer.requestRender());
   };

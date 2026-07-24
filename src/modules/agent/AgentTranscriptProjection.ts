@@ -10,6 +10,7 @@ import { Static } from 'ivue/extras';
 import type { Palette } from '../theme/ThemePalettes';
 import type { GlyphLevel } from '../theme/TerminalCapabilities';
 import { WrapText } from '../ui/WrapText';
+import { ThemeIcons } from '../theme/ThemeIcons';
 import { AgentToolSummary } from './AgentToolSummary';
 import type { TranscriptEntry } from './AgentEvents';
 
@@ -25,22 +26,9 @@ export interface ProjectedLine {
   readonly toggleable: boolean;
 }
 
-/** Collapse/expand caret glyphs per fallback tier (single-cell at every level). */
-const CARET: Record<GlyphLevel, { collapsed: string; expanded: string }> = {
-  nerd: { collapsed: '\u{f0da}', expanded: '\u{f0d7}' }, // fa caret-right / caret-down
-  unicode: { collapsed: '▸', expanded: '▾' },
-  ascii: { collapsed: '>', expanded: 'v' },
-};
-
-/** Tool-call glyph per tier (mirrors the settings-cog ladder). */
-const TOOL_GLYPH: Record<GlyphLevel, string> = { nerd: '\u{f013}', unicode: '⚙', ascii: '*' };
-
-/** Tool-result outcome glyphs per tier. */
-const RESULT_GLYPH: Record<GlyphLevel, { ok: string; error: string }> = {
-  nerd: { ok: '\u{f00c}', error: '\u{f00d}' }, // fa check / times
-  unicode: { ok: '✓', error: '✗' },
-  ascii: { ok: '+', error: 'x' },
-};
+// Transcript glyphs (carets, tool cog, result marks, ellipses) come from the theme's
+// AgentTranscriptIconSet ladder — no private glyph ladders in this module.
+// invariant: Appearance is data with a capability fallback (project.invariants.md)
 
 /** The empty-transcript hint (shown before any turn). */
 const EMPTY_HINT = 'Ask Claude anything. Type a prompt and press Enter.';
@@ -50,7 +38,7 @@ function truncate(text: string, width: number, glyphLevel: GlyphLevel): string {
   if (width <= 0) return '';
   const codePoints = Array.from(text);
   if (codePoints.length <= width) return text;
-  const ellipsis = glyphLevel === 'ascii' ? '.' : '…';
+  const ellipsis = ThemeIcons.Class.agentTranscriptIconsFor(glyphLevel).ellipsisCell;
   return codePoints.slice(0, Math.max(0, width - 1)).join('') + ellipsis;
 }
 
@@ -73,7 +61,8 @@ function $project(
   expandedIndices: ReadonlySet<number>,
 ): ProjectedLine[] {
   const lines: ProjectedLine[] = [];
-  const caret = CARET[glyphLevel];
+  const transcriptIcons = ThemeIcons.Class.agentTranscriptIconsFor(glyphLevel);
+  const caret = { collapsed: transcriptIcons.caretCollapsed, expanded: transcriptIcons.caretExpanded };
   const blank = (): void => { lines.push({ text: '', color: palette.dim, bold: false, entryIndex: -1, toggleable: false }); };
   transcript.forEach((entry, entryIndex) => {
     // Airy turn spacing (Claude-style): a blank line BEFORE each user/error turn (separating it from the
@@ -107,7 +96,7 @@ function $project(
       case 'tool-use': {
         const expanded = expandedIndices.has(entryIndex);
         const marker = expanded ? caret.expanded : caret.collapsed;
-        const head = `${marker} ${TOOL_GLYPH[glyphLevel]} ${entry.name}`;
+        const head = `${marker} ${transcriptIcons.tool} ${entry.name}`;
         if (!expanded) {
           // COLLAPSED: a readable human phrase (tool name + salient arg), never the raw JSON.
           const summary = AgentToolSummary.Class.summarize(entry.name, entry.input);
@@ -143,7 +132,7 @@ function $project(
           });
         } else {
           const allowed = entry.status === 'allowed';
-          const outcome = allowed ? RESULT_GLYPH[glyphLevel].ok : RESULT_GLYPH[glyphLevel].error;
+          const outcome = allowed ? transcriptIcons.resultOk : transcriptIcons.resultError;
           lines.push({
             text: truncate(`${outcome} ${allowed ? 'allowed' : 'denied'}  ${phrase}`, width, glyphLevel),
             color: allowed ? palette.dim : palette.error,
@@ -157,7 +146,7 @@ function $project(
       case 'tool-result': {
         const expanded = expandedIndices.has(entryIndex);
         const marker = expanded ? caret.expanded : caret.collapsed;
-        const outcome = entry.isError ? RESULT_GLYPH[glyphLevel].error : RESULT_GLYPH[glyphLevel].ok;
+        const outcome = entry.isError ? transcriptIcons.resultError : transcriptIcons.resultOk;
         const color = entry.isError ? palette.error : palette.dim;
         if (!expanded) {
           // COLLAPSED: a short outcome summary — "✓ 42 lines" / "✗ error: …", not the raw dump.

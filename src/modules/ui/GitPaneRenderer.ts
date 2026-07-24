@@ -48,8 +48,6 @@ export interface GitPaneRenderContext {
   checkboxIcons: CheckboxIconSet;
 }
 
-const displayColumnWindow = EditorCoordinates.Class.displayColumnWindow;
-const padToDisplayWidth = EditorCoordinates.Class.padToDisplayWidth;
 
 /** One changes-region row as plain text (checkbox glyph depends on the theme's staged/unstaged set). */
 function changeRowText(row: ChangeRow, checkboxIcons: CheckboxIconSet): string {
@@ -113,9 +111,9 @@ function $renderGitPanel(context: GitPaneRenderContext): { text: StyledText; geo
     } = {},
   ) => {
     const viewportWidth = Math.max(1, Math.min(innerWidth, options.viewportWidth ?? innerWidth));
-    let label = displayColumnWindow(text, options.scrollLeft ?? 0, viewportWidth);
-    label = padToDisplayWidth(label, viewportWidth);
-    label = padToDisplayWidth(label, innerWidth);
+    let label = EditorCoordinates.Class.displayColumnWindow(text, options.scrollLeft ?? 0, viewportWidth);
+    label = EditorCoordinates.Class.padToDisplayWidth(label, viewportWidth);
+    label = EditorCoordinates.Class.padToDisplayWidth(label, innerWidth);
     let chunk = fg(color)(label);
     if (options.bold) chunk = bold(chunk);
     if (options.background) chunk = bg(options.background)(chunk);
@@ -186,8 +184,8 @@ function $renderGitPanel(context: GitPaneRenderContext): { text: StyledText; geo
         const staged = row.bucket === 'staged';
         const stageGlyph = staged ? actionIcons.unstage : actionIcons.stage;
         const stageColor = staged ? palette.dim : palette.added;
-        const pathText = padToDisplayWidth(
-          displayColumnWindow(label, gitPanel.changesScrollLeft.value, changesActiveNameWidth),
+        const pathText = EditorCoordinates.Class.padToDisplayWidth(
+          EditorCoordinates.Class.displayColumnWindow(label, gitPanel.changesScrollLeft.value, changesActiveNameWidth),
           changesActiveNameWidth,
         );
         const paint = (text: string, color: string) =>

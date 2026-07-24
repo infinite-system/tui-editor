@@ -25,14 +25,16 @@ class $ImagePreview {
   private renderKey = '';
   private renderedText: StyledText | null = null;
 
-  /** Render the image at `path` into a StyledText sized to columns×rows, over the panel background. */
-  render(path: string, columns: number, rows: number, panelBackground: string): StyledText {
-    const key = `${path}:${columns}:${rows}:${panelBackground}`;
+  /** Render the image at `path` into a StyledText sized to columns×rows, over the panel background.
+   *  `errorColor` paints the decode-failure message — the theme's semantic error token, never a
+   *  hex minted here. invariant: Appearance is data with a capability fallback (project.invariants.md) */
+  render(path: string, columns: number, rows: number, panelBackground: string, errorColor: string): StyledText {
+    const key = `${path}:${columns}:${rows}:${panelBackground}:${errorColor}`;
     if (key === this.renderKey && this.renderedText) return this.renderedText;
     const outcome = this.decode(path);
     const text =
       'error' in outcome
-        ? new StyledText([fg('#e06c75')(`  Cannot preview this image — ${outcome.error}`)])
+        ? new StyledText([fg(errorColor)(`  Cannot preview this image — ${outcome.error}`)])
         : HalfBlockRenderer.Class.render({ image: outcome.image, columns, rows, panelBackground }).styledText;
     this.renderKey = key;
     this.renderedText = text;

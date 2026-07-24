@@ -39,7 +39,6 @@ export interface FindBarRenderContext {
   findIcons: FindIconSet;
 }
 
-const lineWidth = EditorCoordinates.Class.lineWidth;
 
 function $renderFindBar(context: FindBarRenderContext): FindBarRenderResult {
   const { findBar, palette, findIcons } = context;
@@ -67,7 +66,7 @@ function $renderFindBar(context: FindBarRenderContext): FindBarRenderResult {
     const startColumn = column;
     const painted = active ? bg(palette.selection)(fg(palette.accent)(cellLabel)) : fg(color)(cellLabel);
     chunks.push(painted);
-    column += lineWidth(cellLabel);
+    column += EditorCoordinates.Class.lineWidth(cellLabel);
     buttons.push({ action, row: buttonRow, startColumn, endColumn: column });
     chunks.push(fg(palette.fg)(' '));
     column += 1;

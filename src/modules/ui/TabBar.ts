@@ -17,6 +17,7 @@ import {
   type WorkspaceTabBarHover,
 } from './TabBarRenderer';
 import type { Palette } from '../theme/ThemePalettes';
+import { ThemeIcons } from '../theme/ThemeIcons';
 import type { TabStrip } from './TabStrip';
 import type { WorkspaceSet } from '../workspace/WorkspaceSet';
 import type { Theme } from '../theme/Theme';
@@ -93,8 +94,9 @@ class $TabBar {
       showingMarkdownPreview: workspaceSet.active.showingMarkdownPreview,
       previewIcon: theme.actionIcons.preview,
       projectRoot: workspaceSet.active.root,
-      // Tier ladder for the between-tab powerline separator: solid nerd glyph → portable arrow → ascii.
-      separatorGlyph: { nerd: '\u{e0b0}', unicode: '❯', ascii: '>' }[theme.glyphLevel.value] ?? '❯',
+      // The between-tab powerline separator comes from the theme's ladder — no inline glyph ladder.
+      // invariant: Appearance is data with a capability fallback (project.invariants.md)
+      separatorGlyph: ThemeIcons.Class.tabSeparatorFor(theme.glyphLevel.value),
     });
     this.bufferSegments = result.segments;
     this.lastRevealedActiveIndex = result.revealedIndex;

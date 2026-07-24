@@ -51,9 +51,12 @@ function parseHexBackground(hex: string): [number, number, number] {
 }
 
 class $PixelImageMount {
-  private placementKey = '';
-  private placedImageId = 0; // 0 = nothing placed
-  private placedEncoder: PixelEncoder | null = null;
+  private placementKey = ''; // the latest REQUESTED key (dedupes sync calls)
+  // EMITTED state — what is actually on screen. Written ONLY at the moment a payload writes (or a
+  // clear deletes it). The pending/emitted split is load-bearing: a queued placement that never
+  // reaches the terminal must never be the one clear() deletes, or the VISIBLE image is orphaned.
+  private emittedImageId = 0; // 0 = nothing on screen
+  private emittedEncoder: PixelEncoder | null = null;
   private nextImageId = 7001; // arbitrary base clear of small ids other tools might use
   private emitGeneration = 0;
   private disposeSweep = ''; // the removeAll payload of any identity-tracking encoder ever placed
@@ -72,14 +75,17 @@ class $PixelImageMount {
     const fitted = ImageResample.Class.fitWithin(image.width, image.height, boxPixelWidth, boxPixelHeight);
     const fittedColumns = Math.max(1, Math.min(region.columns, Math.round(fitted.width / cell.width)));
     const fittedRows = Math.max(1, Math.min(region.rows, Math.round(fitted.height / cell.height)));
+    // The fitted PIXEL dims are part of the key: a cell-size change (font zoom) can keep the same
+    // cell rect while the raster a pixel tier must emit doubles — the cell-only key missed that.
     const key =
       `${context.tier}:${context.path}:${region.x}:${region.y}:${region.columns}:${region.rows}:` +
-      `${fittedColumns}:${fittedRows}:${context.panelBackground}:${image.width}:${image.height}`;
+      `${fittedColumns}:${fittedRows}:${fitted.width}px:${fitted.height}px:` +
+      `${context.panelBackground}:${image.width}:${image.height}`;
     if (key === this.placementKey) return;
 
-    // Build every payload NOW (pure work, stale-proof); emit after the frame settles.
-    const removePrevious =
-      this.placedEncoder && this.placedImageId ? this.placedEncoder.remove(this.placedImageId) : '';
+    // Build the PLACE payload now (pure, depends only on the new context); the delete-previous half
+    // is computed AT WRITE TIME from the emitted state, so it always targets what is really on
+    // screen — never a pending id that got superseded.
     const imageId = this.nextImageId++;
     const placePayload = context.encoder.place({
       image,
@@ -94,18 +100,22 @@ class $PixelImageMount {
     // the placement never moves the app's real cursor.
     const cursorRow = region.y + Math.floor((region.rows - fittedRows) / 2) + 1;
     const cursorColumn = region.x + Math.floor((region.columns - fittedColumns) / 2) + 1;
-    const payload = `${removePrevious}\x1b7\x1b[${cursorRow};${cursorColumn}H${placePayload}\x1b8`;
 
     this.placementKey = key;
-    this.placedImageId = imageId;
-    this.placedEncoder = context.encoder;
     const removeAll = context.encoder.removeAll();
     if (removeAll) this.disposeSweep = removeAll;
 
     const generation = ++this.emitGeneration;
     void this.terminal.afterFramesSettled().then(() => {
       if (generation !== this.emitGeneration) return; // superseded before it reached the screen
-      this.terminal.writePayload(payload);
+      const removePrevious =
+        this.emittedEncoder && this.emittedImageId ? this.emittedEncoder.remove(this.emittedImageId) : '';
+      this.terminal.writePayload(
+        `${removePrevious}\x1b7\x1b[${cursorRow};${cursorColumn}H${placePayload}\x1b8`,
+      );
+      // Commit ONLY now — the id on screen is the id this payload just placed.
+      this.emittedImageId = imageId;
+      this.emittedEncoder = context.encoder;
     });
   }
 
@@ -113,13 +123,13 @@ class $PixelImageMount {
    *  Idempotent and cheap when nothing is placed. */
   clear(): void {
     this.emitGeneration++; // cancel any in-flight place
-    if (this.placedEncoder && this.placedImageId) {
-      const removePayload = this.placedEncoder.remove(this.placedImageId);
+    if (this.emittedEncoder && this.emittedImageId) {
+      const removePayload = this.emittedEncoder.remove(this.emittedImageId);
       if (removePayload) this.terminal.writePayload(removePayload);
     }
     this.placementKey = '';
-    this.placedImageId = 0;
-    this.placedEncoder = null;
+    this.emittedImageId = 0;
+    this.emittedEncoder = null;
   }
 
   /** App shutdown: delete the current placement and sweep all — nothing may outlive the app. */

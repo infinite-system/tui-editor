@@ -43,7 +43,6 @@ export interface QuickOpenWindow {
   count: number;
 }
 
-const padToDisplayWidth = EditorCoordinates.Class.padToDisplayWidth;
 
 /**
  * Stateless scroll-to-selection window. Given the selected model index, the total match count, and the
@@ -95,7 +94,7 @@ function $renderQuickOpen(context: QuickOpenRenderContext): QuickOpenRenderResul
     // No selection arrow — the row background is the selection signal (the '›' marker was noise). Two
     // intensities: selection (stronger, quick-open owns the keyboard while open) over hover (subtle).
     const rowBackground = selected ? palette.selection : hovered ? palette.cursorLine : null;
-    const label = padToDisplayWidth(` ${match.path}`, innerWidth);
+    const label = EditorCoordinates.Class.padToDisplayWidth(` ${match.path}`, innerWidth);
     const styled = fg(selected ? palette.accent : palette.fg)(label);
     chunks.push(rowBackground ? bg(rowBackground)(styled) : styled);
     if (rowIndex < windowedMatches.length - 1) chunks.push(fg(palette.fg)('\n'));

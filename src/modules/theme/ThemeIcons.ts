@@ -48,6 +48,25 @@ export interface FindIconSet {
   toggleMode: string;
 }
 
+/** Agent-pane transcript + chrome glyphs. Single-cell where they index columns (carets, tool,
+ *  results, rule); `ellipsis` is the LABEL suffix ("Thinking…" vs "Thinking..."), `ellipsisCell`
+ *  the single-cell truncation mark; `spinnerFrames` the animation cycle per tier. This set is the
+ *  ONE home for these tokens — the agent modules carry no private ladders. */
+export interface AgentTranscriptIconSet {
+  caretCollapsed: string;
+  caretExpanded: string;
+  /** The tool cog — the SAME glyph as the status-bar settings ladder, interned here so the cog has
+   *  exactly one definition per tier. */
+  tool: string;
+  resultOk: string;
+  resultError: string;
+  ellipsis: string;
+  ellipsisCell: string;
+  /** The horizontal-rule cell (`─` degrading to `-`). */
+  rule: string;
+  spinnerFrames: readonly string[];
+}
+
 const NERD: IconSet = {
   ext: {
     ts: '', tsx: '', js: '', jsx: '',
@@ -184,6 +203,47 @@ function $alertIconFor(level: GlyphLevel): string {
   return ALERT_ICONS[level];
 }
 
+// The spinner animation cycles: braille at glyph-capable tiers, a rotating ascii bar below — a
+// no-unicode terminal still animates.
+const BRAILLE_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧'] as const;
+const ASCII_SPINNER_FRAMES = ['|', '/', '-', '\\'] as const;
+
+// Agent transcript glyph ladder. The tool cog reuses SETTINGS_ICON per tier (one cog definition);
+// carets are fa caret-right/caret-down degrading to ▸/▾ then >/v; results are fa check/times
+// degrading to ✓/✗ then +/x. Single cell everywhere a column is indexed.
+const AGENT_TRANSCRIPT_ICONS: Record<GlyphLevel, AgentTranscriptIconSet> = {
+  nerd: {
+    caretCollapsed: '\u{f0da}', caretExpanded: '\u{f0d7}', tool: SETTINGS_ICON.nerd,
+    resultOk: '\u{f00c}', resultError: '\u{f00d}',
+    ellipsis: '…', ellipsisCell: '…', rule: '─', spinnerFrames: BRAILLE_SPINNER_FRAMES,
+  },
+  unicode: {
+    caretCollapsed: '▸', caretExpanded: '▾', tool: SETTINGS_ICON.unicode,
+    resultOk: '✓', resultError: '✗',
+    ellipsis: '…', ellipsisCell: '…', rule: '─', spinnerFrames: BRAILLE_SPINNER_FRAMES,
+  },
+  ascii: {
+    caretCollapsed: '>', caretExpanded: 'v', tool: SETTINGS_ICON.ascii,
+    resultOk: '+', resultError: 'x',
+    ellipsis: '...', ellipsisCell: '.', rule: '-', spinnerFrames: ASCII_SPINNER_FRAMES,
+  },
+};
+
+function $agentTranscriptIconsFor(level: GlyphLevel): AgentTranscriptIconSet {
+  return AGENT_TRANSCRIPT_ICONS[level];
+}
+
+// Between-buffer-tab powerline separator ladder: solid nerd powerline glyph → portable ❯ → ascii >.
+const TAB_SEPARATOR: Record<GlyphLevel, string> = {
+  nerd: '\u{e0b0}',
+  unicode: '❯',
+  ascii: '>',
+};
+
+function $tabSeparatorFor(level: GlyphLevel): string {
+  return TAB_SEPARATOR[level];
+}
+
 /** Resolve an icon for a filename against a set (extension keyed, with folder/file default). */
 // invariant: The glyph ladder degrades icons single-cell and legible (src/modules/theme/theme.invariants.md)
 function $iconFor(set: IconSet, name: string, isDirectory: boolean, open = false): string {
@@ -204,6 +264,8 @@ class $ThemeIcons {
   static activityIconsFor = $activityIconsFor;
   static findIconsFor = $findIconsFor;
   static alertIconFor = $alertIconFor;
+  static agentTranscriptIconsFor = $agentTranscriptIconsFor;
+  static tabSeparatorFor = $tabSeparatorFor;
   static iconFor = $iconFor;
 }
 

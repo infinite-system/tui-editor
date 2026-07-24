@@ -17,6 +17,7 @@ import type { StyledText, KeyEvent } from '@opentui/core';
 import { computed, ref, watch, type Ref } from 'vue';
 import type { PaneContent, PaneRenderContext } from '../ui/PaneContent';
 import type { GlyphLevel } from '../theme/TerminalCapabilities';
+import { ThemeIcons } from '../theme/ThemeIcons';
 import { TextSelectionModel, type SelectionPoint } from '../ui/TextSelectionModel';
 import { Clipboard } from '../system/Clipboard';
 import { AgentPaneRenderer, type SelectionRange } from './AgentPaneRenderer';
@@ -281,7 +282,7 @@ class $AgentPaneContent implements PaneContent {
 
     // The rule is inset by the L/R gutter too (side margins → airier canvas).
     const ruleWidth = Math.max(1, context.width - TRANSCRIPT_PAD_LEFT - TRANSCRIPT_PAD_RIGHT);
-    const rule = (context.glyphLevel === 'ascii' ? '-' : '─').repeat(ruleWidth);
+    const rule = ThemeIcons.Class.agentTranscriptIconsFor(context.glyphLevel).rule.repeat(ruleWidth);
 
     // The composer caret sits on its last visible row inside the frame, shifted right by the left gutter.
     this.lastCaret = {

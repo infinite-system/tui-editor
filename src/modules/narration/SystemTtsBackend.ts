@@ -110,10 +110,21 @@ function detectPlayer(): string | null {
 
 type Spawned = { kill(): void; readonly exited: Promise<number> };
 
+/** The most pending utterances kept while one plays: enough to ride out a burst of short turns,
+ *  small enough that narration never runs minutes behind the screen. */
+export const MAX_PENDING_UTTERANCES = 8;
+
 class $SystemTtsBackend implements TtsBackend {
   /** Resolve the piper `.onnx` path for a selected voice (selected-over-first-found). Exposed for tests
    *  and callers that need the resolved model without constructing a backend. */
   static resolvePiperModel = resolvePiperModel;
+
+  /** Bounded enqueue, drop-OLDEST past `cap` — the queue policy as a pure static so it is testable
+   *  without a detected engine (this box's unit runs have none). */
+  static enqueueBounded(queue: string[], utterance: string, cap: number): void {
+    queue.push(utterance);
+    while (queue.length > cap) queue.shift();
+  }
 
   private readonly engine: DetectedEngine | null;
   private readonly playerPath: string | null;
@@ -144,7 +155,10 @@ class $SystemTtsBackend implements TtsBackend {
     if (this.disposed || !this.available) return; // clean no-op when no engine
     const trimmed = text.trim();
     if (!trimmed) return;
-    this.queue.push(trimmed);
+    // Bounded pending speech, drop-OLDEST: turns can arrive faster than slow playback drains them,
+    // and stale narration read minutes late is noise — the newest utterances are the ones that
+    // still describe what the user sees. Barge-in (stop) remains the instant full clear.
+    $SystemTtsBackend.enqueueBounded(this.queue, trimmed, MAX_PENDING_UTTERANCES);
     if (!this.synth && !this.player) this.playNext();
   }
 

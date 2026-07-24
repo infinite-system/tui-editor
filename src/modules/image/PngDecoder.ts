@@ -18,7 +18,7 @@ class $PngDecoder {
 
 export namespace PngDecoder {
   export const $Class = $PngDecoder;
-  export const Class = Static($PngDecoder);
+  export let Class = Static($PngDecoder);
 }
 
 // The eight fixed bytes every PNG file opens with (\x89 P N G \r \n \x1a \n).

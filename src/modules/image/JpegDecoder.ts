@@ -17,7 +17,7 @@ class $JpegDecoder {
 
 export namespace JpegDecoder {
   export const $Class = $JpegDecoder;
-  export const Class = Static($JpegDecoder);
+  export let Class = Static($JpegDecoder);
 }
 
 // Decode memory ceiling: a 48-megapixel photo needs ~192MB of RGBA plus working buffers; anything

@@ -31,10 +31,13 @@ export namespace ImageDecoders {
 }
 
 // The single source of truth for previewable raster formats: lowercase dot-extension → decoder.
+// Delegating closures, never `X.Class.decode` snapshots: `.Class` dereferences at CALL time, so a
+// test/plugin swapping a decoder's Class slot is honored and module init carries no eager edge.
+// invariant: Eager circular runtime reads fail during init (project.invariants.md)
 const decodersByExtension: ReadonlyMap<string, ImageDecoder> = new Map([
-  ['.png', PngDecoder.Class.decode],
-  ['.jpg', JpegDecoder.Class.decode],
-  ['.jpeg', JpegDecoder.Class.decode],
+  ['.png', (bytes: Uint8Array) => PngDecoder.Class.decode(bytes)],
+  ['.jpg', (bytes: Uint8Array) => JpegDecoder.Class.decode(bytes)],
+  ['.jpeg', (bytes: Uint8Array) => JpegDecoder.Class.decode(bytes)],
 ]);
 
 /** The decoder registered for `extension` (case-insensitive, dot included), or null when the
