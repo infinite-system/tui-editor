@@ -8,7 +8,7 @@
 // fixtures; only the subprocess pumping is shell-bound (verified by driving). No ANSI anywhere.
 //
 // invariant: Agent events cross exactly one backend seam (src/modules/agent/agent.invariants.md)
-import type { AgentBackend } from './AgentBackend';
+import { type AgentBackend, resolveLivePermission } from './AgentBackend';
 import type { AgentEvent } from './AgentEvents';
 import { ClaudeStreamMapping } from './ClaudeStreamMapping';
 
@@ -27,8 +27,10 @@ export interface CliStreamOptions {
   /** Working directory for the agent (the workspace root), so Claude operates in the user's project. */
   cwd?: string;
   /** Run without permission prompts (`--dangerously-skip-permissions`) — headless `-p` cannot surface
-   *  approval prompts, so tools are denied unless this is on. Provider-neutral `agentSkipPermissions`. */
-  skipPermissions?: boolean;
+   *  approval prompts, so tools are denied unless this is on. Provider-neutral `agentSkipPermissions`.
+   *  A GETTER (not a snapshot) so a live Shift+Tab toggle takes effect on the NEXT turn — each `send()`
+   *  spawns a fresh `claude`, so it re-reads the current setting rather than the value at agent creation. */
+  skipPermissions?: boolean | (() => boolean);
   /** Model override (`--model`); empty/undefined uses Claude's default. */
   model?: string;
 }
@@ -51,7 +53,8 @@ class $CliStreamBackend implements AgentBackend {
     this.interrupting = false;
     this.stderrTail = '';
     const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
-    if (this.options.skipPermissions) args.push('--dangerously-skip-permissions');
+    // Resolve the permission mode LIVE at send time so a Shift+Tab toggle since creation is honored.
+    if (resolveLivePermission(this.options.skipPermissions)) args.push('--dangerously-skip-permissions');
     if (this.options.model) args.push('--model', this.options.model);
     if (this.sessionId) args.push('--resume', this.sessionId); // continue the conversation
     let child: ReturnType<typeof Bun.spawn>;

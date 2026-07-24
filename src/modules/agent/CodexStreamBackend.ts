@@ -9,7 +9,7 @@
 // resume) to avoid guessing the resume CLI shape before it can be verified.
 //
 // invariant: Agent events cross exactly one backend seam (src/modules/agent/agent.invariants.md)
-import type { AgentBackend } from './AgentBackend';
+import { type AgentBackend, resolveLivePermission } from './AgentBackend';
 import type { AgentEvent } from './AgentEvents';
 import { CodexStreamMapping } from './CodexStreamMapping';
 
@@ -18,8 +18,9 @@ export interface CodexStreamOptions {
   codexPath: string;
   /** Working directory for the agent (the workspace root). */
   cwd?: string;
-  /** Run without approval prompts / sandbox (`--dangerously-bypass-approvals-and-sandbox`). */
-  skipPermissions?: boolean;
+  /** Run without approval prompts / sandbox (`--dangerously-bypass-approvals-and-sandbox`). A GETTER
+   *  (not a snapshot) so a live Shift+Tab toggle is honored on the next turn — resolved at send time. */
+  skipPermissions?: boolean | (() => boolean);
   /** Model override (`-m`); empty/undefined uses codex's default. */
   model?: string;
 }
@@ -41,7 +42,8 @@ class $CodexStreamBackend implements AgentBackend {
     this.interrupting = false;
     this.stderrTail = '';
     const args = ['exec', '--json', '--skip-git-repo-check'];
-    if (this.options.skipPermissions) args.push('--dangerously-bypass-approvals-and-sandbox');
+    // Resolve the permission mode LIVE at send time so a Shift+Tab toggle since creation is honored.
+    if (resolveLivePermission(this.options.skipPermissions)) args.push('--dangerously-bypass-approvals-and-sandbox');
     if (this.options.model) args.push('-m', this.options.model);
     args.push(prompt); // prompt as the final positional argument
     let child: ReturnType<typeof Bun.spawn>;

@@ -256,7 +256,7 @@ async function $boot(options: BootOptions = {}): Promise<BootedApp> {
     const agentPane = AgentFactory.Class.create({
       cwd: workspaceSet.active.root,
       provider: settings.agentProvider.value,
-      skipPermissions: settings.agentSkipPermissions.value,
+      skipPermissions: () => settings.agentSkipPermissions.value, // LIVE getter — Shift+Tab toggle applies next turn
       model: settings.agentModel.value,
     });
     panelHost.register(agentPane);

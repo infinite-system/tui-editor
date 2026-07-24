@@ -23,8 +23,9 @@ export interface AgentCreateOptions {
   cwd?: string;
   /** Which engine to use ('auto' picks the first CLI on PATH, Claude preferred). */
   provider?: AgentProvider;
-  /** Run the agent without permission prompts (provider-neutral; each backend maps it to its flag). */
-  skipPermissions?: boolean;
+  /** Run the agent without permission prompts (provider-neutral; each backend maps it to its flag).
+   *  Pass a GETTER (`() => setting.value`) so a live Shift+Tab toggle is honored on the next turn. */
+  skipPermissions?: boolean | (() => boolean);
   /** Model override; empty uses the provider default. */
   model?: string;
 }

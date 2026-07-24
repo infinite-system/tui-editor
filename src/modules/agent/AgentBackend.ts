@@ -21,3 +21,12 @@ export interface AgentBackend {
   /** Terminate the backend and release every owned resource (subprocess, streams). Idempotent. */
   dispose(): void;
 }
+
+/** Resolve a permission-mode option to a live boolean: a GETTER is read NOW (so a Shift+Tab toggle since
+ *  agent creation is honored on this turn — each send() spawns a fresh CLI), a plain boolean passes
+ *  through, undefined → false. Shared by CliStreamBackend + CodexStreamBackend so both providers resolve
+ *  the flag identically — one generator, not a copy per backend.
+ *  invariant: Seams are drawn at the shared generator (project.invariants.md) */
+export function resolveLivePermission(value: boolean | (() => boolean) | undefined): boolean {
+  return typeof value === 'function' ? value() : Boolean(value);
+}
